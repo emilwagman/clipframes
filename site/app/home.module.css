@@ -4,7 +4,7 @@
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); }
 .scrolled { border-bottom-color: var(--line); }
-.headerIn { max-width: var(--wide); margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 22px; }
+.headerIn { max-width: calc(var(--col) + 48px); margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 22px; }
 .brand { display: flex; align-items: center; gap: 9px; font: 600 17px var(--display); letter-spacing: -0.01em;
   text-decoration: none; margin-right: auto; }
 .gh { color: var(--ink-2); text-decoration: none; font-size: 15px; }
@@ -70,10 +70,13 @@
 .faq p { margin: 0; }
 
 .end { padding-top: 140px; }
-.footer { max-width: var(--wide); margin: 120px auto 0; border-top: 1px solid var(--line); padding: 24px 24px 40px;
+.footer { max-width: var(--col); margin: 120px auto 0; border-top: 1px solid var(--line); padding: 24px 0 40px;
   display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; color: var(--ink-3); }
 .footer a { color: var(--ink-2); text-decoration: none; }
 
+@media (max-width: 688px) {
+  .footer { margin-left: 24px; margin-right: 24px; }
+}
 @media (max-width: 640px) {
   .gh { display: none; }
   .intro { padding-top: 56px; }
