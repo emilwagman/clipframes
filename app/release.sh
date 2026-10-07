@@ -6,8 +6,10 @@
 #
 # Needs, once per Mac:
 #   - the Developer ID Application certificate in the keychain
-#   - notary credentials:  xcrun notarytool store-credentials notary --apple-id <id> --team-id 4UM3XVUN9Y
-#   - the Sparkle signing key in the keychain (vendor/sparkle/bin/generate_keys; import a backup with -f)
+#   - notary credentials saved as the "notary" profile, from the App Store Connect API key Amber Notes uses:
+#     xcrun notarytool store-credentials notary --key AuthKey_<id>.p8 --key-id <id> --issuer <issuer id>
+#   - the Sparkle signing key in the keychain. The backup is .secrets/sparkle-private-key.txt;
+#     import it on a new Mac with vendor/sparkle/bin/generate_keys -f .secrets/sparkle-private-key.txt
 # Bump CFBundleShortVersionString and CFBundleVersion in Info.plist first.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -71,7 +73,9 @@ open(path, "w").write(s.replace(marker, marker + "\n" + item, 1))
 EOF
 
 git push
-gh release create "$TAG" "$ZIP" --repo "$REPO" --target "$(git rev-parse HEAD)" --title "Clipframes $VERSION" --notes "$NOTES"
+# Also attached as Clipframes.zip, so releases/latest/download/Clipframes.zip (the website's link) is always the newest.
+mkdir -p build/latest && cp "$ZIP" build/latest/Clipframes.zip
+gh release create "$TAG" "$ZIP" build/latest/Clipframes.zip --repo "$REPO" --target "$(git rev-parse HEAD)" --title "Clipframes $VERSION" --notes "$NOTES"
 git add "$APPCAST"
 git commit -m "Release $VERSION"
 git push

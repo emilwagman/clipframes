@@ -4,3 +4,4 @@ app/vendor/
 dist/
 spike/axspike
 spike/squeeze
+.secrets/
