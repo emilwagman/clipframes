@@ -17,6 +17,7 @@ struct ClipframesApp: App {
             SettingsView().environmentObject(library)
         }
         .commands {
+            CommandGroup(after: .appInfo) { CheckForUpdatesButton() }
             CommandGroup(replacing: .newItem) {
                 Button("Capture an element") { OverlaySession.toggle(.element, from: .menu) }
                 Button("Take a screenshot") { OverlaySession.toggle(.screenshot, from: .menu) }
@@ -33,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Hotkey.register()
         MainActor.assumeIsolated {
+            _ = Updates.shared
             Library.shared.start()
             if !UserDefaults.standard.bool(forKey: Pref.showInDock) { NSApp.setActivationPolicy(.accessory) }
             if !Onboarding.done {

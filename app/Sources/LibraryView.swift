@@ -807,6 +807,7 @@ struct MenuContent: View {
         Button("Show the bar") { Bar.show() }
         Button("Open the library") { LibraryWindow.show() }
         SettingsLink { Text("Settings…") }
+        CheckForUpdatesButton()
         Divider()
         Button("Quit Clipframes") { NSApp.terminate(nil) }
     }
@@ -877,6 +878,7 @@ struct SettingsView: View {
                     Button("~/Clipframes") { NSWorkspace.shared.open(lib.root) }.buttonStyle(.link)
                 }
             }
+            UpdatesSection()
         }
         .formStyle(.grouped)
         .frame(width: 460)

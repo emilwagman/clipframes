@@ -1,5 +1,6 @@
 .DS_Store
 app/build/
+app/vendor/
 dist/
 spike/axspike
 spike/squeeze

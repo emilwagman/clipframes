@@ -255,8 +255,10 @@ enum Toast {
                 ctx.duration = 0.25
                 p.animator().alphaValue = 0
             }, completionHandler: {
-                p.orderOut(nil)
-                if !appWasInFront, RecordingSession.active == nil, OverlaySession.active == nil { Stage.restoreBehindFrontApp() }
+                MainActor.assumeIsolated {
+                    p.orderOut(nil)
+                    if !appWasInFront, RecordingSession.active == nil, OverlaySession.active == nil { Stage.restoreBehindFrontApp() }
+                }
             })
         }
     }

@@ -178,7 +178,7 @@ final class RecordingSession: ObservableObject {
         }
     }
 
-    private static let controls: Set<String> = ["Button", "Link", "CheckBox", "RadioButton", "PopUpButton", "MenuButton",
+    nonisolated private static let controls: Set<String> = ["Button", "Link", "CheckBox", "RadioButton", "PopUpButton", "MenuButton",
                                                  "TextField", "TextArea", "ComboBox", "Slider", "Tab", "MenuItem", "Switch", "SearchField"]
 
     private func clicked(at p: CGPoint, when: Date) {
