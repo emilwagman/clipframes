@@ -8,7 +8,7 @@ It has three tools:
 - **Screenshot** (⌃⇧2): drag an area. Clipframes saves the image and names the elements inside it.
 - **Clip** (⌃⇧3, press again to stop): record an area. Clipframes saves the video, a set of frames and a timeline of what you clicked.
 
-Each capture is a folder in `~/Clipframes` with a `notes.md` that the agent reads. Captures stay on your Mac, and the app goes online only to check GitHub for updates, and you can turn that off in Settings.
+Each capture is a folder in `~/Clipframes` with a `notes.md` that the agent reads. Captures stay on your Mac, and the app goes online only to check GitHub for updates. You can turn the update check off in Settings.
 
 ## Install
 
