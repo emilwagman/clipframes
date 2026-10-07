@@ -186,12 +186,13 @@ struct BigButton: View {
 }
 
 struct KeyCaps: View {
-    let keys: String
+    let keys: [String]
     var size: CGFloat = 15
     var body: some View {
         HStack(spacing: size * 0.3) {
             ForEach(Array(keys.enumerated()), id: \.offset) { _, k in
-                Text(String(k))
+                Text(k)
+                    .padding(.horizontal, k.count > 1 ? size * 0.45 : 0)
                     .font(.system(size: size, weight: .semibold, design: .rounded))
                     .frame(minWidth: size * 1.9, minHeight: size * 1.9)
                     .background(
@@ -322,9 +323,10 @@ struct TryStep: View {
                      title: "Point at something",
                      text: "Pick something in your own app that's hard to put into words: a button, a badge, a card. Hover it, then click.")
             VStack(spacing: 8) {
-                ToolLine(icon: "cursorarrow.rays", title: "Element", text: "Click one thing", keys: Hotkey.element, highlighted: true)
-                ToolLine(icon: "viewfinder", title: "Screenshot", text: "Drag an area", keys: Hotkey.screenshot)
-                ToolLine(icon: "record.circle", title: "Clip", text: "Record an area", keys: Hotkey.clip)
+                ToolLine(icon: "cursorarrow.rays", title: "Element", text: "Click one thing", keys: ["1"], highlighted: true)
+                ToolLine(icon: "viewfinder", title: "Screenshot", text: "Drag an area", keys: ["2"])
+                ToolLine(icon: "record.circle", title: "Clip", text: "Record an area", keys: ["3"])
+                ShortcutLine()
             }
             .frame(maxWidth: 480)
             Spacer(minLength: 0)
@@ -342,7 +344,7 @@ struct ToolLine: View {
     let icon: String
     let title: String
     let text: String
-    let keys: String
+    let keys: [String]
     var highlighted = false
     var body: some View {
         HStack(spacing: 14) {
@@ -359,6 +361,20 @@ struct ToolLine: View {
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(highlighted ? Brand.accent.opacity(0.10) : Brand.raised))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(highlighted ? Brand.accent.opacity(0.4) : Brand.line))
+    }
+}
+
+/// The one shortcut, under the tools: it opens the bar from any app.
+struct ShortcutLine: View {
+    @ObservedObject private var hotkey = Hotkey.shared
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("From any app, press").foregroundStyle(Brand.text2)
+            KeyCaps(keys: hotkey.combo.parts, size: 11)
+            Text("to open the bar, then a number.").foregroundStyle(Brand.text2)
+        }
+        .font(.system(size: 13))
+        .padding(.top, 6)
     }
 }
 

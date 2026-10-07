@@ -426,7 +426,7 @@ struct RecordingHUD: View {
             }
             .buttonStyle(PressScale())
             .disabled(session.stopping)
-            .help("Stop recording (\(Hotkey.clip))")
+            .help("Stop recording (\(Hotkey.text))")
         }
         .padding(.leading, 14)
         .padding(.trailing, 5)

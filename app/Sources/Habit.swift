@@ -3,7 +3,7 @@ import AppKit
 /// Local-only usage counts that drive the adoption nudges. Nothing leaves the Mac.
 ///
 /// Adoption (MVA) for Clipframes: captures on 4 different days within 14 days,
-/// most of them started with a shortcut rather than the bar.
+/// most of them started from the keyboard (the shortcut, then 1/2/3) rather than by clicking.
 @MainActor
 enum Habit {
     enum Source: String { case bar, shortcut, menu, library }
@@ -27,10 +27,10 @@ enum Habit {
             d.set(d.integer(forKey: barKey) + 1, forKey: barKey)
             let n = d.integer(forKey: barToolKey + tool) + 1
             d.set(n, forKey: barToolKey + tool)
-            // Second time from the bar: teach the shortcut, once per tool.
-            if n >= 2, !d.bool(forKey: tipKey + tool) {
-                d.set(true, forKey: tipKey + tool)
-                pendingTip = "Tip: \(shortcut(mode)) starts \(tool) from any app, no bar needed."
+            // Second click on a tool: teach the shortcut, once.
+            if n >= 2, !d.bool(forKey: tipKey + "shortcut") {
+                d.set(true, forKey: tipKey + "shortcut")
+                pendingTip = "Tip: \(Hotkey.text) opens the bar from any app. Then press \(number(mode)) for \(tool)."
             }
         }
     }
@@ -93,11 +93,12 @@ enum Habit {
         }
     }
 
-    static func shortcut(_ mode: OverlaySession.Mode) -> String {
+    /// The key that picks a tool once the bar has the keyboard.
+    static func number(_ mode: OverlaySession.Mode) -> String {
         switch mode {
-        case .element: Hotkey.element
-        case .screenshot: Hotkey.screenshot
-        case .clip: Hotkey.clip
+        case .element: "1"
+        case .screenshot: "2"
+        case .clip: "3"
         }
     }
 

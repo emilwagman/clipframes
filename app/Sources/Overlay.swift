@@ -471,7 +471,7 @@ struct HUD: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // The three tools; the current one is lit. Click, ⌃⇧1/2/3 or plain 1/2/3 to switch.
+            // The three tools; the current one is lit. Click or press 1/2/3 to switch.
             HStack(spacing: 2) {
                 tool(.element, "1")
                 tool(.screenshot, "2")

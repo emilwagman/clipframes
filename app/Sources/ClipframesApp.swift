@@ -23,7 +23,7 @@ struct ClipframesApp: App {
                 Button("Take a screenshot") { OverlaySession.toggle(.screenshot, from: .menu) }
                 Button("Record a clip") { OverlaySession.toggle(.clip, from: .menu) }
                 Divider()
-                Button("Show the bar") { Bar.show() }
+                Button("Show the bar") { Bar.summon() }
                 Button("Open the library") { LibraryWindow.show() }
             }
         }
@@ -32,8 +32,8 @@ struct ClipframesApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Hotkey.register()
         MainActor.assumeIsolated {
+            Hotkey.shared.register()
             _ = Updates.shared
             Library.shared.start()
             if !UserDefaults.standard.bool(forKey: Pref.showInDock) { NSApp.setActivationPolicy(.accessory) }

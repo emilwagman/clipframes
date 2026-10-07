@@ -29,9 +29,10 @@ export default function Home() {
 
         <section id="element" className={s.section}>
           <div className={s.col}>
-            <h2>Point at one thing <span className={s.keys}>⌃⇧1</span></h2>
+            <h2>Point at one thing</h2>
             <p>
-              Press the shortcut, or Element in the Clipframes bar, and click a button, a card or a menu. In a browser,
+              Press <code className={s.inline}>⌃⇧Space</code> from any app to open the Clipframes bar, then press 1 for
+              Element and click a button, a card or a menu. In a browser,
               Clipframes reads the name the code uses for it, its id and classes, so the agent can find it in your project.
             </p>
           </div>
@@ -41,9 +42,9 @@ export default function Home() {
 
         <section id="screenshot" className={s.section}>
           <div className={s.col}>
-            <h2>Show an area <span className={s.keys}>⌃⇧2</span></h2>
+            <h2>Show an area</h2>
             <p>
-              Drag over part of the screen. Clipframes saves the picture and lists the things inside it, so the agent knows
+              Press 2 in the bar and drag over part of the screen. Clipframes saves the picture and lists the things inside it, so the agent knows
               which parts you mean.
             </p>
           </div>
@@ -53,10 +54,10 @@ export default function Home() {
 
         <section id="clip" className={s.section}>
           <div className={s.col}>
-            <h2>Show what happens <span className={s.keys}>⌃⇧3</span></h2>
+            <h2>Show what happens</h2>
             <p>
               Some problems only show up when you click around: a menu that opens in the wrong place, or a button that does
-              nothing. Press the shortcut, do the thing, and press it again. The agent gets the video, a set of frames and a
+              nothing. Press 3 in the bar, do the thing, and press <code className={s.inline}>⌃⇧Space</code> to stop. The agent gets the video, a set of frames and a
               list of every click.
             </p>
           </div>
@@ -79,7 +80,7 @@ export default function Home() {
           <div className={s.col}>
             <h2>Try it on this page</h2>
             <p>
-              Once Clipframes is installed, press <code className={s.inline}>⌃⇧1</code> and click one of these. Then paste
+              Once Clipframes is installed, press <code className={s.inline}>⌃⇧Space</code>, then 1, and click one of these. Then paste
               somewhere to see what your agent would get.
             </p>
             <div className={s.try}>

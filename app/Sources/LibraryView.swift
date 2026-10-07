@@ -60,9 +60,9 @@ struct Sidebar: View {
             HStack(spacing: 2) {
                 Spacer()
                 LogoMark(size: 20).padding(.trailing, 6)
-                NewButton(icon: "cursorarrow.rays", help: "Capture an element (\(Hotkey.element))") { OverlaySession.toggle(.element, from: .library) }
-                NewButton(icon: "viewfinder", help: "Take a screenshot (\(Hotkey.screenshot))") { OverlaySession.toggle(.screenshot, from: .library) }
-                NewButton(icon: "record.circle", help: "Record a clip (\(Hotkey.clip))") { OverlaySession.toggle(.clip, from: .library) }
+                NewButton(icon: "cursorarrow.rays", help: "Capture an element") { OverlaySession.toggle(.element, from: .library) }
+                NewButton(icon: "viewfinder", help: "Take a screenshot") { OverlaySession.toggle(.screenshot, from: .library) }
+                NewButton(icon: "record.circle", help: "Record a clip") { OverlaySession.toggle(.clip, from: .library) }
             }
             .padding(.horizontal, 10)
             .frame(height: 40) // shares the titlebar with the window buttons
@@ -756,14 +756,15 @@ struct Welcome: View {
             }
             VStack(spacing: 8) {
                 Button { OverlaySession.toggle(.element, from: .library) } label: {
-                    ToolLine(icon: "cursorarrow.rays", title: "Element", text: "Click one thing", keys: Hotkey.element, highlighted: true)
+                    ToolLine(icon: "cursorarrow.rays", title: "Element", text: "Click one thing", keys: ["1"], highlighted: true)
                 }.buttonStyle(PressScale())
                 Button { OverlaySession.toggle(.screenshot, from: .library) } label: {
-                    ToolLine(icon: "viewfinder", title: "Screenshot", text: "Drag an area", keys: Hotkey.screenshot)
+                    ToolLine(icon: "viewfinder", title: "Screenshot", text: "Drag an area", keys: ["2"])
                 }.buttonStyle(PressScale())
                 Button { OverlaySession.toggle(.clip, from: .library) } label: {
-                    ToolLine(icon: "record.circle", title: "Clip", text: "Record an area", keys: Hotkey.clip)
+                    ToolLine(icon: "record.circle", title: "Clip", text: "Record an area", keys: ["3"])
                 }.buttonStyle(PressScale())
+                ShortcutLine()
             }
             .frame(maxWidth: 460)
         }
@@ -790,9 +791,9 @@ struct MenuContent: View {
     @EnvironmentObject var menu: MenuState
 
     var body: some View {
-        Button("Capture an element  \(Hotkey.element)") { OverlaySession.toggle(.element, from: .library) }
-        Button("Take a screenshot  \(Hotkey.screenshot)") { OverlaySession.toggle(.screenshot, from: .library) }
-        Button(menu.recording ? "Stop recording  \(Hotkey.clip)" : "Record a clip  \(Hotkey.clip)") { OverlaySession.toggle(.clip, from: .library) }
+        Button("Capture an element") { OverlaySession.toggle(.element, from: .library) }
+        Button("Take a screenshot") { OverlaySession.toggle(.screenshot, from: .library) }
+        Button(menu.recording ? "Stop recording  \(Hotkey.text)" : "Record a clip") { OverlaySession.toggle(.clip, from: .library) }
 
         if let last = lib.captures.first {
             Divider()
@@ -804,7 +805,7 @@ struct MenuContent: View {
             }
         }
         Divider()
-        Button("Show the bar") { Bar.show() }
+        Button("Show the bar  \(Hotkey.text)") { Bar.summon() }
         Button("Open the library") { LibraryWindow.show() }
         SettingsLink { Text("Settings…") }
         CheckForUpdatesButton()
@@ -847,10 +848,10 @@ struct SettingsView: View {
                 Text("Asks Chrome, Slack, Cursor and similar apps for their page structure, the way a screen reader does. Cursor and VS Code may ask once whether to turn on screen reader mode; choose No.")
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Section("Shortcuts") {
-                LabeledContent("Capture an element", value: Hotkey.element)
-                LabeledContent("Take a screenshot", value: Hotkey.screenshot)
-                LabeledContent("Record a clip, stop", value: Hotkey.clip)
+            Section("Shortcut") {
+                LabeledContent("Open the bar") { ShortcutRecorder() }
+                Text("Works from any app. Then press 1, 2 or 3 to pick a tool. During a recording, it stops the recording.")
+                    .font(.callout).foregroundStyle(.secondary)
             }
             Section("Staying out of the way") {
                 Toggle("Show the bar when Clipframes opens", isOn: $showBarAtLaunch)
@@ -859,14 +860,14 @@ struct SettingsView: View {
                         NSApp.setActivationPolicy(on ? .regular : .accessory)
                         if !on { Bar.show() }
                     }
-                Text("The shortcuts always work. Without the bar and the Dock icon, Clipframes lives in the menu bar.")
+                Text("The shortcut always works. Without the bar and the Dock icon, Clipframes lives in the menu bar.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section("This week") {
                 let week = Habit.recent(days: 7)
                 LabeledContent("Captures", value: "\(week.captures)")
                 LabeledContent("Days you used it", value: "\(week.days) of 7")
-                LabeledContent("Started with a shortcut", value: "\(Int((Habit.shortcutShare * 100).rounded()))%")
+                LabeledContent("Started from the keyboard", value: "\(Int((Habit.shortcutShare * 100).rounded()))%")
             }
             Section {
                 Toggle("Open at login", isOn: $openAtLogin)

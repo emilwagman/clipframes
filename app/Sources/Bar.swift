@@ -8,6 +8,8 @@ enum Bar {
     private static var panel: NSPanel?
     private static var hiddenForCapture = false
     private static var wanted = true
+    /// The shortcut showed the bar, so Esc should hide it again.
+    private static var summonedFromHidden = false
 
     static func show() {
         wanted = true
@@ -31,6 +33,31 @@ enum Bar {
         if let p = panel, p.isVisible { close() } else { show() }
     }
 
+    /// What the global shortcut does: bring the bar up with the keyboard on it, so 1, 2 or 3
+    /// picks a tool. Pressed again while the bar has the keyboard, it puts things back.
+    static func summon() {
+        if let p = panel, p.isVisible, p.isKeyWindow { dismissKeyboard(); return }
+        guard Library.shared.permissions.ready else { Onboarding.shared.show(at: .permissions); return }
+        summonedFromHidden = !(panel?.isVisible ?? false)
+        if summonedFromHidden { show() }
+        // A non-activating panel can take the keyboard without pulling the app you're in to the back.
+        panel?.makeKey()
+    }
+
+    /// Esc, or the shortcut again: give the keyboard back, and hide the bar if the shortcut brought it.
+    static func dismissKeyboard() {
+        guard let p = panel else { return }
+        p.resignKey()
+        if summonedFromHidden { summonedFromHidden = false; close() }
+    }
+
+    /// A tool was picked from the keyboard.
+    static func pick(_ mode: OverlaySession.Mode) {
+        summonedFromHidden = false
+        panel?.resignKey()
+        OverlaySession.toggle(mode, from: .shortcut)
+    }
+
     static func hideWhileCapturing() {
         guard let p = panel, p.isVisible else { return }
         hiddenForCapture = true
@@ -52,7 +79,7 @@ enum Bar {
     }
 
     private static func make() -> NSPanel {
-        let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let p = BarPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = false
@@ -71,6 +98,33 @@ enum Bar {
         panel = p
         return p
     }
+}
+
+/// The bar's window. It takes the keyboard only when the shortcut asks it to.
+final class BarPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+
+    override func becomeKey() { super.becomeKey(); BarFocus.shared.keyboard = true }
+    override func resignKey() { super.resignKey(); BarFocus.shared.keyboard = false }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 18, 83: Bar.pick(.element)      // 1, keypad 1
+        case 19, 84: Bar.pick(.screenshot)   // 2
+        case 20, 85: Bar.pick(.clip)         // 3
+        case 53: Bar.dismissKeyboard()       // esc
+        default: super.keyDown(with: event)
+        }
+    }
+
+    override func cancelOperation(_ sender: Any?) { Bar.dismissKeyboard() }
+}
+
+/// Whether the bar has the keyboard, so the tools can show their number keys.
+@MainActor
+final class BarFocus: ObservableObject {
+    static let shared = BarFocus()
+    @Published var keyboard = false
 }
 
 struct BarView: View {
@@ -96,13 +150,13 @@ struct BarView: View {
             LogoMark(size: 30)
                 .padding(.leading, 8).padding(.trailing, 8)
                 .help("Clipframes")
-            ToolButton(icon: "cursorarrow.rays", title: "Element", key: Hotkey.element, tint: Brand.accent) {
+            ToolButton(icon: "cursorarrow.rays", title: "Element", key: "1", tint: Brand.accent) {
                 OverlaySession.toggle(.element)
             }
-            ToolButton(icon: "viewfinder", title: "Screenshot", key: Hotkey.screenshot, tint: Brand.accent) {
+            ToolButton(icon: "viewfinder", title: "Screenshot", key: "2", tint: Brand.accent) {
                 OverlaySession.toggle(.screenshot)
             }
-            ToolButton(icon: "record.circle", title: "Clip", key: Hotkey.clip, tint: Brand.record) {
+            ToolButton(icon: "record.circle", title: "Clip", key: "3", tint: Brand.record) {
                 OverlaySession.toggle(.clip)
             }
             Rectangle().fill(.white.opacity(0.12)).frame(width: 1, height: 34).padding(.horizontal, 6)
@@ -134,6 +188,7 @@ struct ToolButton: View {
     let tint: Color
     let action: () -> Void
     @State private var hover = false
+    @ObservedObject private var focus = BarFocus.shared
 
     var body: some View {
         Button(action: action) {
@@ -145,12 +200,23 @@ struct ToolButton: View {
                 Text(title).font(Brand.display(11, .medium)).foregroundStyle(hover ? .white : Brand.text2)
             }
             .frame(width: 76, height: 50)
+            .overlay(alignment: .topTrailing) {
+                // With the keyboard on the bar, each tool shows the number that picks it.
+                if focus.keyboard {
+                    Text(key).font(Brand.display(10, .bold)).foregroundStyle(Brand.text2)
+                        .frame(width: 16, height: 16)
+                        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white.opacity(0.1)))
+                        .padding(4)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.12), value: focus.keyboard)
             .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(hover ? Brand.accent.opacity(0.14) : .clear))
             .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(PressScale())
         .onHover { h in withAnimation(.easeOut(duration: 0.12)) { hover = h } }
-        .help("\(title) (\(key))")
+        .help(title)
     }
 }
 

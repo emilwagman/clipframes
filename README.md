@@ -2,11 +2,11 @@
 
 Clipframes is a macOS menu bar app for showing a coding agent what you mean. You point at something on screen, and Clipframes copies a reference you can paste into Claude Code or Codex.
 
-It has three tools:
+Press ⌃⇧Space from any app to open the Clipframes bar, then press 1, 2 or 3 or click a tool. You can change the shortcut in Settings.
 
-- **Element** (⌃⇧1): click one thing, like a button or a card. Clipframes saves a screenshot and reads the element's name, role and, in browsers and Electron apps, its DOM id, classes and URL.
-- **Screenshot** (⌃⇧2): drag an area. Clipframes saves the image and names the elements inside it.
-- **Clip** (⌃⇧3, press again to stop): record an area. Clipframes saves the video, a set of frames and a timeline of what you clicked.
+- **Element** (1): click one thing, like a button or a card. Clipframes saves a screenshot and reads the element's name, role and, in browsers and Electron apps, its DOM id, classes and URL.
+- **Screenshot** (2): drag an area. Clipframes saves the image and names the elements inside it.
+- **Clip** (3): record an area, and press ⌃⇧Space to stop. Clipframes saves the video, a set of frames and a timeline of what you clicked.
 
 Each capture is a folder in `~/Clipframes` with a `notes.md` that the agent reads. Captures stay on your Mac, and the app goes online only to check GitHub for updates. You can turn the update check off in Settings.
 
