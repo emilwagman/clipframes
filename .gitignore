@@ -5,3 +5,4 @@ dist/
 spike/axspike
 spike/squeeze
 .secrets/
+demo/logo/art/*.log

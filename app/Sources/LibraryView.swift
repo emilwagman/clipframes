@@ -781,7 +781,7 @@ struct MenuLabel: View {
         if menu.recording {
             Text("\(Image(systemName: "record.circle.fill")) \(Fmt.clock(menu.elapsed))")
         } else {
-            Image(systemName: "viewfinder")
+            Image(nsImage: Brand.menuBarImage)
         }
     }
 }

@@ -167,11 +167,7 @@ struct BarView: View {
 
     private var setup: some View {
         HStack(spacing: 14) {
-            Image(systemName: "viewfinder")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Brand.accent))
+            LogoMark(size: 40)
             Text("Clipframes isn't set up yet").font(.system(size: 14, weight: .semibold))
             PillButton(title: "Finish setup") { Onboarding.shared.show(at: .permissions) }
             IconButton(icon: "xmark", help: "Hide the bar") { Bar.close() }

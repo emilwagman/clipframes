@@ -1,65 +1,75 @@
+import AppKit
 import SwiftUI
 
-/// The Clipframes mark: a tangerine squircle holding a viewfinder frame around a capture dot.
+/// The Clipframes mark: a square frame with its top-right corner clipped off, and the
+/// clipped piece lifted away. Same geometry as site/public/mark.svg and make-icon.swift.
+enum ClipGeometry {
+    /// The design box is 114 units square; these points are in it, top-left origin.
+    static let box: CGFloat = 114
+    static let frame: [CGPoint] = [(4, 10.2), (76, 10.2), (104, 38.2), (104, 110.2), (4, 110.2)].map { CGPoint(x: $0.0, y: $0.1) }
+    static let hole = CGRect(x: 21, y: 27.2, width: 66, height: 66)
+    static let piece: [CGPoint] = [(83.6, 4), (110, 4), (110, 30.4)].map { CGPoint(x: $0.0, y: $0.1) }
+
+    /// The mark as a path in `rect`. `flipped` for AppKit's bottom-left origin.
+    static func path(in rect: CGRect, flipped: Bool = false) -> CGPath {
+        let k = min(rect.width, rect.height) / box
+        let ox = rect.midX - box * k / 2, oy = rect.midY - box * k / 2
+        func p(_ q: CGPoint) -> CGPoint {
+            CGPoint(x: ox + q.x * k, y: flipped ? oy + (box - q.y) * k : oy + q.y * k)
+        }
+        let path = CGMutablePath()
+        path.addLines(between: frame.map(p)); path.closeSubpath()
+        let h = [CGPoint(x: hole.minX, y: hole.minY), CGPoint(x: hole.maxX, y: hole.minY),
+                 CGPoint(x: hole.maxX, y: hole.maxY), CGPoint(x: hole.minX, y: hole.maxY)]
+        path.addLines(between: h.map(p)); path.closeSubpath()
+        path.addLines(between: piece.map(p)); path.closeSubpath()
+        return path
+    }
+}
+
+struct ClipMark: Shape {
+    func path(in rect: CGRect) -> Path { Path(ClipGeometry.path(in: rect)) }
+}
+
+/// The mark on its off-white tile, like the app icon.
 struct LogoMark: View {
     var size: CGFloat = 64
     var glow = false
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
-                .fill(LinearGradient(colors: [Color(red: 1.0, green: 0.58, blue: 0.28), Brand.accentDeep],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            // Soft top light
-            RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
-                .fill(LinearGradient(colors: [.white.opacity(0.28), .clear], startPoint: .top, endPoint: .center))
-                .padding(size * 0.02)
-                .blendMode(.softLight)
-            RoundedRectangle(cornerRadius: size * 0.27, style: .continuous)
-                .strokeBorder(.white.opacity(0.22), lineWidth: max(0.5, size * 0.012))
-            FrameBrackets()
-                .stroke(.white, style: StrokeStyle(lineWidth: size * 0.075, lineCap: .round, lineJoin: .round))
-                .padding(size * 0.24)
-            Circle()
-                .fill(.white)
-                .frame(width: size * 0.2, height: size * 0.2)
-                .offset(x: size * 0.035, y: size * 0.035)
+            RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
+                .fill(Color(red: 0.984, green: 0.98, blue: 0.969))
+            RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
+                .strokeBorder(.black.opacity(0.08), lineWidth: max(0.5, size * 0.008))
+            ClipMark()
+                .fill(Color(red: 0.08, green: 0.08, blue: 0.08), style: FillStyle(eoFill: true))
+                .padding(size * 0.2)
         }
         .frame(width: size, height: size)
-        .shadow(color: Brand.accent.opacity(glow ? 0.55 : 0), radius: size * 0.35, y: size * 0.08)
-        .shadow(color: .black.opacity(0.25), radius: size * 0.04, y: size * 0.03)
+        .shadow(color: .black.opacity(glow ? 0.45 : 0.25), radius: glow ? size * 0.22 : size * 0.04, y: size * (glow ? 0.08 : 0.03))
     }
 }
 
-/// Four rounded corner brackets.
-struct FrameBrackets: Shape {
-    func path(in r: CGRect) -> Path {
-        let l = r.width * 0.3, k = r.width * 0.1
-        var p = Path()
-        // top-left
-        p.move(to: CGPoint(x: r.minX, y: r.minY + l)); p.addLine(to: CGPoint(x: r.minX, y: r.minY + k))
-        p.addQuadCurve(to: CGPoint(x: r.minX + k, y: r.minY), control: CGPoint(x: r.minX, y: r.minY))
-        p.addLine(to: CGPoint(x: r.minX + l, y: r.minY))
-        // top-right
-        p.move(to: CGPoint(x: r.maxX - l, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX - k, y: r.minY))
-        p.addQuadCurve(to: CGPoint(x: r.maxX, y: r.minY + k), control: CGPoint(x: r.maxX, y: r.minY))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.minY + l))
-        // bottom-right
-        p.move(to: CGPoint(x: r.maxX, y: r.maxY - l)); p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - k))
-        p.addQuadCurve(to: CGPoint(x: r.maxX - k, y: r.maxY), control: CGPoint(x: r.maxX, y: r.maxY))
-        p.addLine(to: CGPoint(x: r.maxX - l, y: r.maxY))
-        // bottom-left
-        p.move(to: CGPoint(x: r.minX + l, y: r.maxY)); p.addLine(to: CGPoint(x: r.minX + k, y: r.maxY))
-        p.addQuadCurve(to: CGPoint(x: r.minX, y: r.maxY - k), control: CGPoint(x: r.minX, y: r.maxY))
-        p.addLine(to: CGPoint(x: r.minX, y: r.maxY - l))
-        return p
-    }
+extension Brand {
+    /// The mark for the menu bar: a template image, so macOS tints it like its own icons.
+    static let menuBarImage: NSImage = {
+        let image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+            let ctx = NSGraphicsContext.current!.cgContext
+            ctx.addPath(ClipGeometry.path(in: rect.insetBy(dx: 0.5, dy: 0.5), flipped: true))
+            ctx.setFillColor(NSColor.black.cgColor)
+            ctx.fillPath(using: .evenOdd)
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
 }
 
-/// The name set in the brand's rounded face.
+/// The name, set the way the logo lockup sets it.
 struct Wordmark: View {
     var size: CGFloat = 20
     var body: some View {
-        Text("Clipframes").font(Brand.display(size, .bold)).tracking(-size * 0.02)
+        Text("Clipframes").font(.system(size: size, weight: .semibold)).tracking(-size * 0.02)
     }
 }

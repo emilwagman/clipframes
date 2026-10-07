@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DOWNLOAD_PATH, REPO_URL } from "@/lib/site";
 import { DownloadIcon } from "./DownloadButton";
+import Mark from "./Mark";
 import s from "./home.module.css";
 
 /// The quiet top bar. A hairline appears under it once the page scrolls.
@@ -19,7 +20,7 @@ export default function Header() {
     <header className={`${s.header} ${scrolled ? s.scrolled : ""}`}>
       <div className={s.headerIn}>
         <a className={s.brand} href="/">
-          <img src="/icon.svg" alt="" width={26} height={26} />
+          <Mark size={22} />
           Clipframes
         </a>
         <a className={s.gh} href={REPO_URL}>GitHub</a>
