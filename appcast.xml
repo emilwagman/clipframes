@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Clipframes</title>
+    <!-- release.sh adds new versions below this line -->
+    <item>
+      <title>0.2</title>
+      <pubDate>Wed, 07 Oct 2026 13:37:37 +0000</pubDate>
+      <sparkle:version>2</sparkle:version>
+      <sparkle:shortVersionString>0.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<ul><li>First release with automatic updates</li><li>Notarized, so it opens without a warning</li><li>Runs on Apple Silicon and Intel Macs</li></ul>]]></description>
+      <enclosure url="https://github.com/emilwagman/clipframes/releases/download/v0.2/Clipframes-0.2.zip" sparkle:edSignature="WTHpa50EWd7EjNr/I4UnLc5ahcyqMgRiRkOOFUEiajCNsVvd1m1XGQe2ZEtVL4K8VWkPWqAX7KoXyBM3gpmADw==" length="3697505" type="application/octet-stream"/>
+    </item>
+  </channel>
+</rss>
