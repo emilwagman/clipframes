@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoices · Northwind</title>
+<!-- A fictional app to record Clipframes against. Serve with: python3 -m http.server 3000 (from this folder). -->
+<style>
+  :root { --ink: #17181c; --ink-2: #5d616b; --ink-3: #9a9ea8; --line: #e8e9ee; --bg: #f7f8fa; --brand: #3b3fd8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif; color: var(--ink); background: #fff; }
+  .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  aside { background: var(--bg); border-right: 1px solid var(--line); padding: 22px 16px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; margin-bottom: 26px; }
+  .logo i { width: 24px; height: 24px; border-radius: 7px; background: var(--brand); }
+  nav a { display: block; padding: 7px 10px; border-radius: 7px; color: var(--ink-2); text-decoration: none; margin-bottom: 2px; }
+  nav a.on { background: #ebecf3; color: var(--ink); font-weight: 550; }
+  main { padding: 30px 40px; }
+  .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+  h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-3); font-size: 13px; }
+  .actions { display: flex; gap: 10px; align-items: center; }
+  input[type=search] { width: 220px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+  button { font: inherit; font-weight: 550; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px; }
+  .stat { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .stat span { color: var(--ink-3); font-size: 12.5px; }
+  .stat strong { display: block; font-size: 24px; font-weight: 650; margin-top: 2px; }
+  .stat.overdue strong { color: #d6333a; }
+  table { width: 100%; border-collapse: collapse; margin-top: 26px; }
+  th { text-align: left; font-size: 12px; font-weight: 550; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; padding: 0 12px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 13px 12px; border-bottom: 1px solid #f1f2f5; }
+  td.amount, th.amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .badge { font-size: 12px; font-weight: 550; padding: 3px 9px; border-radius: 999px; }
+  .badge.paid { background: #e3f6ea; color: #17803d; }
+  .badge.due { background: #fff4d6; color: #9a6b00; }
+  .badge.overdue { background: #fde6e7; color: #c42a31; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="logo"><i></i>Northwind</div>
+    <nav>
+      <a href="#">Overview</a>
+      <a href="#" class="on">Invoices</a>
+      <a href="#">Customers</a>
+      <a href="#">Reports</a>
+      <a href="#">Settings</a>
+    </nav>
+  </aside>
+  <main>
+    <div class="top">
+      <div><h1>Invoices</h1><div class="sub">September 2026 · 128 invoices</div></div>
+      <div class="actions">
+        <input type="search" id="invoice-search" placeholder="Search invoices" aria-label="Search invoices">
+        <button id="export" class="btn">Export</button>
+        <button id="new-invoice" class="btn btn-primary primary">New invoice</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat" id="paid-total"><span>Paid this month</span><strong>$48,210</strong></div>
+      <div class="stat" id="outstanding-total"><span>Outstanding</span><strong>$12,940</strong></div>
+      <div class="stat overdue" id="overdue-total"><span>Overdue</span><strong>$3,120</strong></div>
+    </div>
+    <table id="invoice-table">
+      <thead><tr><th>Invoice</th><th>Customer</th><th>Status</th><th>Due</th><th class="amount">Amount</th></tr></thead>
+      <tbody>
+        <tr><td>INV-1042</td><td>Maersk Line</td><td><span class="badge overdue">Overdue</span></td><td>Sep 12</td><td class="amount">$3,120.00</td></tr>
+        <tr><td>INV-1041</td><td>Cellmark AB</td><td><span class="badge due">Due</span></td><td>Oct 02</td><td class="amount">$8,400.00</td></tr>
+        <tr><td>INV-1040</td><td>Movia Care</td><td><span class="badge paid">Paid</span></td><td>Sep 28</td><td class="amount">$1,950.00</td></tr>
+        <tr><td>INV-1039</td><td>Nyberg Bil</td><td><span class="badge paid">Paid</span></td><td>Sep 26</td><td class="amount">$6,300.00</td></tr>
+        <tr><td>INV-1038</td><td>Ekvia Group</td><td><span class="badge due">Due</span></td><td>Oct 05</td><td class="amount">$4,540.00</td></tr>
+        <tr><td>INV-1037</td><td>Vanta Studio</td><td><span class="badge paid">Paid</span></td><td>Sep 21</td><td class="amount">$2,780.00</td></tr>
+        <tr><td>INV-1036</td><td>Plex Tech</td><td><span class="badge paid">Paid</span></td><td>Sep 18</td><td class="amount">$12,200.00</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>
