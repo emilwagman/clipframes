@@ -1,5 +1,5 @@
-// Draws the app icon: the Clipframes mark (a frame with its corner clipped off, the
-// piece lifted away) in black on an off-white tile. Same geometry as ClipGeometry
+// Draws the app icon: the Clipframes mark (a frame with its corner clipped off into the
+// window, the piece lifted away, corners rounded) in near-black on a white tile. Same geometry as ClipGeometry
 // in Sources/Logo.swift and site/public/mark.svg.
 import AppKit
 
@@ -10,21 +10,21 @@ let sizes: [(Int, String)] = [
     (512, "512x512"), (1024, "512x512@2x"),
 ]
 
-// The mark in a 114-unit box, top-left origin.
+// The mark in a 114-unit box, top-left origin: the frame as one outline (the cut opens into
+// the window) and the lifted piece, every corner rounded.
 let box: CGFloat = 114
-let frame: [(CGFloat, CGFloat)] = [(4, 10.2), (76, 10.2), (104, 38.2), (104, 110.2), (4, 110.2)]
-let hole: [(CGFloat, CGFloat)] = [(21, 27.2), (87, 27.2), (87, 93.2), (21, 93.2)]
-let piece: [(CGFloat, CGFloat)] = [(83.6, 4), (110, 4), (110, 30.4)]
+let frame: [(CGFloat, CGFloat)] = [(0, 0), (64, 0), (81, 17), (17, 17), (17, 83), (83, 83), (83, 19), (100, 36), (100, 100), (0, 100)]
+    .map { ($0.0 + 4, $0.1 + 10.2) }
+let piece: [(CGFloat, CGFloat)] = [(75.66, 4), (109.5, 4), (109.5, 37.84)]
 
 func mark(in r: NSRect) -> NSBezierPath {
     let k = r.width / box
     let path = NSBezierPath()
-    path.windingRule = .evenOdd
-    for shape in [frame, hole, piece] {
-        for (i, q) in shape.enumerated() {
-            let p = NSPoint(x: r.minX + q.0 * k, y: r.maxY - q.1 * k)   // flip for AppKit
-            if i == 0 { path.move(to: p) } else { path.line(to: p) }
-        }
+    for (shape, radius) in [(frame, CGFloat(6)), (piece, CGFloat(4))] {
+        let pts = shape.map { NSPoint(x: r.minX + $0.0 * k, y: r.maxY - $0.1 * k) }   // flip for AppKit
+        let n = pts.count
+        path.move(to: NSPoint(x: (pts[n - 1].x + pts[0].x) / 2, y: (pts[n - 1].y + pts[0].y) / 2))
+        for i in 0..<n { path.appendArc(from: pts[i], to: pts[(i + 1) % n], radius: radius * k) }
         path.close()
     }
     return path
@@ -50,7 +50,7 @@ func draw(_ px: Int) -> Data {
     shadow.shadowBlurRadius = s * 0.03
     NSGraphicsContext.saveGraphicsState()
     shadow.set()
-    NSColor(red: 0.984, green: 0.98, blue: 0.969, alpha: 1).setFill()
+    NSColor.white.setFill()
     tile.fill()
     NSGraphicsContext.restoreGraphicsState()
     NSColor.black.withAlphaComponent(0.08).setStroke()
@@ -59,7 +59,7 @@ func draw(_ px: Int) -> Data {
 
     // The mark takes 60% of the tile, centred.
     let m = body.width * 0.6
-    NSColor(red: 0.08, green: 0.08, blue: 0.08, alpha: 1).setFill()
+    NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 1).setFill()
     mark(in: NSRect(x: body.midX - m / 2, y: body.midY - m / 2, width: m, height: m)).fill()
 
     NSGraphicsContext.restoreGraphicsState()
