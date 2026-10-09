@@ -1157,8 +1157,10 @@ pub fn run() {
             *core.settings.lock().unwrap() = saved.clone();
             if !existed {
                 save_settings(&handle);
-                set_launch_at_login(&handle, saved.launch_at_login);
             }
+            // Every start, so the login entry matches the setting even when the settings were
+            // there before this copy was installed.
+            set_launch_at_login(&handle, saved.launch_at_login);
 
             // Another app may own the shortcut already. Clipframes still runs: the tray opens
             // it, and Settings offers another shortcut.
