@@ -1,5 +1,6 @@
 // Every Clipframes window loads this page; the window's name says which part it is.
 
+import { invoke } from "@tauri-apps/api/core";
 import { createRoot } from "react-dom/client";
 import "../ui/style.css";
 import { Bar } from "../ui/Bar";
@@ -20,6 +21,11 @@ if (!own) {
     if (event.key === "Escape") void platform.escape();
   });
 }
+
+// An error in a window's own code is reported, without anything from the page it was drawn over.
+const report = (message: string, at: string) => void invoke("ui_error", { message: message.slice(0, 300), at }).catch(() => {});
+window.addEventListener("error", (event) => report(event.message, `${event.filename}:${event.lineno}`));
+window.addEventListener("unhandledrejection", (event) => report(String(event.reason), "promise"));
 
 // These are tool windows, not pages: no context menu.
 window.addEventListener("contextmenu", (event) => event.preventDefault());

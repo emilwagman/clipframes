@@ -14,10 +14,12 @@ use crate::places::{self, Place, Places};
 use crate::round::{Click, Kind, Pick, Round};
 use crate::shot;
 use crate::tab;
+use crate::telemetry;
 use crate::settings::{self, Settings};
 use crate::store::{self, Stamp};
 use crate::updates;
 use serde::Serialize;
+use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::path::PathBuf;
@@ -498,6 +500,7 @@ fn open(app: &AppHandle) {
     }
     trace("open: begin");
     let started = Instant::now();
+    let via = telemetry::take_via();
     core.turn.fetch_add(1, Ordering::SeqCst);
     *core.opened.lock().unwrap() = Some(started);
     *core.round.lock().unwrap() = Round::default();
@@ -531,6 +534,14 @@ fn open(app: &AppHandle) {
         return;
     }
     trace("open: bar on screen");
+    if let Some(trouble) = core.trouble.lock().unwrap().as_deref() {
+        // "permission" is a known state; anything else is the picker's own error message.
+        let kind = if trouble == "permission" { "permission" } else { "picker" };
+        telemetry::event("round_blocked", json!({ "via": via, "why": kind }));
+        if kind == "picker" {
+            telemetry::error("picker", trouble, "picker::start");
+        }
+    }
     if core.trouble.lock().unwrap().is_some() {
         let _ = app.emit("round", view(app));
         return;
@@ -550,12 +561,14 @@ fn open(app: &AppHandle) {
     refresh_exempt(app);
     publish(app);
     eprintln!("open ({}): picking after {:.0} ms, all windows after {:.0} ms", if was_warm { "warm" } else { "cold" }, picking.as_secs_f64() * 1000.0, started.elapsed().as_secs_f64() * 1000.0);
+    telemetry::event("round_opened", json!({ "via": via, "warm": was_warm, "ms_to_input": picking.as_millis() as u64, "ms_to_windows": started.elapsed().as_millis() as u64, "displays": core.screens.lock().unwrap().len() }));
 }
 
 /// Ends the round and hides everything. What was picked stays on the clipboard.
 fn close(app: &AppHandle) {
     trace("close: begin");
     let core = app.state::<Core>();
+    let was_open = core.picker.lock().unwrap().is_some();
     // A clip still recording is finished first, so it is kept.
     stop_recording(app);
     let waiting = Instant::now();
@@ -568,6 +581,12 @@ fn close(app: &AppHandle) {
     drop(picker);
     trace("close: picker stopped");
     *core.noting.lock().unwrap() = None;
+    if was_open {
+        let round = core.round.lock().unwrap();
+        let count = |kind: Kind| round.picks.iter().filter(|p| p.kind == kind).count();
+        let seconds = core.opened.lock().unwrap().map(|t| t.elapsed().as_secs()).unwrap_or(0);
+        telemetry::event("round_closed", json!({ "picks": round.picks.len(), "elements": count(Kind::Element), "areas": count(Kind::Area), "clips": count(Kind::Clip), "notes": round.picks.iter().filter(|p| !p.note.is_empty()).count(), "seconds": seconds }));
+    }
     close_round_windows(app);
     trace("close: windows closed");
     if let Some(bar) = app.get_webview_window(BAR) {
@@ -624,6 +643,7 @@ fn on_event(app: &AppHandle, event: Event) {
             let pad = if cfg!(windows) { 18.0 } else { 12.0 };
             let around = Rect { x: (frame.x - pad).max(0.0), y: (frame.y - pad).max(0.0), width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
             let (image, pixels) = snap(&core, &around, ELEMENT_WIDTH).unwrap_or_default();
+            telemetry::event("pick_added", json!({ "kind": "element", "picture": !image.is_empty(), "selector": !element.selector().is_empty(), "named": !element.name.is_empty(), "web": !element.url.is_empty() }));
             remember(app, &element);
             let index = core.round.lock().unwrap().push(Pick { element, image, pixels, ..Default::default() });
             *core.noting.lock().unwrap() = Some(index);
@@ -656,6 +676,7 @@ fn snap(core: &Core, rect: &Rect, widest: u32) -> Option<(String, (u32, u32))> {
         Ok(pixels) => Some((name, pixels)),
         Err(e) => {
             trace(&format!("no picture: {e}"));
+            telemetry::error("capture", &e.to_string(), "app::snap");
             None
         }
     }
@@ -677,6 +698,7 @@ fn show_area(app: &AppHandle, rect: Option<Rect>, recording: bool) {
 /// The screen could not be captured: say so in the bar instead of adding an empty pick.
 fn cannot_capture(app: &AppHandle) {
     let core = app.state::<Core>();
+    telemetry::error("capture", "the screen could not be captured", "app::cannot_capture");
     *core.trouble.lock().unwrap() = Some(if cfg!(target_os = "macos") { "screen".into() } else { "The screen could not be captured.".into() });
     let _ = app.emit("round", view(app));
 }
@@ -689,6 +711,7 @@ fn add_area(app: &AppHandle, rect: Rect) {
         thread::sleep(Duration::from_millis(60));
     }
     let Some((image, pixels)) = snap(&core, &rect, AREA_WIDTH) else { return cannot_capture(app) };
+    telemetry::event("pick_added", json!({ "kind": "area", "picture": true, "width": pixels.0, "height": pixels.1 }));
     let element = place_of(&rect);
     remember(app, &element);
     let index = core.round.lock().unwrap().push(Pick { kind: Kind::Area, element, image, pixels, ..Default::default() });
@@ -755,6 +778,7 @@ fn start_recording(app: &AppHandle, rect: Rect) {
         }
         // Each click is tied to the first frame taken after it.
         let clicks = recording.clicks.lock().unwrap().iter().map(|(at, what)| Click { at: *at, frame: (times.iter().position(|t| t >= at).unwrap_or(times.len() - 1) + 1) as u32, what: what.clone() }).collect();
+        telemetry::event("pick_added", json!({ "kind": "clip", "picture": true, "seconds": seconds.round() as u64, "frames": frames, "clicks": recording.clicks.lock().unwrap().len() }));
         let element = place_of(&rect);
         remember(&app, &element);
         let index = core.round.lock().unwrap().push(Pick { kind: Kind::Clip, element, image: name, pixels, frames, seconds, clicks, ..Default::default() });
@@ -848,6 +872,7 @@ fn note_close(app: AppHandle) {
 #[tauri::command]
 fn pick_remove(app: AppHandle, index: usize) {
     let core = app.state::<Core>();
+    telemetry::event("pick_removed", json!({}));
     let nothing_left = {
         let mut round = core.round.lock().unwrap();
         round.remove(index);
@@ -948,6 +973,7 @@ fn history_copy(app: AppHandle, id: String) -> Result<(), String> {
     let round = store::load(&folder).ok_or("That capture could not be read.")?;
     let text = round.reference(folder.join("notes.md").to_str());
     copy_text(&app, &text);
+    telemetry::event("history_copied", json!({ "picks": round.picks.len() }));
     Ok(())
 }
 
@@ -962,6 +988,7 @@ fn history_reveal(app: AppHandle, id: String) {
 #[tauri::command]
 fn history_delete(id: String) -> Result<(), String> {
     let folder = store::folder_of(&store::root(), &id).ok_or("That capture is gone.")?;
+    telemetry::event("history_deleted", json!({}));
     std::fs::remove_dir_all(folder).map_err(|e| e.to_string())
 }
 
@@ -972,6 +999,7 @@ fn place_auto_set(app: AppHandle, on: bool) {
     if let Some(place) = core.over.lock().unwrap().as_ref() {
         let mut places = core.places.lock().unwrap();
         places.set_auto(place, on, places::now());
+        telemetry::event("place_auto_set", json!({ "on": on }));
         if let Some(dir) = config_dir(&app) {
             let _ = places.save(&dir);
         }
@@ -982,6 +1010,7 @@ fn place_auto_set(app: AppHandle, on: bool) {
 /// The tab was clicked.
 #[tauri::command]
 fn tab_open(app: AppHandle) {
+    telemetry::via("tab");
     later(&app, open);
 }
 
@@ -993,6 +1022,9 @@ struct SettingsView {
     shortcut_label: String,
     shortcut_works: bool,
     launch_at_login: bool,
+    share_usage: bool,
+    /// False in a build that has nowhere to send usage to: the switch is not shown.
+    usage_available: bool,
     version: String,
     update: String,
     mac: bool,
@@ -1008,6 +1040,8 @@ fn settings_view(app: &AppHandle) -> SettingsView {
         shortcut: settings.shortcut,
         shortcut_works,
         launch_at_login: settings.launch_at_login,
+        share_usage: settings.share_usage,
+        usage_available: telemetry::available(),
         version: app.package_info().version.to_string(),
         update,
         mac: cfg!(target_os = "macos"),
@@ -1028,6 +1062,7 @@ fn bind_shortcut(app: &AppHandle, shortcut: &str) -> Result<(), String> {
     app.global_shortcut()
         .on_shortcut(shortcut, |app, _, event| {
             if event.state() == ShortcutState::Pressed {
+                telemetry::via("shortcut");
                 later(app, toggle);
             }
         })
@@ -1115,6 +1150,7 @@ fn shortcut_set(app: AppHandle, shortcut: String) -> Result<SettingsView, String
     }
     core.settings.lock().unwrap().shortcut = shortcut;
     *core.shortcut_works.lock().unwrap() = true;
+    telemetry::event("shortcut_changed", json!({}));
     save_settings(&app);
     refresh_menu(&app);
     let _ = app.emit("round", view(&app));
@@ -1130,6 +1166,20 @@ fn launch_set(app: AppHandle, on: bool) -> SettingsView {
 }
 
 #[tauri::command]
+fn usage_set(app: AppHandle, on: bool) -> SettingsView {
+    app.state::<Core>().settings.lock().unwrap().share_usage = on;
+    save_settings(&app);
+    telemetry::set_enabled(on);
+    settings_view(&app)
+}
+
+/// Something went wrong in one of the windows' own code.
+#[tauri::command]
+fn ui_error(window: WebviewWindow, message: String, at: String) {
+    telemetry::error("ui", &message, &format!("{}:{}", window.label(), at.rsplit('/').next().unwrap_or("")));
+}
+
+#[tauri::command]
 fn update_check(app: AppHandle) {
     thread::spawn(move || {
         set_update_status(&app, "Checking…".into());
@@ -1140,7 +1190,10 @@ fn update_check(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         // Starting Clipframes while it is running opens the bar of the one that is.
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| later(app, open)))
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+            telemetry::via("launch");
+            later(app, open)
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // The login start says so, and that is the one start that shows nothing.
@@ -1167,6 +1220,8 @@ pub fn run() {
             settings_get,
             shortcut_set,
             launch_set,
+            usage_set,
+            ui_error,
             update_check
         ])
         .setup(|app| {
@@ -1176,10 +1231,16 @@ pub fn run() {
             let core = app.state::<Core>();
 
             let (saved, existed) = app.path().app_config_dir().map(|dir| settings::load(&dir)).unwrap_or_default();
+            let mut saved = saved;
+            let first_run = saved.install_id.is_empty();
+            if first_run {
+                saved.install_id = telemetry::new_install_id();
+            }
             *core.settings.lock().unwrap() = saved.clone();
-            if !existed {
+            if !existed || first_run {
                 save_settings(&handle);
             }
+            telemetry::start(saved.install_id.clone(), &app.package_info().version.to_string(), saved.share_usage);
             // Every start, so the login entry matches the setting even when the settings were
             // there before this copy was installed.
             set_launch_at_login(&handle, saved.launch_at_login);
@@ -1197,7 +1258,10 @@ pub fn run() {
             refresh_menu(&handle);
 
             let tray = TrayIconBuilder::new().tooltip("Clipframes").menu(&menu).on_menu_event(|app, event| match event.id.as_ref() {
-                "open" => later(app, open),
+                "open" => {
+                    telemetry::via("tray");
+                    later(app, open)
+                }
                 "settings" => later(app, open_settings),
                 "quit" => app.exit(0),
                 _ => {}
@@ -1229,7 +1293,10 @@ pub fn run() {
                 selftest::run(handle.clone());
                 return Ok(());
             }
-            let quiet = std::env::args().any(|a| a == "--hidden") | updates::just_updated(&handle);
+            let updated = updates::just_updated(&handle);
+            let hidden = std::env::args().any(|a| a == "--hidden");
+            telemetry::event("app_started", json!({ "how": if updated { "update" } else if hidden { "login" } else { "hand" }, "first_run": first_run, "shortcut_works": bound, "launch_at_login": saved.launch_at_login }));
+            let quiet = hidden | updated;
             if !quiet {
                 later(&handle, if bound { open } else { open_settings });
             }
@@ -1242,7 +1309,10 @@ pub fn run() {
             tauri::RunEvent::ExitRequested { api, code, .. } if code.is_none() => api.prevent_exit(),
             // macOS: the app was opened again while running (Spotlight, Launchpad, Finder).
             #[cfg(target_os = "macos")]
-            tauri::RunEvent::Reopen { .. } => later(app, open),
+            tauri::RunEvent::Reopen { .. } => {
+                telemetry::via("launch");
+                later(app, open)
+            }
             _ => {
                 let _ = app;
             }

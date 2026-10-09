@@ -44,6 +44,9 @@ pub fn check(app: &AppHandle) -> Result<String, String> {
     }
     let result = run(app);
     BUSY.store(false, Ordering::SeqCst);
+    if let Err(e) = &result {
+        crate::telemetry::error("update", e, "updates::check");
+    }
     app::set_update_status(app, match &result {
         Ok(message) => message.clone(),
         Err(e) => format!("Could not check for updates: {e}"),
@@ -57,6 +60,7 @@ fn run(app: &AppHandle) -> Result<String, String> {
     let Some(update) = tauri::async_runtime::block_on(updater.check()).map_err(text)? else {
         return Ok(format!("Clipframes {} is the latest version.", app.package_info().version));
     };
+    crate::telemetry::event("update_found", serde_json::json!({ "to": update.version }));
     app::set_update_status(app, format!("Downloading version {}…", update.version));
     let bytes = tauri::async_runtime::block_on(update.download(|_, _| {}, || {})).map_err(text)?;
 
