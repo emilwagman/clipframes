@@ -53,7 +53,28 @@ COPYFILE_DISABLE=1 tar -czf "$OUT/Clipframes.app.tar.gz" -C "$(dirname "$APP")" 
 MAC_SIG=$(sign "$OUT/Clipframes.app.tar.gz")
 
 echo "Windows: building on ${WIN_HOST}…"
-ssh -o ServerAliveInterval=30 "$WIN_HOST" "cd $WIN_REPO; git fetch -q; git checkout -q $BRANCH; git pull -q; if ((git rev-parse HEAD) -ne '$(git rev-parse HEAD)') { throw 'Windows is not on the same commit.' }; cd desktop; pnpm install --frozen-lockfile | Out-Null; '{\"bundle\":{\"createUpdaterArtifacts\":false}}' | Set-Content -Encoding ASCII \$env:TEMP\cf-release.json; pnpm -s tauri build --bundles nsis --config \$env:TEMP\cf-release.json | Out-Null; if (-not (Test-Path src-tauri\target\release\bundle\nsis\Clipframes_${VERSION}_x64-setup.exe)) { throw 'No installer was built.' }"
+# The steps go over as a script, so no quoting stands between this file and PowerShell.
+# A copy still running from the build folder would lock the file, and an installer left from
+# an earlier build must never be taken for this one: stop the first, delete the second, and
+# stop on any error.
+cat > "$OUT/build-windows.ps1" <<PS1
+\$ErrorActionPreference = 'Stop'
+Set-Location '$WIN_REPO'
+git fetch -q; git checkout -q $BRANCH; git pull -q
+if ((git rev-parse HEAD) -ne '$(git rev-parse HEAD)') { throw 'Windows is not on the same commit.' }
+Set-Location desktop
+Get-Process clipframes -ErrorAction SilentlyContinue | Where-Object { \$_.Path -like '*target?release*' } | Stop-Process -Force
+Remove-Item src-tauri/target/release/bundle/nsis -Recurse -Force -ErrorAction SilentlyContinue
+'{"bundle":{"createUpdaterArtifacts":false}}' | Set-Content -Encoding ASCII "\$env:TEMP/cf-release.json"
+\$ErrorActionPreference = 'Continue'
+pnpm install --frozen-lockfile | Out-Null
+pnpm -s tauri build --bundles nsis --config "\$env:TEMP/cf-release.json" 2>&1 | Select-Object -Last 3
+if (\$LASTEXITCODE -ne 0) { throw 'The Windows build failed.' }
+if (-not (Test-Path src-tauri/target/release/bundle/nsis/Clipframes_${VERSION}_x64-setup.exe)) { throw 'No installer was built.' }
+PS1
+scp -q "$OUT/build-windows.ps1" "$WIN_HOST:cf-build-windows.ps1"
+rm "$OUT/build-windows.ps1"
+ssh -o ServerAliveInterval=30 "$WIN_HOST" 'powershell -ExecutionPolicy Bypass -File $HOME\cf-build-windows.ps1; $code = $LASTEXITCODE; Remove-Item $HOME\cf-build-windows.ps1; exit $code'
 scp -q "$WIN_HOST:$(printf '%s' "$WIN_REPO" | tr '\\' '/')/desktop/src-tauri/target/release/bundle/nsis/Clipframes_${VERSION}_x64-setup.exe" "$OUT/Clipframes-setup.exe"
 WIN_SIG=$(sign "$OUT/Clipframes-setup.exe")
 

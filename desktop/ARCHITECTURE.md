@@ -21,7 +21,7 @@ everything it does.
 
 ```
 desktop/
-  ui/          the interface, as plain TypeScript with no framework: the bar, the tab, the
+  ui/          the interface, in React with one Zustand store: the bar, the tab, the
                overlay painter, the comment box, the library. It talks to the outside only
                through `Platform` (ui/platform.ts).
   src/         one small entry file per window, each mounting something from ui/ with the
