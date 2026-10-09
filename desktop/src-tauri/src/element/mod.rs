@@ -107,6 +107,19 @@ impl ElementInfo {
         parts.join(" ")
     }
 
+    /// What tells it apart from others of its role: its name, or for something without one
+    /// (a piece of text on macOS) the value it shows. Empty when it has neither, or is only
+    /// known by the text found inside it.
+    pub fn label(&self) -> &str {
+        if !self.name.is_empty() {
+            &self.name
+        } else if self.inner_text.is_empty() {
+            &self.value
+        } else {
+            ""
+        }
+    }
+
     /// `2nd of 2 on the page`: which of several elements that read the same this one is.
     /// "On the page" inside a browser or a web view, "in the window" in any other app.
     pub fn which_one(&self) -> Option<String> {

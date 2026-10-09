@@ -4,6 +4,7 @@
 //! Clipframes' own overlay. It finds the front window of another app under the point and asks
 //! that app, with a short timeout on every question so a hung app can't stall the pointer.
 
+use super::locate::{self, Node, Opened};
 use super::{ElementInfo, ReadError, Rect};
 use accessibility_sys::*;
 use core_foundation::array::{CFArray, CFArrayRef};
@@ -109,17 +110,19 @@ fn window_at(x: f64, y: f64) -> Option<ScreenWindow> {
 }
 
 pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
-    read(x, y, true)
+    read(x, y, true, false)
 }
 
 /// The address of the page at a point, or nothing when there is no page there. With
 /// `may_wake` off, a Chromium or Electron app whose page structure is not switched on is
 /// left as it is, and has no address to give.
 pub fn page_at(x: f64, y: f64, may_wake: bool) -> String {
-    read(x, y, may_wake).map(|e| e.url).unwrap_or_default()
+    read(x, y, may_wake, false).map(|e| e.url).unwrap_or_default()
 }
 
-fn read(x: f64, y: f64, may_wake: bool) -> Result<ElementInfo, ReadError> {
+/// `locate` adds which one it is and what heading it is under: a look through the whole page
+/// or window, for a click only.
+fn read(x: f64, y: f64, may_wake: bool, locate: bool) -> Result<ElementInfo, ReadError> {
     let win = window_at(x, y).ok_or(ReadError::Nothing)?;
     if may_wake {
         wake(win.pid);
@@ -139,9 +142,17 @@ fn read(x: f64, y: f64, may_wake: bool) -> Result<ElementInfo, ReadError> {
             return Ok(base);
         }
         let target = best_target(Element(hit));
-        let mut info = describe(&target, base);
+        let mut around = None;
+        let mut info = describe(&target, base, &mut around);
         if info.frame.width < 1.0 {
             info.frame = win.frame;
+        }
+        if let Some(around) = around.filter(|_| locate) {
+            let target = AxNode(target);
+            if let Some(found) = locate::walk(AxNode(around), &target, &info.role, info.label(), &locate::BUDGET) {
+                info.occurrence = found.occurrence;
+                info.heading = found.heading;
+            }
         }
         Ok(info)
     }
@@ -172,7 +183,9 @@ unsafe fn best_target(el: Element) -> Element {
     el
 }
 
-unsafe fn describe(el: &Element, base: ElementInfo) -> ElementInfo {
+/// `around` is set to the page the element is on (its web area), or failing that its window:
+/// what "the others like it" are looked for in.
+unsafe fn describe(el: &Element, base: ElementInfo, around: &mut Option<Element>) -> ElementInfo {
     let mut i = base;
     i.role = el.role();
     i.name = [kAXTitleAttribute, kAXDescriptionAttribute, kAXPlaceholderValueAttribute, kAXHelpAttribute]
@@ -210,6 +223,9 @@ unsafe fn describe(el: &Element, base: ElementInfo) -> ElementInfo {
         }
         if role == "Window" && i.window.is_empty() {
             i.window = c.string(kAXTitleAttribute);
+        }
+        if (role == "WebArea" || role == "Window") && around.is_none() {
+            *around = Some(c.retained());
         }
         if role == "WebArea" {
             if i.url.is_empty() {
@@ -335,6 +351,82 @@ fn is_chromium(pid: i32) -> bool {
 
 // MARK: An owned AXUIElement
 
+/// An attribute's value as text: a string, a URL or a list of strings, trimmed, on one line.
+unsafe fn text_of(v: &CFType) -> String {
+    if let Some(s) = v.downcast::<CFString>() {
+        return s.to_string().trim().replace('\n', " ");
+    }
+    if let Some(u) = v.downcast::<CFURL>() {
+        return u.get_string().to_string();
+    }
+    if v.type_of() == CFArray::<CFType>::type_id() {
+        let array: CFArray<CFType> = CFArray::wrap_under_get_rule(v.as_CFTypeRef() as CFArrayRef);
+        return array.iter().filter_map(|item| item.downcast::<CFString>()).map(|s| s.to_string()).collect::<Vec<_>>().join(" ");
+    }
+    String::new()
+}
+
+/// An attribute's value as the elements it lists.
+unsafe fn elements_of(v: &CFType) -> Vec<Element> {
+    if v.type_of() != CFArray::<CFType>::type_id() {
+        return vec![];
+    }
+    let array: CFArray<CFType> = CFArray::wrap_under_get_rule(v.as_CFTypeRef() as CFArrayRef);
+    array
+        .iter()
+        .filter(|item| item.type_of() == AXUIElementGetTypeID())
+        .map(|item| {
+            let raw = item.as_CFTypeRef() as AXUIElementRef;
+            core_foundation::base::CFRetain(raw as CFTypeRef);
+            Element(raw)
+        })
+        .collect()
+}
+
+/// An element as the look through a page meets it (`locate::walk`).
+struct AxNode(Element);
+
+/// What is asked about each element on the way, in this order, in one message to the app:
+/// asked one by one, a page of a thousand elements would be seven thousand messages.
+const ASKED: [&str; 7] = [kAXRoleAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXPlaceholderValueAttribute, kAXHelpAttribute, kAXValueAttribute, kAXChildrenAttribute];
+
+impl Node for AxNode {
+    fn open(&self) -> Opened<AxNode> {
+        let mut opened = Opened { role: String::new(), name: String::new(), heading: None, children: Vec::new() };
+        unsafe {
+            let asked: Vec<CFString> = ASKED.iter().map(|a| CFString::new(a)).collect();
+            let asked = CFArray::from_CFTypes(&asked);
+            let mut answers: CFArrayRef = ptr::null();
+            // An attribute the element does not have comes back as an error value in its
+            // place, which reads as no text and no children below.
+            if AXUIElementCopyMultipleAttributeValues(self.0 .0, asked.as_concrete_TypeRef(), 0, &mut answers) != kAXErrorSuccess || answers.is_null() {
+                return opened;
+            }
+            let answers: CFArray<CFType> = CFArray::wrap_under_create_rule(answers);
+            if answers.len() != ASKED.len() as isize {
+                return opened;
+            }
+            let text = |i: isize| answers.get(i).map(|v| text_of(&v)).unwrap_or_default();
+            opened.role = text(0).trim_start_matches("AX").to_string();
+            // The same name `describe` gives, or for something without one the value it
+            // shows: what `ElementInfo::label` is for the element that was picked.
+            let name = (1..=4).map(text).find(|s| !s.is_empty()).unwrap_or_default();
+            let value = text(5);
+            opened.name = if !name.is_empty() { name } else if value.chars().count() < 200 { value } else { String::new() };
+            if opened.role == "Heading" {
+                // A heading says its text as its title, its value, or only in the text inside it.
+                opened.heading = Some(if opened.name.is_empty() { inner_text(&self.0) } else { opened.name.clone() });
+            }
+            opened.children = answers.get(6).map(|v| elements_of(&v)).unwrap_or_default().into_iter().map(AxNode).collect();
+        }
+        opened
+    }
+
+    fn is(&self, other: &AxNode) -> bool {
+        unsafe { core_foundation::base::CFEqual(self.0 .0 as CFTypeRef, other.0 .0 as CFTypeRef) != 0 }
+    }
+}
+
 struct Element(AXUIElementRef);
 
 impl Drop for Element {
@@ -360,18 +452,7 @@ impl Element {
 
     /// A string, a URL or a list of strings as text, trimmed, on one line.
     unsafe fn string(&self, attribute: &str) -> String {
-        let Some(v) = self.copy(attribute) else { return String::new() };
-        if let Some(s) = v.downcast::<CFString>() {
-            return s.to_string().trim().replace('\n', " ");
-        }
-        if let Some(u) = v.downcast::<CFURL>() {
-            return u.get_string().to_string();
-        }
-        if v.type_of() == CFArray::<CFType>::type_id() {
-            let array: CFArray<CFType> = CFArray::wrap_under_get_rule(v.as_CFTypeRef() as CFArrayRef);
-            return array.iter().filter_map(|item| item.downcast::<CFString>()).map(|s| s.to_string()).collect::<Vec<_>>().join(" ");
-        }
-        String::new()
+        self.copy(attribute).map(|v| text_of(&v)).unwrap_or_default()
     }
 
     /// "AXButton" → "Button".
@@ -395,20 +476,7 @@ impl Element {
     }
 
     unsafe fn children(&self) -> Vec<Element> {
-        let Some(v) = self.copy(kAXChildrenAttribute) else { return vec![] };
-        if v.type_of() != CFArray::<CFType>::type_id() {
-            return vec![];
-        }
-        let array: CFArray<CFType> = CFArray::wrap_under_get_rule(v.as_CFTypeRef() as CFArrayRef);
-        array
-            .iter()
-            .filter(|item| item.type_of() == AXUIElementGetTypeID())
-            .map(|item| {
-                let raw = item.as_CFTypeRef() as AXUIElementRef;
-                core_foundation::base::CFRetain(raw as CFTypeRef);
-                Element(raw)
-            })
-            .collect()
+        self.copy(kAXChildrenAttribute).map(|v| elements_of(&v)).unwrap_or_default()
     }
 
     unsafe fn pressable(&self) -> bool {
@@ -463,6 +531,7 @@ fn focused_title(pid: i32) -> String {
     }
 }
 
+/// The reading for a click: the element, and which one it is and under what heading.
 pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
-    element_full_at(x, y)
+    read(x, y, true, true)
 }
