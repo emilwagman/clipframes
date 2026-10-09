@@ -399,3 +399,8 @@ impl Element {
         Rect { x: origin.x, y: origin.y, width: size.width, height: size.height }
     }
 }
+
+/// Every reading here is already the full one.
+pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    element_at(x, y)
+}

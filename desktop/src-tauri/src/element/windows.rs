@@ -2,6 +2,7 @@
 //! elements here too: AutomationId carries the DOM id and ClassName the class list.
 
 use super::{ElementInfo, ReadError, Rect};
+use uiautomation::patterns::UIValuePattern;
 use uiautomation::types::Point;
 use uiautomation::{UIAutomation, UIElement};
 
@@ -36,6 +37,51 @@ pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     })
 }
 
+/// What the hover reading leaves out because each answer is a call into the other app: the
+/// selector of a bare piece of text, what the element sits inside, and the page's address.
+pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    AUTOMATION.with(|automation| {
+        let automation = automation.as_ref().ok_or(ReadError::Other("UI Automation is not available.".into()))?;
+        let el = automation.element_from_point(Point::new(x as i32, y as i32)).map_err(|_| ReadError::Nothing)?;
+        let mut info = describe(&el, x as i32, y as i32);
+        let Ok(walker) = automation.get_control_view_walker() else { return Ok(info) };
+
+        let mut parent = walker.get_parent(&el).ok();
+        let mut nearest = true;
+        let mut steps = 0;
+        while let Some(p) = parent {
+            let role = role_of(&p);
+            if role == "Window" || steps > 40 {
+                break;
+            }
+            if nearest && is_web(&p) && info.dom_id.is_empty() && info.dom_classes.is_empty() && info.role == "Text" {
+                // A piece of text has no id or class of its own; the element holding it does.
+                info.dom_id = p.get_automation_id().unwrap_or_default();
+                info.dom_classes = p.get_classname().unwrap_or_default();
+            }
+            nearest = false;
+            if role == "Document" {
+                if info.url.is_empty() && is_web(&p) {
+                    info.url = p.get_pattern::<UIValuePattern>().and_then(|v| v.get_value()).unwrap_or_default();
+                }
+            } else if role != "Pane" && info.path.len() < 4 {
+                let name = p.get_name().unwrap_or_default();
+                if !name.is_empty() && name.chars().count() <= 40 && name != info.name {
+                    info.path.insert(0, name);
+                }
+            }
+            steps += 1;
+            parent = walker.get_parent(&p).ok();
+        }
+        Ok(info)
+    })
+}
+
+fn is_web(el: &UIElement) -> bool {
+    let framework = el.get_framework_id().unwrap_or_default();
+    framework.eq_ignore_ascii_case("Chrome") || framework.eq_ignore_ascii_case("Gecko")
+}
+
 fn describe(el: &UIElement, x: i32, y: i32) -> ElementInfo {
     let class = el.get_classname().unwrap_or_default();
     let automation_id = el.get_automation_id().unwrap_or_default();
@@ -60,8 +106,12 @@ fn describe(el: &UIElement, x: i32, y: i32) -> ElementInfo {
     // The window and the app come from the window system directly: asking UI Automation for
     // each parent is a call into the other app every step.
     let (title, pid) = win::top_window_at(x, y);
-    info.window = title;
     info.app = win::app_name(if pid != 0 { pid } else { info.pid as u32 });
+    // "Invoices - Google Chrome" says the app twice once the app is named.
+    info.window = match title.strip_suffix(&info.app).map(|t| t.trim_end_matches([' ', '-', '\u{2013}', '\u{2014}'])) {
+        Some(short) if !info.app.is_empty() && !short.is_empty() => short.to_string(),
+        _ => title,
+    };
     info
 }
 

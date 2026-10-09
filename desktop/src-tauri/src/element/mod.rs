@@ -116,6 +116,12 @@ pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     platform::element_at(x, y)
 }
 
+/// The same, with everything worth knowing about it: what it sits inside, the page it is on.
+/// Slower where that takes extra questions, so it is asked once, when the user clicks.
+pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    platform::element_full_at(x, y)
+}
+
 /// Housekeeping to call now and then: lets apps that were asked for their page structure go
 /// back to sleep once they have not been looked at for `older_than`.
 pub fn sleep_idle(older_than: std::time::Duration) {

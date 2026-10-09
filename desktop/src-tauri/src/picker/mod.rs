@@ -122,11 +122,12 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             if exempt(shared, x, y) {
                 return false;
             }
-            // Reuse the hover answer when the click is inside the element just read.
+            // The click asks once more, for the full description. The hover answer is the
+            // fallback when the app does not reply.
             let known = shared.last.lock().unwrap().clone().filter(|(_, _, e)| contains(&e.frame, x, y)).map(|(_, _, e)| e);
             let emit = emit.clone();
             thread::spawn(move || {
-                if let Some(element) = known.or_else(|| element::element_at(x, y).ok()) {
+                if let Some(element) = full(x, y).or(known) {
                     emit(Event::Pick { x, y, element });
                 }
             });
@@ -137,6 +138,17 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             true
         }
     }
+}
+
+#[cfg(not(test))]
+fn full(x: f64, y: f64) -> Option<ElementInfo> {
+    element::element_full_at(x, y).ok()
+}
+
+/// Tests never read the real screen.
+#[cfg(test)]
+fn full(_x: f64, _y: f64) -> Option<ElementInfo> {
+    None
 }
 
 fn contains(r: &Rect, x: f64, y: f64) -> bool {
@@ -207,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    fn a_click_inside_the_element_just_hovered_reuses_that_answer() {
+    fn a_click_falls_back_to_the_hover_answer_when_the_app_does_not_reply() {
         let (shared, emit, rx) = round();
         let button = ElementInfo { role: "Button".into(), name: "New invoice".into(), frame: Rect { x: 100.0, y: 40.0, width: 110.0, height: 39.0 }, ..Default::default() };
         *shared.last.lock().unwrap() = Some((120.0, 50.0, button));
