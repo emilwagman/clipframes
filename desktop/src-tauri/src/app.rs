@@ -51,6 +51,8 @@ const ELEMENT_WIDTH: u32 = 1600;
 const AREA_WIDTH: u32 = 2560;
 /// How long the hidden bar is kept after closing, ready to open again at once.
 const KEEP_WARM: Duration = Duration::from_secs(90);
+/// How far the clipboard and the files on disk may trail behind typing in the comment box.
+const NOTE_SETTLE: Duration = Duration::from_millis(200);
 
 /// Sizes in CSS pixels.
 const BAR_SIZE: (f64, f64) = (376.0, 64.0);
@@ -130,6 +132,10 @@ pub struct Core {
     turn: AtomicU64,
     /// When the bar was asked to open, to time how long until it can draw.
     opened: Mutex<Option<Instant>>,
+    /// A comment was typed that the clipboard and the round's folder do not have yet.
+    note_unsaved: AtomicBool,
+    /// A thread is waiting to write that comment out.
+    note_timer: AtomicBool,
 }
 
 /// A clip in the making.
@@ -231,6 +237,7 @@ fn copy_text(app: &AppHandle, text: &str) {
 /// Tells every window what the round looks like now, and puts it on the clipboard.
 fn publish(app: &AppHandle) {
     let core = app.state::<Core>();
+    core.note_unsaved.store(false, Ordering::SeqCst);
     save(&core);
     let state = view(app);
     if !state.reference.is_empty() {
@@ -589,6 +596,8 @@ fn close(app: &AppHandle) {
     drop(picker);
     trace("close: picker stopped");
     *core.noting.lock().unwrap() = None;
+    // What was being typed in the comment box goes with the round, however it was closed.
+    settle_note(app);
     if was_open {
         let round = core.round.lock().unwrap();
         let count = |kind: Kind| round.picks.iter().filter(|p| p.kind == kind).count();
@@ -866,10 +875,29 @@ fn round_state(app: AppHandle, window: WebviewWindow) -> RoundView {
     view(&app)
 }
 
+/// The comment box sends its text as it is typed, so closing the round in any way keeps it.
+/// The round has the text at once; the clipboard and the files follow a moment later, once
+/// for a run of keystrokes.
 #[tauri::command]
 fn note_set(app: AppHandle, index: usize, note: String) {
-    app.state::<Core>().round.lock().unwrap().set_note(index, &note);
-    publish(&app);
+    let core = app.state::<Core>();
+    core.round.lock().unwrap().set_note(index, &note);
+    core.note_unsaved.store(true, Ordering::SeqCst);
+    if !core.note_timer.swap(true, Ordering::SeqCst) {
+        let app = app.clone();
+        thread::spawn(move || {
+            thread::sleep(NOTE_SETTLE);
+            app.state::<Core>().note_timer.store(false, Ordering::SeqCst);
+            settle_note(&app);
+        });
+    }
+}
+
+/// Writes out a comment that was typed but not yet saved or copied.
+fn settle_note(app: &AppHandle) {
+    if app.state::<Core>().note_unsaved.load(Ordering::SeqCst) {
+        publish(app);
+    }
 }
 
 #[tauri::command]
@@ -1277,6 +1305,7 @@ pub fn run() {
                 }
                 "settings" => later(app, open_settings),
                 "quit" => {
+                    settle_note(app);
                     telemetry::flush();
                     app.exit(0)
                 }
@@ -1329,6 +1358,9 @@ pub fn run() {
                 telemetry::via("launch");
                 later(app, open)
             }
+            // Quit, an update's restart, the system shutting down: a comment still being
+            // typed is written out first.
+            tauri::RunEvent::Exit => settle_note(app),
             _ => {
                 let _ = app;
             }
