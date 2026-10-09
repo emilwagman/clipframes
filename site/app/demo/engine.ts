@@ -194,12 +194,6 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
   }, true);
   d.host.addEventListener("pointerleave", () => (from = null));
   d.host.addEventListener("pointerdown", (event) => event.isTrusted && event.pointerType !== "touch" && take(d), true);
-  // Pressing on the page ends the comment that is open. The box is taken down before it can
-  // save what was typed (it lives on in the desktop app, where it is a window), so it is saved here.
-  d.host.addEventListener("pointerdown", (event) => {
-    const ui = glass.querySelector(":scope > .clipframes-web:not([data-still])");
-    if (ui && event.target instanceof Element && event.target.closest(".window") === null) saveOpenNote(d, ui);
-  }, true);
   d.host.addEventListener("keydown", (event) => event.isTrusted && take(d), true);
   // The comment box takes the keyboard when it opens, and the browser scrolls to it. That is
   // right when the visitor picked something. When the example did, the keyboard stays where
@@ -275,15 +269,6 @@ function play(d: Demo): void {
     });
 }
 
-/// The comment being written is not in the round until it is saved. Before the interface is
-/// taken down it is saved, so it is still there when the demo is live again.
-function saveOpenNote(d: Demo, ui: Element): void {
-  const box = ui.querySelector<HTMLTextAreaElement>("#comment");
-  const index = d.round.noting;
-  if (!box || index === null || box.value.trim() === "" || box.value.trim() === d.round.picks[index]?.note) return;
-  void d.platform.setNote(index, box.value);
-}
-
 function freeze(d: Demo): void {
   const ui = d.glass.querySelector(":scope > .clipframes-web");
   if (!ui) return;
@@ -299,7 +284,6 @@ function freeze(d: Demo): void {
   still.dataset.still = "";
   d.glass.append(still);
   d.still = still;
-  saveOpenNote(d, ui);
 }
 
 export function activate(next: Demo): void {

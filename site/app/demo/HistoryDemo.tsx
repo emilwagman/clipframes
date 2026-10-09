@@ -30,7 +30,7 @@ export default function HistoryDemo() {
   const api = useMemo<HistoryApi>(() => {
     const entries = [...captures, ...EARLIER].filter((entry) => !deleted.includes(entry.id));
     return {
-      list: async () => ({ entries, total: entries.length }),
+      list: async () => ({ entries, total: entries.length, next: entries.length }),
       copy: async (id) => {
         const text = entries.find((entry) => entry.id === id)?.text;
         if (!text) return;
