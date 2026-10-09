@@ -1,0 +1,9 @@
+/* The app's History window as a panel: the window's size, on the page's ground. */
+.panel { height: 430px; border-radius: 14px; overflow: hidden; background: var(--surface); box-shadow: var(--shadow-window); }
+.panel :global(.history) { height: 100%; }
+@media (max-width: 640px) {
+  /* Narrower than the window ever is: the pictures give way to the names. */
+  .panel.panel :global(.history .thumbs) { display: none; }
+  .panel.panel :global(.history) { padding: 0 16px 18px; }
+  .panel.panel :global(.history .actions .round) { display: none; }
+}

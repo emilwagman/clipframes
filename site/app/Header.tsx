@@ -29,9 +29,7 @@ export default function Header({ stars: initial }: { stars: number | null }) {
   return (
     <header className={`${s.header} ${scrolled ? s.scrolled : ""}`}>
       <div className={s.headerIn}>
-        <a className={s.brand} href="/">
-          <img src="/wordmark.png" alt="Clipframes" width={127} height={40} className={s.wordmark} />
-        </a>
+        <a className={s.brand} href="/">Clipframes</a>
         <a className={s.gh} href={REPO_URL} aria-label={stars ? `GitHub, ${stars} ${stars === 1 ? "star" : "stars"}` : "GitHub"}>
           GitHub
           {/* No badge at zero: an empty counter says the wrong thing. */}

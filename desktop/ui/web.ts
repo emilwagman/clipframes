@@ -18,6 +18,8 @@ export interface Stage {
   place?: string;
   /** What the page is called in the copied text, e.g. `Google Chrome "Invoices"`. */
   where?: string;
+  /** Puts the copied text on the clipboard. Left out, the browser's own clipboard is written. */
+  copy?(text: string): void;
 }
 
 export interface WebPlatform extends Platform {
@@ -74,6 +76,7 @@ export function webPlatform(stage: Stage, options: { tools?: Tool[]; shortcut?: 
   let area: AreaView = { rect: null, recording: false };
   let drag: { x: number; y: number } | null = null;
   let timer: number | undefined;
+  const copy = stage.copy ?? ((text: string) => void navigator.clipboard?.writeText(text).catch(() => {}));
   const on = { round: [] as ((r: RoundView) => void)[], hover: [] as ((h: HoverView) => void)[], marks: [] as ((m: MarkView[]) => void)[], area: [] as ((a: AreaView) => void)[], note: [] as ((r: Rect | null) => void)[], close: [] as ((s: string) => void)[] };
 
   // Not instanceof: an element of a page in a frame belongs to that frame's own Element.
@@ -81,7 +84,7 @@ export function webPlatform(stage: Stage, options: { tools?: Tool[]; shortcut?: 
   const publish = (change: Partial<RoundView> = {}) => {
     round = { ...round, ...change };
     round.reference = reference(round.picks, stage.where);
-    if (round.reference) void navigator.clipboard?.writeText(round.reference).catch(() => {});
+    if (round.reference) copy(round.reference);
     on.round.forEach((f) => f(round));
     on.marks.forEach((f) => f(targets.map((t, i) => ({ number: i + 1, rect: rectOf(t), kind: round.picks[i].kind }))));
     on.note.forEach((f) => f(round.noting === null ? null : rectOf(targets[round.noting])));

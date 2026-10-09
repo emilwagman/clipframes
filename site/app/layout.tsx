@@ -1,12 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Caveat } from "next/font/google";
+// The app's own stylesheet, kept to the app's interface (lib/app-style.cjs). It comes first:
+// the site's colours are named after the app's.
+import "@desktop/ui/style.css";
 import "./globals.css";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 const description = "Point at the thing you want changed, and Clipframes tells your agent exactly what it is. For Mac and Windows, for building with Claude Code and Codex.";
-
-// The handwriting for notes and marks, served from this site.
-const hand = Caveat({ subsets: ["latin"], weight: ["700"], variable: "--hand", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -21,15 +20,12 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#faf8f5" },
-    { media: "(prefers-color-scheme: dark)", color: "#171513" },
-  ],
+  themeColor: "#fafaf9",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={hand.variable}>
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

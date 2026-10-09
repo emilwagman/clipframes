@@ -1,0 +1,73 @@
+/* Northwind, the made-up app in the demos. It keeps its own look (another product's page, with
+   its own blue), and its class names are unhashed because Clipframes copies them. Everything
+   is under .northwind, and it lays itself out by the width of the stage it is in. */
+.northwind { --ink: #17181c; --ink-2: #5d616b; --ink-3: #9a9ea8; --line: #e8e9ee; --ground: #f7f8fa; --brand: #3b3fd8;
+  container-type: inline-size; position: absolute; inset: 0; overflow: hidden; background: #fff; color: var(--ink);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; text-align: left;
+  letter-spacing: normal; user-select: none; -webkit-user-select: none; cursor: default; }
+.northwind * { box-sizing: border-box; }
+.northwind .app { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+.northwind aside { background: var(--ground); border-right: 1px solid var(--line); padding: 22px 16px; }
+.northwind .logo { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; margin-bottom: 26px; }
+.northwind .logo i { width: 24px; height: 24px; border-radius: 7px; background: var(--brand); }
+.northwind nav a { display: block; padding: 7px 10px; border-radius: 7px; color: var(--ink-2); margin-bottom: 2px; }
+.northwind nav a.on { background: #ebecf3; color: var(--ink); font-weight: 550; }
+.northwind main { padding: 30px 40px; min-width: 0; }
+.northwind .top { position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.northwind .app h1 { margin: 0; font-size: 24px; line-height: 1.5; font-weight: 650; letter-spacing: -0.01em; color: var(--ink); white-space: normal; }
+.northwind .sub { color: var(--ink-3); font-size: 13px; white-space: nowrap; }
+.northwind .actions { display: flex; gap: 10px; align-items: center; }
+.northwind input[type="search"] { width: 220px; min-width: 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; color: inherit;
+  background: #fff; outline: none; cursor: default; -webkit-appearance: none; appearance: none; }
+.northwind input[type="search"]::placeholder { color: var(--ink-3); }
+.northwind .btn { font: inherit; font-weight: 550; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink);
+  white-space: nowrap; cursor: pointer; }
+.northwind .btn:hover { background: var(--ground); }
+.northwind .btn-primary, .northwind .btn-primary:hover { background: var(--brand); border-color: var(--brand); color: #fff; }
+/* The fault: the menu hangs from the left end of the row, far from the button that opened it. */
+.northwind .menu { position: absolute; left: 0; top: calc(100% + 8px); z-index: 1; min-width: 190px; padding: 6px; border-radius: 10px; background: #fff;
+  border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(23, 24, 28, 0.14); }
+.northwind .menu a { display: block; padding: 7px 10px; border-radius: 6px; color: var(--ink); white-space: nowrap; }
+.northwind .menu a:hover { background: var(--ground); }
+.northwind .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px; }
+.northwind .stat { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-width: 0; }
+.northwind .stat span { color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
+.northwind .stat strong { display: block; font-size: 24px; line-height: 1.5; font-weight: 650; margin-top: 2px; color: var(--ink); width: fit-content; }
+.northwind .stat.overdue strong { color: #d6333a; }
+.northwind table { width: 100%; border-collapse: collapse; margin-top: 26px; }
+.northwind th { text-align: left; font-size: 12px; font-weight: 550; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; padding: 0 12px 10px;
+  border-bottom: 1px solid var(--line); }
+.northwind td { padding: 13px 12px; border-bottom: 1px solid #f1f2f5; white-space: nowrap; }
+.northwind td.amount, .northwind th.amount { text-align: right; font-variant-numeric: tabular-nums; }
+.northwind .badge { font-size: 12px; font-weight: 550; padding: 3px 9px; border-radius: 999px; }
+.northwind .badge.paid { background: #e3f6ea; color: #17803d; }
+.northwind .badge.due { background: #fff4d6; color: #9a6b00; }
+.northwind .badge.overdue { background: #fde6e7; color: #c42a31; }
+
+@container (max-width: 960px) {
+  .northwind .app { grid-template-columns: 176px 1fr; }
+  .northwind main { padding: 26px 28px; }
+  .northwind input[type="search"] { width: 170px; }
+}
+@container (max-width: 780px) {
+  .northwind .app { grid-template-columns: 1fr; }
+  .northwind aside { display: none; }
+}
+/* A phone: the page a phone would get, with the columns that fit. */
+@container (max-width: 560px) {
+  .northwind main { padding: 18px 16px; }
+  .northwind input[type="search"], .northwind td.due, .northwind th.due, .northwind .sub { display: none; }
+  .northwind .app h1 { font-size: 21px; }
+  .northwind .actions { gap: 8px; }
+  .northwind .btn { padding: 7px 11px; }
+  .northwind .stats { gap: 8px; margin-top: 18px; }
+  .northwind .stat { padding: 11px 12px; border-radius: 10px; }
+  .northwind .stat span { font-size: 11.5px; }
+  .northwind .stat strong { font-size: 18px; }
+  .northwind table { margin-top: 18px; }
+  .northwind th { padding: 0 8px 8px; font-size: 11px; }
+  .northwind td { padding: 11px 8px; font-size: 13px; }
+}
+@container (max-width: 380px) {
+  .northwind td.customer, .northwind th.customer { display: none; }
+}

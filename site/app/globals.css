@@ -1,48 +1,37 @@
-/* Clipframes brand tokens (the design system: claude.ai/artifact/TZ6e1xwH8bueK6H8eKHAuP).
-   Calm and modern: neutral greys, one blue accent, rounded shapes. */
+/* The site speaks the app's language. The app is black with one orange for everything it
+   draws on a page; the site is the light, quiet page it is laid over. The colours and faces
+   marked "the app's" are read from desktop/ui/style.css (as --app-*, see lib/app-style.cjs),
+   so they are written in one place. */
 :root {
-  color-scheme: light dark;
-  --bg: #ffffff;
+  color-scheme: light;
+  --bg: #fafaf9;
   --surface: #ffffff;
-  --surface-2: #eef1f4;
-  --border: #e3e7ec;
-  --text: #16181d;
-  --text-2: #555b65;
-  --text-3: #6b717b;
-  --accent: #2563eb;
-  --accent-wash: rgba(37, 99, 235, 0.10);
-  --record: #e5484d;
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04);
-  --shadow-film: 0 1px 2px rgba(16, 24, 40, 0.04), 0 24px 48px -28px rgba(16, 24, 40, 0.28);
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --col: 640px;
-  --wide: 920px;
+  --surface-2: #f1f1ee;
+  --border: #e5e5e1;
+  --border-strong: #c9c9c4;
+  --text: var(--app-surface);   /* the app's black is the site's ink */
+  --text-2: #4f5057;
+  --text-3: #6c6d74;
+  --accent: var(--app-accent);  /* the app's orange: outlines and numbers, nothing else */
+  --sans: var(--app-sans);
+  --mono: var(--app-mono);
+  --shadow-window: 0 0 0 1px rgba(18, 18, 19, 0.02), 0 2px 4px rgba(18, 18, 19, 0.04), 0 32px 64px -32px rgba(18, 18, 19, 0.22);
+  --gutter: 24px;
+  --page: 1120px;
+  --col: 660px;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111214;
-    --surface: #1a1b1e;
-    --surface-2: #222327;
-    --border: #2a2c31;
-    --text: #eceef1;
-    --text-2: #a3a8b0;
-    --text-3: #8b9098;
-    --accent: #6b9bff;
-    --accent-wash: rgba(107, 155, 255, 0.16);
-    --record: #ff6369;
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-film: 0 1px 2px rgba(0, 0, 0, 0.3), 0 24px 48px -28px rgba(0, 0, 0, 0.7);
-  }
+@media (max-width: 640px) {
+  :root { --gutter: 20px; }
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 16.5px/1.65 var(--sans); }
-a { color: var(--accent); text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-a:hover { text-decoration-color: var(--accent); }
+html { -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 18px/1.6 var(--sans); overflow-x: clip; }
+p { margin: 0; }
+a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
+a:hover { text-decoration-color: currentColor; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* Inside the app's interface the page's type settings do not apply. */
+.cf { letter-spacing: normal; text-align: left; font-weight: 400; text-wrap: wrap; }
+.cf p { margin: 1em 0; }
