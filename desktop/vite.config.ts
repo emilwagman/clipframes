@@ -10,6 +10,8 @@ export default defineConfig(() => ({
   //
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
+  // The lab pages use these too; finding them up front keeps the dev server from reloading mid-test.
+  optimizeDeps: { include: ["react", "react-dom", "react-dom/client", "zustand"] },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,

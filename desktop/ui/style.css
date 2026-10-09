@@ -8,10 +8,10 @@
   --border: rgba(255, 255, 255, 0.1);
   --text: #ffffff;
   --text-2: #9c9da5;
-  --accent: #3b82f6;        /* the one colour: the tool that is on, Save, and marks on the page */
+  --accent: #f76808;        /* the one colour: the tool that is on, Save, and marks on the page */
   --on-accent: #ffffff;
-  --accent-wash: rgba(59, 130, 246, 0.2);
-  --accent-text: #6ea8ff;   /* the accent where it is drawn as a line on black */
+  --accent-wash: rgba(247, 104, 8, 0.22);
+  --accent-text: #ff9550;   /* the accent where it is drawn as a line on black */
   --ring-halo: rgba(255, 255, 255, 0.85); /* a hairline around page marks, so they show on any colour */
   --record: #ff453a;
   --radius: 18px;
@@ -86,7 +86,7 @@ button.quiet:hover { color: var(--text); }
 :root[data-look="mono"] :is(.highlight, .drag:not(.recording)) { border-color: #121213; background: transparent; }
 :root[data-look="mono"] .mark { border-color: rgba(18, 18, 19, 0.6); }
 :root[data-look="mono"] .mark b { background: #121213; color: #fff; }
-:root[data-look="orange"] { --accent: #f76808; --accent-wash: rgba(247, 104, 8, 0.22); --accent-text: #ff9550; }
+:root[data-look="blue"] { --accent: #3b82f6; --accent-wash: rgba(59, 130, 246, 0.2); --accent-text: #6ea8ff; }
 
 /* Settings and History are ordinary windows, so they have a background and read like a page. */
 html.window, html.window body { background: var(--surface); overflow: auto; }
@@ -129,6 +129,11 @@ html.window, html.window body { background: var(--surface); overflow: auto; }
 .history .actions { display: flex; align-items: center; gap: 2px; flex: none; }
 .history .actions .plain { margin-right: 4px; }
 @media (prefers-reduced-motion: reduce) { .plain, .settings input[type="checkbox"], .settings input[type="checkbox"]::after { transition: none; } }
+
+/* On a web page the two windows are boxes on the glass; they take the pointer, the rest of
+   the glass passes it to the picker. */
+.clipframes-web { position: absolute; inset: 0; overflow: hidden; font: 13px/1.35 var(--sans); color: var(--text); cursor: crosshair; }
+.clipframes-web .window { position: absolute; cursor: default; pointer-events: auto; }
 
 /* The tab: only the mark, on a window just large enough for it. */
 .tabmark { position: absolute; inset: 6px; padding: 0; border-radius: 12px; }
