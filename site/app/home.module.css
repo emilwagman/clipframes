@@ -46,7 +46,7 @@
 
 .ref { max-width: var(--col); margin: 18px auto 0; }
 .ref code { display: block; font: 13px/1.6 var(--mono); background: var(--surface-2); border: 0;
-  border-radius: var(--radius-md); padding: 14px 18px; overflow-wrap: anywhere; }
+  border-radius: var(--radius-md); padding: 14px 18px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .out { max-width: var(--col); margin: 14px auto 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
 .out summary { cursor: pointer; list-style: none; padding: 13px 18px; font-size: 15px; color: var(--text-2);
   display: flex; gap: 10px; align-items: center; }

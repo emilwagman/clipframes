@@ -1,6 +1,6 @@
 import Header from "./Header";
-import { DownloadIcon } from "./DownloadButton";
-import { DOWNLOAD_PATH, MAKER_URL, REPO_URL, REQUIREMENTS, VERSION } from "@/lib/site";
+import { DownloadButtons } from "./DownloadButton";
+import { MAKER_URL, REPO_URL, REQUIREMENTS, VERSION } from "@/lib/site";
 import { starCount } from "@/lib/github";
 import s from "./home.module.css";
 
@@ -19,7 +19,7 @@ function Circled({ children }: { children: React.ReactNode }) {
 function Download({ note }: { note?: string }) {
   return (
     <div className={s.get}>
-      <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_PATH}><DownloadIcon />Download for Mac</a>
+      <DownloadButtons />
       {note ? (
         <span className={s.note}>
           {note}
@@ -32,7 +32,7 @@ function Download({ note }: { note?: string }) {
   );
 }
 
-/// A real capture of the app: its own views drawn over the Northwind demo page (demo/tools/render-shots.sh).
+/// The app's real interface drawn over the Northwind demo page (demo/tools/render-shots.mjs).
 function Shot({ src, alt, caption }: { src: string; alt: string; caption?: string }) {
   return (
     <figure className={s.figure}>
@@ -42,7 +42,9 @@ function Shot({ src, alt, caption }: { src: string; alt: string; caption?: strin
   );
 }
 
-const ref = '[Element: Button "New invoice" (#new-invoice .btn-primary) in Chrome "Invoices". Read ~/Clipframes/2026-10-07_11-42-30/notes.md]';
+const ref = `[Clipframes: 2 things in Google Chrome "Invoices". Read ~/Clipframes/2026-10-09_11-42-30/notes.md]
+1. Button "New invoice" (#new-invoice .btn.btn-primary): make this green
+2. Text "$3,120" (#overdue-total .stat.overdue): too alarming, use the normal text colour`;
 
 export default async function Home() {
   const stars = await starCount(3600);
@@ -53,8 +55,8 @@ export default async function Home() {
         <div className={`${s.col} ${s.intro}`}>
           <h1>Point at <Circled>the thing</Circled> you want changed.</h1>
           <p className={s.lede}>
-            Clipframes is a Mac app for building with Claude Code and Codex. Point at a button, drag an area or record a
-            clip, and your agent knows exactly what you mean.
+            Clipframes is a small app for Mac and Windows, for building with Claude Code and Codex. Point at a button,
+            drag an area or record a clip, say what you want, and your agent knows exactly what you mean.
           </p>
           <Download note="it's free" />
           <p className={s.meta}>Version {VERSION} · {REQUIREMENTS}</p>
@@ -66,59 +68,69 @@ export default async function Home() {
           <p>
             When you build with an agent, the hard part is often saying which thing you mean. &ldquo;The blue button at the
             top&rdquo; can match five buttons, and you may not know what the button is called in the code. Clipframes
-            copies a short reference with a screenshot and the element&apos;s name in the code, and you paste that into
-            your agent.
+            copies a short reference with the element&apos;s name in the code, a picture of it and your comment, and you
+            paste that into your agent.
           </p>
           <p>
-            It works in every app on your Mac: your web app in Chrome or Safari, desktop apps built with Electron or Tauri,
-            and native Mac apps. You don&apos;t add anything to your project.
+            It works in every app on your computer: your web app in a browser, desktop apps built with Electron or Tauri,
+            and native apps. You don&apos;t add anything to your project.
           </p>
         </section>
 
         <section id="element" className={`${s.col} ${s.section}`}>
-          <h2>Point at one thing</h2>
+          <h2>Point at things and say what you want</h2>
           <p>
-            Press <code className={s.inline}>⌃⇧Space</code> from any app to open the Clipframes bar, then press 1 for
-            Element and click a button, a card or a menu. In a browser, Clipframes reads the name the code uses for it, its
-            id and classes, so the agent can find it in your project. This is what lands on your clipboard:
+            Press <code className={s.inline}>Ctrl+Shift+Space</code> from any app to open the Clipframes bar, then click a
+            button, a card or a menu. A box opens next to it for your comment. Click the next thing and comment on that
+            too. In a browser, Clipframes reads the name the code uses for each one, its id and classes, so the agent can
+            find it in your project. This is what lands on your clipboard:
           </p>
           <div className={s.ref}><code>{ref}</code></div>
         </section>
-        <Shot src="bar.jpg" alt="The Clipframes bar over a web app, showing Element, Screenshot and Clip with the keys 1, 2 and 3" caption="⌃⇧Space opens the bar from any app. The numbers show which key picks each tool." />
+        <Shot src="pick.jpg" alt="Two things picked in a web app with Clipframes, each numbered, with a comment box open under the second one and the bar saying 2 things copied" caption="Everything you pick is on your clipboard straight away. Keep going, or paste." />
 
         <section id="screenshot" className={`${s.col} ${s.section}`}>
           <h2>Show an area</h2>
           <p>
-            Press 2 and drag over part of the screen. Clipframes saves the picture and lists the things inside it, so the
-            agent knows which parts you mean. Every capture is kept in the library, ready to copy again.
+            Choose Area in the bar and drag over part of the screen. Clipframes saves the picture and your comment about
+            it. You can mix areas, elements and clips in the same go.
           </p>
         </section>
-        <Shot src="screenshot.jpg" alt="An area of a web app selected with Clipframes, the rest of the screen dimmed" />
+        <Shot src="screenshot.jpg" alt="An area of a web app being selected with Clipframes, the rest of the screen dimmed" />
 
         <section id="clip" className={`${s.col} ${s.section}`}>
           <h2>Show what happens</h2>
           <p>
             Some problems only show up when you click around: a menu that opens in the wrong place, or a button that does
-            nothing. Press 3, do the thing, and press <code className={s.inline}>⌃⇧Space</code> to stop. The agent gets the
-            video, a set of frames and a list of every click.
+            nothing. Choose Clip, drag over the area, do the thing, and press Stop. The agent gets the frames in order and
+            a list of every click you made.
           </p>
         </section>
-        <Shot src="clip.jpg" alt="Clipframes choosing an area of a web app to record" />
+        <Shot src="clip.jpg" alt="Clipframes recording an area of a web app, with the bar showing the time and a Stop button" />
 
         <section id="paste" className={`${s.col} ${s.section}`}>
           <h2>Then paste it</h2>
           <p>
-            Every capture puts one line on your clipboard. Paste it into Claude Code or Codex and say what you want changed.
-            The agent opens the notes file and sees what you saw.
+            Paste into Claude Code or Codex. The agent gets one short list of what you picked and what you said, and opens
+            the notes file to see what you saw.
           </p>
         </section>
-        <Shot src="library.jpg" alt="The Clipframes library: recent captures on the left, the selected one with its reference and notes on the right" caption="Every capture stays in the library, with the line to paste and the notes your agent reads." />
+        <Shot src="history.jpg" alt="The Clipframes history: past captures with small pictures, each with a Copy button" caption="Everything you captured stays in History, ready to copy again." />
+
+        <section id="there" className={`${s.col} ${s.section}`}>
+          <h2>It is there when you need it</h2>
+          <p>
+            Clipframes starts with your computer and stays out of the way. When you come back to an app or a site where
+            you used it, a small tab appears at the bottom of the screen. Click it to open the bar. You can turn the tab
+            off for any place with the pin in the bar.
+          </p>
+        </section>
 
         <section id="try" className={`${s.col} ${s.section}`}>
           <h2>Try it on this page</h2>
           <p>
-            Once Clipframes is installed, press <code className={s.inline}>⌃⇧Space</code>, then 1, and click one of these.
-            Then paste somewhere to see what your agent would get.
+            Once Clipframes is installed, press <code className={s.inline}>Ctrl+Shift+Space</code> and click one of
+            these. Then paste somewhere to see what your agent would get.
           </p>
           <div className={s.try}>
             <div className={s.tryRow}>
@@ -134,12 +146,12 @@ export default async function Home() {
         </section>
 
         <section id="private" className={`${s.col} ${s.section}`}>
-          <h2>Your captures stay on your Mac</h2>
+          <h2>Your captures stay on your computer</h2>
           <p>
-            Each capture is a folder in <code className={s.inline}>~/Clipframes</code> with the screenshot, any video and
-            frames, and the notes.md your agent reads. Nothing is uploaded.
+            Each capture is a folder in <code className={s.inline}>~/Clipframes</code> with the pictures, any clip frames,
+            and the notes.md your agent reads. Nothing is uploaded.
           </p>
-          <p>Clipframes goes online only to check for updates, and it installs them for you. You can turn that off in Settings.</p>
+          <p>Clipframes goes online only to check for updates, and it installs them for you.</p>
         </section>
 
         <section id="faq" className={`${s.col} ${s.section} ${s.faq}`}>
@@ -147,7 +159,7 @@ export default async function Home() {
           <h3>How is this different from Agentation?</h3>
           <p>
             Agentation is a toolbar you install in a React web app, and it works inside that app. Clipframes runs on your
-            Mac, so it works in every app without adding anything to your project, and it can also record clips.
+            computer, so it works in every app without adding anything to your project, and it can also record clips.
           </p>
           <h3>Which apps does it read?</h3>
           <p>
@@ -156,8 +168,9 @@ export default async function Home() {
           </p>
           <h3>What does it need?</h3>
           <p>
-            macOS 15 or later, on Apple Silicon or Intel. On first launch it asks for Screen Recording, to take screenshots
-            and clips, and Accessibility, to read which element you pointed at.
+            A Mac with macOS 12 or later, on Apple Silicon or Intel, or a PC with Windows 10 or 11. On a Mac it asks for
+            Accessibility, to read which element you pointed at, and Screen Recording, to take pictures and clips.
+            Windows asks for nothing.
           </p>
           <h3>Can I see the code?</h3>
           <p>The source is on <a href={REPO_URL}>GitHub</a>.</p>
