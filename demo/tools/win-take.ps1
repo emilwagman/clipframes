@@ -42,6 +42,8 @@ public class H {
 function Wait([int]$ms) { Start-Sleep -Milliseconds $ms }
 
 $exe = "C:\Users\User\Development\clipframes\desktop\src-tauri\target\release\clipframes.exe"
+# Clipframes leaves its own windows out of captures; for a demo of itself they must be in.
+$env:CLIPFRAMES_CAPTURABLE = "1"
 if (-not (Get-Process clipframes -ErrorAction SilentlyContinue)) { Start-Process $exe -ArgumentList "--hidden"; Wait 2500 }
 [H]::Glide(1500, 1250, 300)
 $ff = Start-Process ffmpeg -ArgumentList "-y","-filter_complex","ddagrab=output_idx=0:framerate=30:video_size=3840x2088,hwdownload,format=bgra","-c:v","libx264","-preset","ultrafast","-crf","12","-pix_fmt","yuv420p","-t","$Seconds","$demo\$Name.mkv" -WindowStyle Hidden -PassThru -RedirectStandardError "$demo\$Name.log"
@@ -101,7 +103,7 @@ if ($Scene -eq "return") {
   [H]::Glide(1200, 1100, 900); Wait 300; [H]::Click(); Wait 2600   # back to the site: it returns
   [H]::Glide(1920, 1956, 800); Wait 400; [H]::Click(); Wait 1800   # the tab opens the bar
   Go $history 700; Wait 400; [H]::Click(); Wait 2600       # History
-  [H]::Glide(2230, 735, 800); Wait 500; [H]::Click(); Wait 1500    # Copy the newest
+  [H]::Glide(2212, 790, 800); Wait 500; [H]::Click(); Wait 1500    # Copy the newest
   [H]::Glide(2300, 900, 600)
 }
 
