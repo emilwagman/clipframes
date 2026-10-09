@@ -63,6 +63,8 @@ const start = () => {
       : [],
     noting: picked ? 1 : null,
     recording: state === "recording" ? 7 : null,
+    // ?state=screen and ?state=screen-asked: a picture tool without Screen Recording on a Mac.
+    trouble: state.startsWith("screen") ? state : null,
     shortcut: "Ctrl+Shift+Space",
     place: { name: "Google Chrome · localhost:3000", auto: true },
   };

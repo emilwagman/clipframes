@@ -20,6 +20,15 @@ pub fn permitted() -> bool {
     platform::permitted()
 }
 
+/// Whether a picture can be taken right now, found out by taking a very small one. For when
+/// `permitted` says no: that answer can be out of date.
+pub fn works() -> bool {
+    let path = std::env::temp_dir().join(format!("clipframes-try-{}.png", std::process::id()));
+    let taken = capture_to_file(&Rect { x: 0.0, y: 0.0, width: 8.0, height: 8.0 }, &path, None).is_ok();
+    let _ = std::fs::remove_file(&path);
+    taken
+}
+
 /// Has the system ask the user for that permission, where there is one to ask for.
 pub fn ask_permission() {
     platform::ask_permission()
@@ -184,9 +193,9 @@ mod platform {
     use std::path::Path;
     use std::process::{Command, Stdio};
 
-    /// Screen Recording, under Privacy & Security. Asked before a round starts: the first
-    /// screenshot would otherwise bring up the system's question in the middle of a round,
-    /// while every click, including those on that question, is being taken as a pick.
+    /// Screen Recording, under Privacy & Security, as the system reports it. It can go on
+    /// saying no after the user has allowed it, until the app is started again, so a no is
+    /// checked with `works` before it is believed.
     pub fn permitted() -> bool {
         ScreenCaptureAccess.preflight()
     }

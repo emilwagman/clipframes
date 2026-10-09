@@ -51,6 +51,7 @@ button.quiet:hover { color: var(--text); }
 .status { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar.wide { gap: 10px; padding: 0 8px 0 18px; }
 .bar.wide .status { color: var(--text); }
+.bar.wide.back { padding-left: 6px; gap: 8px; } /* begins with a round button, like the tools */
 .bar .time { font-weight: 600; font-variant-numeric: tabular-nums; }
 .bar .dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--record); animation: pulse 1.4s ease-in-out infinite; }
 .bar .dot ~ .pill { background: var(--record); }

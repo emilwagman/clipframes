@@ -42,7 +42,7 @@ export interface RoundView {
   recording: number | null;
   /** What is on the clipboard now. */
   reference: string;
-  /** "permission", "screen", or a message, when something could not be done. */
+  /** "permission", "screen", "screen-asked", or a message, when something could not be done. */
   trouble: string | null;
   /** The shortcut as people write it, e.g. "Ctrl+Shift+Space". */
   shortcut: string;

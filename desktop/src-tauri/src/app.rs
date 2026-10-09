@@ -136,6 +136,8 @@ pub struct Core {
     began: Mutex<Option<Instant>>,
     /// Why the round could not start, for a bar that loads after the fact.
     trouble: Mutex<Option<String>>,
+    /// "Open Settings" was pressed for Screen Recording since the app started.
+    asked_screen: AtomicBool,
     /// Counts opens and closes, so a keep-warm timer knows if it is out of date.
     turn: AtomicU64,
     /// When the bar was asked to open, to time how long until it can draw.
@@ -713,16 +715,10 @@ fn open_now(app: &AppHandle) {
     core.files.store(0, Ordering::SeqCst);
     *core.folder.lock().unwrap() = None;
     *core.notes.lock().unwrap() = None;
-    // Both permissions are settled before a round starts, so the system never has to ask for
-    // one while clicks are being taken as picks.
-    let missing = if !element::permitted() {
-        Some("permission")
-    } else if !shot::permitted() {
-        Some("screen")
-    } else {
-        None
-    };
-    *core.trouble.lock().unwrap() = missing.map(String::from);
+    // Pointing at elements needs only this one. Pictures need another permission on macOS,
+    // which is asked about when a picture tool is chosen (`tool_set`), so someone who only
+    // wants elements, or has said no to the other, can still work.
+    *core.trouble.lock().unwrap() = (!element::permitted()).then(|| "permission".to_string());
 
     let was_warm = app.get_webview_window(BAR).is_some();
     if was_warm {
@@ -749,9 +745,8 @@ fn open_now(app: &AppHandle) {
     }
     trace("open: bar on screen");
     if let Some(trouble) = core.trouble.lock().unwrap().as_deref() {
-        // "permission" and "screen" are known states; anything else is the picker's own
-        // error message.
-        let kind = if trouble == "permission" || trouble == "screen" { trouble } else { "picker" };
+        // "permission" is a known state; anything else is the picker's own error message.
+        let kind = if trouble == "permission" { "permission" } else { "picker" };
         telemetry::event("round_blocked", json!({ "via": via, "why": kind }));
         if kind == "picker" {
             telemetry::error("picker", trouble, "picker::start");
@@ -925,14 +920,30 @@ fn show_area(app: &AppHandle, rect: Option<Rect>, recording: bool) {
 
 /// The screen could not be captured: say so in the bar instead of adding an empty pick.
 fn cannot_capture(app: &AppHandle) {
-    let core = app.state::<Core>();
     telemetry::error("capture", "the screen could not be captured", "app::cannot_capture");
-    *core.trouble.lock().unwrap() = Some(if cfg!(target_os = "macos") { "screen".into() } else { "The screen could not be captured.".into() });
-    // Nothing more can be picked, so the round stops taking input. Left on, it would swallow
-    // the clicks the user now needs elsewhere: on the system's own question about the
-    // permission, or in System Settings. Never called from the picker's own threads.
-    let picker = core.picker.lock().unwrap().take();
-    drop(picker);
+    no_pictures(app);
+}
+
+/// The picture tools cannot be used: the bar says so, with a way to the system's settings
+/// and a way back to pointing at elements, which needs no pictures.
+fn no_pictures(app: &AppHandle) {
+    let core = app.state::<Core>();
+    // "screen-asked": the user has been to the settings in this run. macOS often goes on
+    // saying no until the app is started again, and the bar says that instead.
+    let state = if !cfg!(target_os = "macos") {
+        "The screen could not be captured."
+    } else if core.asked_screen.load(Ordering::SeqCst) {
+        "screen-asked"
+    } else {
+        "screen"
+    };
+    *core.trouble.lock().unwrap() = Some(state.into());
+    // Until a tool is chosen again every click goes to the app it is on. Left as it was, the
+    // round would swallow the clicks the user now needs elsewhere: on the system's own
+    // question about the permission, or in System Settings. Esc still ends the round.
+    if let Some(picker) = core.picker.lock().unwrap().as_ref() {
+        picker.set_mode(Mode::Watch);
+    }
     // The round's folder was made for the picture that failed. With nothing picked it is
     // empty, and would sit among the captures for good.
     {
@@ -1197,12 +1208,14 @@ fn permission_open(app: AppHandle, kind: String) {
     use tauri_plugin_opener::OpenerExt;
     // The system's own question first: being asked is what puts Clipframes in the list the
     // user is about to look at.
-    if kind == "screen" {
+    let screen = kind.starts_with("screen");
+    if screen {
         shot::ask_permission();
+        app.state::<Core>().asked_screen.store(true, Ordering::SeqCst);
     } else {
         element::ask_permission();
     }
-    let pane = if kind == "screen" { "Privacy_ScreenCapture" } else { "Privacy_Accessibility" };
+    let pane = if screen { "Privacy_ScreenCapture" } else { "Privacy_Accessibility" };
     let _ = app.opener().open_url(format!("x-apple.systempreferences:com.apple.preference.security?{pane}"), None::<&str>);
     *app.state::<Core>().trouble.lock().unwrap() = None;
     // The round ends and the bar goes: nothing of Clipframes may be in the way, or taking
@@ -1227,6 +1240,18 @@ fn tool_set(app: AppHandle, tool: Kind) {
         let _ = app.emit_to(screen.label.as_str(), "hover", HoverView { rect: None, label: String::new() });
     }
     let _ = app.emit("round", view(&app));
+    // A picture tool where the system says Clipframes may not take pictures (macOS without
+    // Screen Recording). The system's answer is known to stay "no" after the user has said
+    // yes, until the app is started again, so it is not taken at its word: a small picture
+    // is tried, and only if that fails too does the bar say what is missing.
+    if tool != Kind::Element && !shot::permitted() {
+        thread::spawn(move || {
+            let still = |app: &AppHandle| *app.state::<Core>().tool.lock().unwrap() == tool;
+            if still(&app) && !shot::works() && still(&app) {
+                no_pictures(&app);
+            }
+        });
+    }
 }
 
 #[tauri::command]

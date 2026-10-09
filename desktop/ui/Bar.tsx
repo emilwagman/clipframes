@@ -18,14 +18,23 @@ export function Bar() {
   const count = round.picks.length;
 
   if (round.trouble !== null) {
-    const permission = round.trouble === "permission" || round.trouble === "screen";
-    const message = round.trouble === "permission" ? "Needs Accessibility access" : round.trouble === "screen" ? "Needs Screen Recording access" : round.trouble;
+    // "screen-asked": Screen Recording is still refused after a visit to System Settings.
+    const screen = round.trouble === "screen" || round.trouble === "screen-asked";
+    const permission = round.trouble === "permission" || screen;
+    const message = round.trouble === "permission" ? "Needs Accessibility access" : round.trouble === "screen" ? "Needs Screen Recording" : round.trouble === "screen-asked" ? "Quit and reopen Clipframes" : round.trouble;
+    const more = screen ? "Screenshots and clips need Screen Recording access. After you turn it on, Clipframes may need to be quit and opened again." : message;
     return (
-      <div className="bar wide">
-        <span className="status" title={message}>
+      <div className={round.picking ? "bar wide back" : "bar wide"}>
+        {/* The round is still on when only pictures are the trouble: pointing at elements works. */}
+        {round.picking && (
+          <button className="round" aria-label={NAMES.element} title="Back to pointing at elements" onClick={() => void platform.setTool("element")}>
+            <Icon name="element" />
+          </button>
+        )}
+        <span className="status" title={more}>
           {message}
         </span>
-        <button className="pill" onClick={() => void (permission ? platform.openPermission(round.trouble as string) : platform.done())}>
+        <button className="pill" title={screen ? more : undefined} onClick={() => void (permission ? platform.openPermission(round.trouble as string) : platform.done())}>
           {permission ? "Open Settings" : "Close"}
         </button>
       </div>
