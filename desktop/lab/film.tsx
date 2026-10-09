@@ -125,7 +125,6 @@ let hovered: Element | null = null;
 // The fastest the pointer crosses the picture, in pixels a second: a check on the script.
 let fastest = 0;
 let seen: Point | null = null;
-const speeds: number[] = [];
 
 /** Where a point of the world is in the browser window. */
 function client(p: Point): Point {
@@ -271,7 +270,6 @@ async function step(n: number): Promise<void> {
   settle();
   const shown = client(where);
   const speed = seen ? Math.hypot(shown.x - seen.x, shown.y - seen.y) * FPS : 0;
-  if (n % 6 === 0) speeds.push(Math.round(speed));
   fastest = Math.max(fastest, speed);
   seen = shown;
 }
@@ -304,7 +302,7 @@ frame.addEventListener("load", () => {
   platform.onClose((text) => (closedWith = text));
   window.addEventListener("keydown", (event) => event.ctrlKey && event.shiftKey && event.code === "Space" && platform.open());
 
-  const film = { fps: FPS, frames: Math.round(END * FPS), step, result: () => ({ clipboard, closedWith, shown: pasted.textContent, fastest: Math.round(fastest), speeds }) };
+  const film = { fps: FPS, frames: Math.round(END * FPS), step, result: () => ({ clipboard, closedWith, shown: pasted.textContent, fastest: Math.round(fastest) }) };
   Object.assign(window, { film });
   paint(0);
 
