@@ -10,7 +10,7 @@ export function Note() {
   const index = round.noting;
   const pick = index === null ? undefined : round.picks[index];
   const [text, setText] = useState("");
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   // What was being written, so it can be kept when the next pick takes the box over.
   const open = useRef<{ index: number; text: string } | null>(null);
 
@@ -36,23 +36,37 @@ export function Note() {
     open.current = null;
     await platform.closeNote();
   };
+  const remove = async () => {
+    open.current = null;
+    await platform.removePick(index);
+  };
 
   return (
     <div className="note">
-      <div className="head">
-        <b className="num">{index + 1}</b>
-        <div className="names">
-          <strong className="what">{pick.headline}</strong>
-          {pick.selector && <code className="selector">{pick.selector}</code>}
-        </div>
-      </div>
-      <input ref={input} id="comment" type="text" value={text} placeholder="What should change?" spellCheck={false} autoComplete="off" onChange={(e) => write(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} />
-      <div className="keys">
-        <kbd>Enter</kbd>
-        <span>save</span>
-        <kbd>Esc</kbd>
-        <span>skip</span>
-        <span className="or">or pick the next thing</span>
+      <div className="what">{pick.headline}</div>
+      <textarea
+        ref={input}
+        id="comment"
+        rows={2}
+        value={text}
+        placeholder="What should change?"
+        spellCheck={false}
+        autoComplete="off"
+        onChange={(e) => write(e.target.value)}
+        onKeyDown={(e) => {
+          // Enter saves; Shift+Enter is a new line. Enter that confirms an input method is left alone.
+          if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          void save();
+        }}
+      />
+      <div className="foot">
+        <button className="quiet" onClick={() => void remove()}>
+          Remove
+        </button>
+        <button className="pill" onClick={() => void save()}>
+          Save
+        </button>
       </div>
     </div>
   );

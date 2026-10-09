@@ -1,22 +1,21 @@
-/* Clipframes' own interface: black, so it stands out against whatever it sits on.
-   It looks the same in light and dark mode; it is a tool laid over other people's pages. */
+/* Clipframes' own interface: black, so it stands out against whatever it sits on, with one
+   colour for everything it draws on the page. It looks the same in light and dark mode; it is
+   a tool laid over other people's pages. */
 :root {
   color-scheme: dark;
-  --surface: #0b0b0c;
-  --raised: #1b1c1f;
-  --border: rgba(255, 255, 255, 0.14);
+  --surface: #121213;
+  --raised: #232326;
+  --border: rgba(255, 255, 255, 0.1);
   --text: #ffffff;
-  --text-2: #a3a4ab;
-  --accent: #ffffff;        /* the one loud thing: Done, the caret, the pick numbers */
-  --on-accent: #0b0b0c;
-  --accent-wash: rgba(255, 255, 255, 0.1);
-  --ring: #0b0b0c;          /* outlines drawn on the page */
-  --ring-halo: #ffffff;     /* a hairline around them, so they show on dark pages too */
-  --ring-fill: transparent;
+  --text-2: #9c9da5;
+  --accent: #3b82f6;        /* the one colour: the tool that is on, Save, and marks on the page */
+  --on-accent: #ffffff;
+  --accent-wash: rgba(59, 130, 246, 0.2);
+  --accent-text: #6ea8ff;   /* the accent where it is drawn as a line on black */
+  --ring-halo: rgba(255, 255, 255, 0.85); /* a hairline around page marks, so they show on any colour */
   --record: #ff453a;
-  --radius: 16px;
-  --radius-s: 9px;
-  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 6px 14px rgba(0, 0, 0, 0.32);
+  --radius: 18px;
+  --shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.28);
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
@@ -26,61 +25,68 @@ html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
 body { font: 13px/1.35 var(--sans); color: var(--text); -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; cursor: default; }
 [hidden] { display: none !important; }
 
-button { font: inherit; color: inherit; border: 0; background: none; cursor: default; }
-button.primary { height: 36px; padding: 0 18px; border-radius: var(--radius-s); background: var(--accent); color: var(--on-accent); font-weight: 650; font-size: 14px; white-space: nowrap; }
-button.primary:hover { filter: brightness(0.9); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-kbd { font: 600 11px/1 var(--sans); color: var(--text); padding: 4px 6px; border-radius: 5px; background: var(--raised); border: 1px solid var(--border); border-bottom-width: 2px; }
+button { font: inherit; color: inherit; border: 0; padding: 0; background: none; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+svg.icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The three kinds of button: a round one holding an icon, a pill that is the thing to press,
+   and a quiet one for the way back. */
+button.round { width: 36px; height: 36px; flex: none; border-radius: 50%; color: var(--text-2); display: grid; place-items: center; transition: background-color 0.12s, color 0.12s; }
+button.round:hover { background: var(--raised); color: var(--text); }
+button.round.on { background: var(--accent-wash); color: var(--accent-text); }
+button.round.lit { color: var(--text); }
+button.pill { height: 32px; padding: 0 16px; flex: none; border-radius: 16px; background: var(--accent); color: var(--on-accent); font-weight: 600; white-space: nowrap; }
+button.pill:hover { filter: brightness(1.1); }
+button.quiet { height: 32px; padding: 0 10px; border-radius: 16px; color: var(--text-2); }
+button.quiet:hover { color: var(--text); }
+.num { display: inline-block; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* The window is a little larger than the card, so the shadow has room. */
-.bar, .note { position: absolute; inset: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.bar, .note { position: absolute; inset: 8px; background: var(--surface); box-shadow: var(--shadow); }
 
-svg.icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-button.ghost { width: 36px; height: 36px; flex: none; border-radius: var(--radius-s); color: var(--text-2); display: grid; place-items: center; }
-button.ghost:hover { background: var(--raised); color: var(--text); }
-button.ghost.on { color: var(--text); background: var(--raised); }
-
-.bar { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 8px; }
-.tools { display: flex; gap: 2px; padding: 3px; border-radius: calc(var(--radius-s) + 3px); background: var(--raised); }
-.tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 60px; height: 46px; border-radius: var(--radius-s); color: var(--text-2); font-size: 11px; font-weight: 600; }
-.tool:hover { color: var(--text); }
-.tool.on { background: var(--accent); color: var(--on-accent); }
-.status { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding-left: 4px; }
-.status strong { font-weight: 650; font-size: 14px; }
-.status span { color: var(--text-2); font-size: 12px; }
-.status strong, .status span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bar.trouble, .bar.recording { padding-left: 18px; }
-.bar .dot { width: 12px; height: 12px; flex: none; border-radius: 50%; background: var(--record); animation: pulse 1.4s ease-in-out infinite; }
+.bar { display: flex; align-items: center; gap: 2px; padding: 0 6px; border-radius: 24px; }
+.tools { display: flex; gap: 2px; }
+.rule { width: 1px; height: 14px; flex: none; margin: 0 8px; background: var(--border); }
+.status { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar.wide { gap: 10px; padding: 0 8px 0 18px; }
+.bar.wide .status { color: var(--text); }
+.bar .time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar .dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--record); animation: pulse 1.4s ease-in-out infinite; }
+.bar .dot ~ .pill { background: var(--record); }
 @keyframes pulse { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } button.round { transition: none; } }
 
-.note { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-.note .head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
-.num { flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; }
-.note .names { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.note .what { font-weight: 650; font-size: 14px; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.note .selector { font: 12px/1.3 var(--mono); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.note input { font: inherit; font-size: 14px; color: var(--text); caret-color: var(--accent); width: 100%; height: 40px; padding: 0 12px; border-radius: var(--radius-s); border: 1px solid var(--border); background: var(--raised); outline: none; user-select: text; -webkit-user-select: text; }
-.note input::placeholder { color: var(--text-2); }
-.note input:focus { border-color: var(--accent); }
-.note .keys { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; }
-.note .keys kbd + span { margin-right: 8px; }
-.note .keys .or { margin-left: auto; margin-right: 0; }
+.note { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--radius); }
+.note .what { padding: 0 2px; color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note textarea { display: block; width: 100%; height: 60px; padding: 9px 11px; resize: none; font: 14px/20px var(--sans); color: var(--text); caret-color: var(--accent-text); border-radius: 10px; border: 1px solid var(--border); background: var(--raised); outline: none; user-select: text; -webkit-user-select: text; }
+.note textarea::placeholder { color: var(--text-2); }
+.note textarea:focus { border-color: var(--accent); }
+.note .foot { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 
 /* The overlay. Only transform, width and height change while the pointer moves. */
-.highlight, .mark { position: absolute; left: 0; top: 0; border-radius: 5px; pointer-events: none; will-change: transform; }
-.highlight { border: 2px solid var(--ring); background: var(--ring-fill); box-shadow: 0 0 0 1.5px var(--ring-halo), inset 0 0 0 1.5px var(--ring-halo); }
+.highlight, .mark, .drag { position: absolute; left: 0; top: 0; pointer-events: none; }
+.highlight { border: 2px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 8%, transparent); box-shadow: 0 0 0 1px var(--ring-halo); will-change: transform; }
 .highlight.big { background: transparent; }
-.label { position: absolute; left: -2px; bottom: 100%; margin-bottom: 6px; max-width: 420px; padding: 4px 9px; border-radius: 7px; background: var(--surface); color: var(--text); border: 1px solid var(--border); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.label, .drag .size { position: absolute; padding: 4px 8px; border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap; }
+.label { left: -2px; bottom: 100%; margin-bottom: 6px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 .label.inside { bottom: auto; top: 6px; left: 6px; margin: 0; }
 .label:empty { display: none; }
-.mark { border: 2px solid var(--ring); box-shadow: 0 0 0 1.5px var(--ring-halo); }
+/* A thing already picked keeps a faint frame and its number. */
+.mark { border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 4px; }
 .mark.area, .mark.clip { border-style: dashed; }
-/* The area being dragged: a crisp frame, with its size while it is still being drawn. */
-.drag { position: absolute; left: 0; top: 0; pointer-events: none; border: 2px solid var(--ring); box-shadow: 0 0 0 1.5px var(--ring-halo), inset 0 0 0 1.5px var(--ring-halo), 0 0 0 100vmax rgba(0, 0, 0, 0.28); }
-.drag.recording { border-color: var(--record); box-shadow: 0 0 0 1.5px var(--ring-halo); }
-.drag .size { position: absolute; left: -2px; top: 100%; margin-top: 6px; padding: 3px 8px; border-radius: 6px; background: var(--surface); color: var(--text); border: 1px solid var(--border); font: 600 11px/1.3 var(--mono); white-space: nowrap; }
-.mark b { position: absolute; left: -12px; top: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--surface); color: var(--text); box-shadow: 0 0 0 1.5px var(--ring-halo); font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; }
+.mark b { position: absolute; left: -11px; top: -11px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 1.5px var(--ring-halo), 0 2px 5px rgba(0, 0, 0, 0.25); font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; }
+/* The area being dragged: a crisp frame with the rest of the screen dimmed, and its size
+   while it is still being drawn. */
+.drag { border: 2px solid var(--accent); box-shadow: 0 0 0 1px var(--ring-halo), 0 0 0 100vmax rgba(0, 0, 0, 0.28); }
+.drag.recording { border-color: var(--record); box-shadow: 0 0 0 1px var(--ring-halo); }
+.drag .size { left: -2px; top: 100%; margin-top: 6px; font-family: var(--mono); font-size: 11px; }
+
+/* The same interface in other colours, to compare: ?look= in the lab. */
+:root[data-look="mono"] { --accent: #ffffff; --on-accent: #121213; --accent-wash: rgba(255, 255, 255, 0.16); --accent-text: #ffffff; }
+:root[data-look="mono"] :is(.highlight, .drag:not(.recording)) { border-color: #121213; background: transparent; }
+:root[data-look="mono"] .mark { border-color: rgba(18, 18, 19, 0.6); }
+:root[data-look="mono"] .mark b { background: #121213; color: #fff; }
+:root[data-look="orange"] { --accent: #f76808; --accent-wash: rgba(247, 104, 8, 0.22); --accent-text: #ff9550; }
 
 /* Settings: an ordinary window, so it has a background and can be read like a page. */
 html.window, html.window body { background: var(--surface); overflow: auto; }

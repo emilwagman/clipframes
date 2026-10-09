@@ -113,10 +113,10 @@ export function History({ api = core }: { api?: HistoryApi }) {
                   <Icon name="copy" />
                   {copied === entry.id ? "Copied" : "Copy"}
                 </button>
-                <button className="ghost" title="Open the folder" onClick={() => void api.reveal(entry.id)}>
+                <button className="round" title="Open the folder" onClick={() => void api.reveal(entry.id)}>
                   <Icon name="folder" />
                 </button>
-                <button className="ghost" title="Delete" onClick={() => setConfirming(entry.id)}>
+                <button className="round" title="Delete" onClick={() => setConfirming(entry.id)}>
                   <Icon name="trash" />
                 </button>
               </div>

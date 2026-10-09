@@ -11,9 +11,12 @@ import { connect, useStore } from "../ui/store";
 import { History } from "../src/History";
 import type { HistoryApi } from "../src/History";
 
-const state = new URLSearchParams(location.search).get("state") ?? "picked";
-const BAR = { w: 640, h: 80 };
-const NOTE = { w: 380, h: 158 };
+const query = new URLSearchParams(location.search);
+const state = query.get("state") ?? "picked";
+// ?look= tries the interface in another colour.
+if (query.get("look")) document.documentElement.dataset.look = query.get("look") as string;
+const BAR = { w: 376, h: 64 };
+const NOTE = { w: 316, h: 172 };
 
 // Example captures for the History window.
 const examples: HistoryApi = {

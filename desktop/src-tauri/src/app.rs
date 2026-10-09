@@ -47,8 +47,8 @@ const AREA_WIDTH: u32 = 2560;
 const KEEP_WARM: Duration = Duration::from_secs(90);
 
 /// Sizes in CSS pixels.
-const BAR_SIZE: (f64, f64) = (640.0, 80.0);
-const NOTE_SIZE: (f64, f64) = (380.0, 158.0);
+const BAR_SIZE: (f64, f64) = (376.0, 64.0);
+const NOTE_SIZE: (f64, f64) = (316.0, 172.0);
 
 /// A line on stderr with the time since start, when CLIPFRAMES_TRACE is set. For chasing
 /// the order of things across threads on a machine with no debugger.
@@ -843,8 +843,26 @@ fn note_close(app: AppHandle) {
 
 #[tauri::command]
 fn pick_remove(app: AppHandle, index: usize) {
-    app.state::<Core>().round.lock().unwrap().remove(index);
-    publish(&app);
+    let core = app.state::<Core>();
+    let nothing_left = {
+        let mut round = core.round.lock().unwrap();
+        round.remove(index);
+        round.picks.is_empty()
+    };
+    // The clipboard and the round's folder still hold the pick that was just taken back.
+    if nothing_left {
+        copy_text(&app, "");
+        let folder = core.folder.lock().unwrap().take();
+        if let Some((path, _)) = folder {
+            let _ = std::fs::remove_dir_all(path);
+        }
+        core.files.store(0, Ordering::SeqCst);
+        *core.notes.lock().unwrap() = None;
+    }
+    // Remove is pressed in the comment box, which goes with its pick.
+    if !hide_note(&app) {
+        publish(&app);
+    }
 }
 
 #[tauri::command]
