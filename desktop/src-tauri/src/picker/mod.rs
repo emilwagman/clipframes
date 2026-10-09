@@ -92,6 +92,8 @@ struct Shared {
     mode: AtomicU8,
     /// Where the drag in progress began.
     drag: Mutex<Option<(f64, f64)>>,
+    /// The last press was on one of Clipframes' own windows and went to it.
+    own_press: AtomicBool,
     running: AtomicBool,
 }
 
@@ -176,7 +178,9 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             false
         }
         Input::Down(x, y) => {
-            if exempt(shared, x, y) {
+            let own = exempt(shared, x, y);
+            shared.own_press.store(own, Ordering::SeqCst);
+            if own {
                 return false;
             }
             match mode {
@@ -194,6 +198,11 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             }
         }
         Input::Up(x, y) => {
+            // A press the bar got is the bar's to the end: dragged off and let go elsewhere,
+            // it is not a pick, and the bar must see the button come up.
+            if shared.own_press.swap(false, Ordering::SeqCst) {
+                return false;
+            }
             if let Some(start) = shared.drag.lock().unwrap().take() {
                 let rect = span(start, (x, y));
                 *shared.pending.lock().unwrap() = None;
@@ -321,6 +330,21 @@ mod tests {
         assert!(!handle(&shared, &emit, Input::Up(150.0, 820.0)));
         handle(&shared, &emit, Input::Move(150.0, 820.0));
         assert_eq!(*shared.pending.lock().unwrap(), None, "hovering our own bar must not ask for an element");
+    }
+
+    #[test]
+    fn a_press_on_the_bar_released_outside_it_is_not_a_pick() {
+        let (shared, emit, rx) = round();
+        *shared.exempt.lock().unwrap() = vec![Rect { x: 100.0, y: 800.0, width: 400.0, height: 60.0 }];
+        let under = ElementInfo { role: "Button".into(), frame: Rect { x: 250.0, y: 250.0, width: 100.0, height: 100.0 }, ..Default::default() };
+        *shared.last.lock().unwrap() = Some((300.0, 300.0, under));
+        assert!(!handle(&shared, &emit, Input::Down(150.0, 820.0)), "the bar gets the press");
+        assert!(!handle(&shared, &emit, Input::Up(300.0, 300.0)), "and the release that belongs to it");
+        assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nothing the user never clicked is picked");
+        // The next click is an ordinary one again.
+        assert!(handle(&shared, &emit, Input::Down(300.0, 300.0)));
+        assert!(handle(&shared, &emit, Input::Up(300.0, 300.0)));
+        assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Pick { .. })));
     }
 
     #[test]
