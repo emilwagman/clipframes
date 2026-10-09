@@ -9,6 +9,27 @@ pub const SIZE: f64 = 44.0;
 #[cfg(windows)]
 pub use native::Tab;
 
+/// The picture with a light hairline just inside its shape: every pixel of the shape that
+/// touches the outside is mixed with 14% white. The same edge the web interface draws
+/// (`--edge` in ui/style.css), so the tab can be found on a dark screen.
+#[cfg(any(windows, test))]
+fn edged(mut image: crate::shot::Image) -> crate::shot::Image {
+    let (w, h) = (image.width as i64, image.height as i64);
+    let solid = |rgba: &[u8], x: i64, y: i64| x >= 0 && y >= 0 && x < w && y < h && rgba[((y * w + x) * 4 + 3) as usize] >= 128;
+    let before = image.rgba.clone();
+    for y in 0..h {
+        for x in 0..w {
+            let on_edge = solid(&before, x, y) && [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)].iter().any(|&(nx, ny)| !solid(&before, nx, ny));
+            if on_edge {
+                for c in &mut image.rgba[((y * w + x) * 4) as usize..][..3] {
+                    *c += ((255 - *c as u32) * 14 / 100) as u8;
+                }
+            }
+        }
+    }
+    image
+}
+
 #[cfg(windows)]
 mod native {
     use crate::shot::Image;
@@ -164,7 +185,7 @@ mod native {
         let mut reader = decoder.read_info().ok()?;
         let mut rgba = vec![0u8; reader.output_buffer_size()];
         let info = reader.next_frame(&mut rgba).ok()?;
-        (info.color_type == png::ColorType::Rgba).then(|| Image { width: info.width, height: info.height, rgba }.fit(side))
+        (info.color_type == png::ColorType::Rgba).then(|| super::edged(Image { width: info.width, height: info.height, rgba }.fit(side)))
     }
 
     /// Hands the picture to the window, pixels and transparency together.
@@ -263,5 +284,35 @@ mod native {
         pub fn hide(&self) {
             unsafe { PostMessageW(self.hwnd as Handle, WM_APP_HIDE, 0, 0) };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::edged;
+    use crate::shot::Image;
+
+    #[test]
+    fn the_edge_is_one_pixel_inside_the_shape_and_nowhere_else() {
+        // A black 3 by 3 square in the middle of a clear 5 by 5 picture.
+        let mut rgba = vec![0u8; 5 * 5 * 4];
+        for y in 1..4 {
+            for x in 1..4 {
+                rgba[(y * 5 + x) * 4 + 3] = 255;
+            }
+        }
+        let out = edged(Image { width: 5, height: 5, rgba });
+        let at = |x: usize, y: usize| &out.rgba[(y * 5 + x) * 4..][..4];
+        assert_eq!(at(1, 1), [35, 35, 35, 255], "the rim is lighter");
+        assert_eq!(at(3, 2), [35, 35, 35, 255]);
+        assert_eq!(at(2, 2), [0, 0, 0, 255], "the middle is as it was");
+        assert_eq!(at(0, 0), [0, 0, 0, 0], "and nothing is drawn outside the shape");
+    }
+
+    #[test]
+    fn a_shape_that_reaches_the_side_of_the_picture_has_its_edge_there() {
+        let out = edged(Image { width: 3, height: 3, rgba: [16, 16, 16, 255].repeat(9) });
+        assert_eq!(&out.rgba[..4], [49, 49, 49, 255]);
+        assert_eq!(&out.rgba[4 * 4..][..4], [16, 16, 16, 255]);
     }
 }
