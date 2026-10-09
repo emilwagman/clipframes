@@ -79,7 +79,8 @@ frame.addEventListener("load", () => {
   };
   createRoot(document.getElementById("overlay") as HTMLElement).render(<Overlay />);
   mount("bar", (innerWidth - BAR.w) / 2, innerHeight - BAR.h - 40, BAR.w, BAR.h, <Bar />);
-  mount("note", overdue.x, overdue.y + overdue.height + 8, NOTE.w, NOTE.h, <Note />);
+  // Kept on screen, the way the app clamps it to the display.
+  mount("note", Math.min(overdue.x, innerWidth - NOTE.w - 8), overdue.y + overdue.height + 8, NOTE.w, NOTE.h, <Note />);
   if (state === "history") {
     // A window of its own in the app; here a panel in the middle of the page.
     const panel = document.getElementById("history") as HTMLElement;
