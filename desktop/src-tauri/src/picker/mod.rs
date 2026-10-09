@@ -116,9 +116,19 @@ impl Picker {
 
         let source = {
             let (shared, emit) = (shared.clone(), emit.clone());
-            platform::Source::start(move |input| handle(&shared, &emit, input))?
+            platform::Source::start(move |input| handle(&shared, &emit, input))
         };
-        Ok(Picker { shared, source: Some(source), worker: Some(worker) })
+        match source {
+            Ok(source) => Ok(Picker { shared, source: Some(source), worker: Some(worker) }),
+            Err(message) => {
+                // The reader was already started: without this it would wake twice a second
+                // for the rest of the run, one more for every failed open.
+                shared.running.store(false, Ordering::SeqCst);
+                shared.wake.notify_all();
+                let _ = worker.join();
+                Err(message)
+            }
+        }
     }
 
     /// Where Clipframes' own windows are, so clicks on the bar or the comment box pass through.
