@@ -1,0 +1,7 @@
+{
+  "name": "clipframes-demo-tools",
+  "private": true,
+  "type": "module",
+  "description": "Renders the website's figures: demo/tools/render-shots.sh",
+  "devDependencies": { "playwright-core": "1.63.0" }
+}

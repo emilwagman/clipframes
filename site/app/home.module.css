@@ -98,3 +98,10 @@
 .lede { font-size: 18px; line-height: 1.6; }
 .main .meta { margin-top: 16px; font-size: 14px; color: var(--text-3); }
 .intro + .section { padding-top: 72px; }
+
+/* The real captures of the app. */
+.figure { max-width: var(--wide); margin: 48px auto 0; }
+.shot { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 24px 48px -28px rgba(16, 24, 40, 0.28); }
+.figure figcaption { max-width: var(--col); margin: 14px auto 0; font-size: 14px; color: var(--text-3); }
+@media (max-width: 640px) { .figure { margin-left: -8px; margin-right: -8px; } }

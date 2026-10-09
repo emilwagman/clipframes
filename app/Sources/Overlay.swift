@@ -73,6 +73,9 @@ final class OverlaySession: ObservableObject {
 
     private init(mode: Mode) { self.mode = mode }
 
+    /// A session that only exists to be drawn (RenderShots); it never opens a panel.
+    static func forRendering(_ mode: Mode) -> OverlaySession { OverlaySession(mode: mode) }
+
     // MARK: Lifecycle
 
     static func toggle(_ mode: Mode, from source: Habit.Source = .bar) {

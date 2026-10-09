@@ -1,6 +1,6 @@
 /// The facts every part of the site shares.
 
-export const SITE_URL = "https://clipframes.vercel.app";
+export const SITE_URL = "https://clipframes.app";
 export const SITE_NAME = "Clipframes";
 export const REPO_URL = "https://github.com/emilwagman/clipframes";
 export const MAKER_URL = "https://emilwagman.com";

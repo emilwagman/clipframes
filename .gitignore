@@ -6,3 +6,4 @@ spike/axspike
 spike/squeeze
 .secrets/
 demo/logo/**/*.log
+demo/tools/node_modules/

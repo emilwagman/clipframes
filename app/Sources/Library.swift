@@ -211,10 +211,9 @@ enum Toast {
     private static var panel: NSPanel?
     private static var hideTask: Task<Void, Never>?
 
-    static func show(_ text: String, icon: String = "checkmark.circle.fill", tint: Color = .green) {
-        let appWasInFront = NSApp.isActive
-        if !appWasInFront { Stage.park() }
-        let view = HStack(spacing: 8) {
+    /// The toast itself, also drawn by RenderShots.
+    static func view(_ text: String, icon: String = "checkmark.circle.fill", tint: Color = .green) -> some View {
+        HStack(spacing: 8) {
             Image(systemName: icon).foregroundStyle(tint)
             Text(text).font(.system(size: 13, weight: .medium))
         }
@@ -223,6 +222,12 @@ enum Toast {
         .surface(radius: 20)
         .padding(PanelMargin.value)
         .fixedSize()
+    }
+
+    static func show(_ text: String, icon: String = "checkmark.circle.fill", tint: Color = .green) {
+        let appWasInFront = NSApp.isActive
+        if !appWasInFront { Stage.park() }
+        let view = view(text, icon: icon, tint: tint)
 
         let host = NSHostingView(rootView: view)
         let size = host.fittingSize

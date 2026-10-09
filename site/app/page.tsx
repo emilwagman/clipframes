@@ -31,6 +31,16 @@ function Download({ note }: { note?: string }) {
   );
 }
 
+/// A real capture of the app: its own views drawn over the Northwind demo page (demo/tools/render-shots.sh).
+function Shot({ src, alt, caption }: { src: string; alt: string; caption?: string }) {
+  return (
+    <figure className={s.figure}>
+      <img className={s.shot} src={`/shots/${src}`} alt={alt} width={1440} height={900} loading="lazy" />
+      {caption && <figcaption>{caption}</figcaption>}
+    </figure>
+  );
+}
+
 const ref = '[Element: Button "New invoice" (#new-invoice .btn-primary) in Chrome "Invoices". Read ~/Clipframes/2026-10-07_11-42-30/notes.md]';
 
 export default function Home() {
@@ -47,6 +57,8 @@ export default function Home() {
           <Download note="it's free" />
           <p className={s.meta}>Version {VERSION} · {REQUIREMENTS}</p>
         </div>
+
+        <Shot src="element.jpg" alt="Clipframes highlighting the New invoice button in a web app, with its name and selector in a label above it" />
 
         <section className={`${s.col} ${s.section}`}>
           <p>
@@ -70,6 +82,7 @@ export default function Home() {
           </p>
           <div className={s.ref}><code>{ref}</code></div>
         </section>
+        <Shot src="bar.jpg" alt="The Clipframes bar over a web app, showing Element, Screenshot and Clip with the keys 1, 2 and 3" caption="⌃⇧Space opens the bar from any app. The numbers show which key picks each tool." />
 
         <section id="screenshot" className={`${s.col} ${s.section}`}>
           <h2>Show an area</h2>
@@ -78,6 +91,7 @@ export default function Home() {
             agent knows which parts you mean. Every capture is kept in the library, ready to copy again.
           </p>
         </section>
+        <Shot src="screenshot.jpg" alt="An area of a web app selected with Clipframes, the rest of the screen dimmed" />
 
         <section id="clip" className={`${s.col} ${s.section}`}>
           <h2>Show what happens</h2>
@@ -87,6 +101,7 @@ export default function Home() {
             video, a set of frames and a list of every click.
           </p>
         </section>
+        <Shot src="clip.jpg" alt="Clipframes choosing an area of a web app to record" />
 
         <section id="paste" className={`${s.col} ${s.section}`}>
           <h2>Then paste it</h2>
@@ -95,6 +110,7 @@ export default function Home() {
             The agent opens the notes file and sees what you saw.
           </p>
         </section>
+        <Shot src="library.jpg" alt="The Clipframes library: recent captures on the left, the selected one with its reference and notes on the right" caption="Every capture stays in the library, with the line to paste and the notes your agent reads." />
 
         <section id="try" className={`${s.col} ${s.section}`}>
           <h2>Try it on this page</h2>

@@ -32,6 +32,7 @@ struct ClipframesApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if MainActor.assumeIsolated({ RenderShots.runIfAsked() }) { return }
         MainActor.assumeIsolated {
             Hotkey.shared.register()
             _ = Updates.shared
