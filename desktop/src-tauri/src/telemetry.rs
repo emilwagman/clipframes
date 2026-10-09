@@ -74,6 +74,9 @@ fn post(url: &str, key: &str, batch: Vec<Value>, patience: Duration) {
 /// Call once at start. `on` is the user's setting.
 pub fn start(install: String, version: &str, on: bool) {
     let Some((url, key)) = endpoint() else { return };
+    // The HTTP client has no encryption of its own in this build; it uses the one installed
+    // here. The updater installs the same one when it first runs, which may be later.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let (queue, events) = channel::<Value>();
     let mut common = Map::new();
     common.insert("app_version".into(), version.into());
