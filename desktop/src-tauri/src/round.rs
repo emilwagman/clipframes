@@ -129,12 +129,19 @@ impl Round {
 }
 
 /// `Button "New invoice" (#new-invoice .btn.btn-primary)`, `Screenshot (2.png)`,
-/// `Screen clip, 6 s, 24 frames (3/)`.
+/// `Screen clip, 6 s, 24 frames (3/)`. An element that reads the same as others on its page
+/// also says which one it is and what heading it is under:
+/// `Link "Download" (.pill), 2nd of 2 on the page, under heading "Try it on your own app."`.
 pub(crate) fn describe(pick: &Pick) -> String {
     match pick.kind {
         Kind::Element => {
             let selector = pick.element.selector();
-            if selector.is_empty() { pick.element.headline() } else { format!("{} ({selector})", pick.element.headline()) }
+            let mut said = if selector.is_empty() { pick.element.headline() } else { format!("{} ({selector})", pick.element.headline()) };
+            // What it is, then which one, then under what.
+            for clause in pick.element.whereabouts() {
+                said.push_str(&format!(", {clause}"));
+            }
+            said
         }
         Kind::Area if pick.image.is_empty() => "Screenshot".into(),
         Kind::Area => format!("Screenshot ({})", pick.image),
@@ -204,6 +211,51 @@ mod tests {
             r.reference(Some("/Users/sam/Clipframes/2026-10-09_11-42-30/notes.md")),
             "[Button \"New invoice\" (#new-invoice .btn.btn-primary) in Google Chrome \"Invoices\": make this secondary. Read /Users/sam/Clipframes/2026-10-09_11-42-30/notes.md]"
         );
+    }
+
+    fn second_download() -> ElementInfo {
+        use crate::element::Heading;
+        ElementInfo {
+            app: "Google Chrome".into(),
+            window: "Clipframes".into(),
+            url: "https://clipframes.com/".into(),
+            role: "Link".into(),
+            name: "Download for Windows".into(),
+            dom_classes: "home_pill__qnvOg home_big__1QvCE".into(),
+            occurrence: Some((2, 2)),
+            heading: Some(Heading { text: "Try it on your own app.".into(), inside: false }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn one_of_several_that_read_the_same_says_which_one_and_under_what_heading() {
+        let mut r = Round::default();
+        let i = r.add(second_download());
+        r.set_note(i, "change this to say Download for PC");
+        assert_eq!(
+            r.reference(Some("/Users/sam/Clipframes/2026-10-10_09-21-47/notes.md")),
+            "[Link \"Download for Windows\" (.home_pill__qnvOg.home_big__1QvCE), 2nd of 2 on the page, under heading \"Try it on your own app.\" in Google Chrome \"Clipframes\": change this to say Download for PC. Read /Users/sam/Clipframes/2026-10-10_09-21-47/notes.md]"
+        );
+    }
+
+    #[test]
+    fn in_a_numbered_list_each_line_carries_its_own_which_one_and_heading() {
+        use crate::element::Heading;
+        let mut r = Round::default();
+        r.add(second_download());
+        // A native app: no page, and a section that holds its own heading. No selector.
+        r.add(ElementInfo { app: "Google Chrome".into(), window: "Clipframes".into(), role: "Group".into(), heading: Some(Heading { text: "Questions".into(), inside: true }), ..Default::default() });
+        r.add(ElementInfo { app: "Google Chrome".into(), window: "Clipframes".into(), role: "Button".into(), name: "OK".into(), occurrence: Some((1, 3)), ..Default::default() });
+        r.push(Pick { kind: Kind::Area, element: ElementInfo { occurrence: Some((1, 2)), ..chrome_site() }, image: "4.png".into(), ..Default::default() });
+        assert_eq!(
+            r.reference(None),
+            "[Clipframes: 4 things in Google Chrome \"Clipframes\"]\n1. Link \"Download for Windows\" (.home_pill__qnvOg.home_big__1QvCE), 2nd of 2 on the page, under heading \"Try it on your own app.\"\n2. Group, with heading \"Questions\"\n3. Button \"OK\", 1st of 3 in the window\n4. Screenshot (4.png)"
+        );
+    }
+
+    fn chrome_site() -> ElementInfo {
+        ElementInfo { app: "Google Chrome".into(), window: "Clipframes".into(), ..Default::default() }
     }
 
     #[test]

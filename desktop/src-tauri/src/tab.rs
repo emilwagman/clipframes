@@ -9,6 +9,27 @@ pub const SIZE: f64 = 44.0;
 #[cfg(windows)]
 pub use native::Tab;
 
+/// The picture with a light hairline just inside its shape: every pixel of the shape that
+/// touches the outside is mixed with 14% white. The same edge the web interface draws
+/// (`--edge` in ui/style.css), so the tab can be found on a dark screen.
+#[cfg(any(windows, test))]
+fn edged(mut image: crate::shot::Image) -> crate::shot::Image {
+    let (w, h) = (image.width as i64, image.height as i64);
+    let solid = |rgba: &[u8], x: i64, y: i64| x >= 0 && y >= 0 && x < w && y < h && rgba[((y * w + x) * 4 + 3) as usize] >= 128;
+    let before = image.rgba.clone();
+    for y in 0..h {
+        for x in 0..w {
+            let on_edge = solid(&before, x, y) && [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)].iter().any(|&(nx, ny)| !solid(&before, nx, ny));
+            if on_edge {
+                for c in &mut image.rgba[((y * w + x) * 4) as usize..][..3] {
+                    *c += ((255 - *c as u32) * 14 / 100) as u8;
+                }
+            }
+        }
+    }
+    image
+}
+
 #[cfg(windows)]
 mod native {
     use crate::shot::Image;
@@ -109,6 +130,7 @@ mod native {
     const WS_EX_TOPMOST: u32 = 0x0000_0008;
     const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
     const WS_EX_NOACTIVATE: u32 = 0x0800_0000;
+    const WM_CLOSE: u32 = 0x0010;
     const WM_LBUTTONUP: u32 = 0x0202;
     const WM_APP_SHOW: u32 = 0x8001;
     const WM_APP_HIDE: u32 = 0x8002;
@@ -134,6 +156,9 @@ mod native {
                 0
             }
             WM_APP_SHOW => {
+                // 4 is "show, in its normal state, without taking the keyboard": it also brings
+                // the tab back if something minimized it (Win+D, a window manager, a script).
+                ShowWindow(hwnd, 4);
                 SetWindowPos(hwnd, HWND_TOPMOST, wparam as i32, lparam as i32, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
                 0
             }
@@ -141,6 +166,11 @@ mod native {
                 ShowWindow(hwnd, 0);
                 0
             }
+            // Asked to close (Alt+F4 while it has the keyboard, or another program closing
+            // windows): nothing happens. Destroyed, the tab could never come back, and hidden
+            // behind the app's back it would not be shown again until the place changed. The
+            // pin in the bar is how the tab is turned off.
+            WM_CLOSE => 0,
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
@@ -155,7 +185,7 @@ mod native {
         let mut reader = decoder.read_info().ok()?;
         let mut rgba = vec![0u8; reader.output_buffer_size()];
         let info = reader.next_frame(&mut rgba).ok()?;
-        (info.color_type == png::ColorType::Rgba).then(|| Image { width: info.width, height: info.height, rgba }.fit(side))
+        (info.color_type == png::ColorType::Rgba).then(|| super::edged(Image { width: info.width, height: info.height, rgba }.fit(side)))
     }
 
     /// Hands the picture to the window, pixels and transparency together.
@@ -254,5 +284,35 @@ mod native {
         pub fn hide(&self) {
             unsafe { PostMessageW(self.hwnd as Handle, WM_APP_HIDE, 0, 0) };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::edged;
+    use crate::shot::Image;
+
+    #[test]
+    fn the_edge_is_one_pixel_inside_the_shape_and_nowhere_else() {
+        // A black 3 by 3 square in the middle of a clear 5 by 5 picture.
+        let mut rgba = vec![0u8; 5 * 5 * 4];
+        for y in 1..4 {
+            for x in 1..4 {
+                rgba[(y * 5 + x) * 4 + 3] = 255;
+            }
+        }
+        let out = edged(Image { width: 5, height: 5, rgba });
+        let at = |x: usize, y: usize| &out.rgba[(y * 5 + x) * 4..][..4];
+        assert_eq!(at(1, 1), [35, 35, 35, 255], "the rim is lighter");
+        assert_eq!(at(3, 2), [35, 35, 35, 255]);
+        assert_eq!(at(2, 2), [0, 0, 0, 255], "the middle is as it was");
+        assert_eq!(at(0, 0), [0, 0, 0, 0], "and nothing is drawn outside the shape");
+    }
+
+    #[test]
+    fn a_shape_that_reaches_the_side_of_the_picture_has_its_edge_there() {
+        let out = edged(Image { width: 3, height: 3, rgba: [16, 16, 16, 255].repeat(9) });
+        assert_eq!(&out.rgba[..4], [49, 49, 49, 255]);
+        assert_eq!(&out.rgba[4 * 4..][..4], [16, 16, 16, 255]);
     }
 }

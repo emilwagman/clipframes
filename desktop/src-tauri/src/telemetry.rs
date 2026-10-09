@@ -93,15 +93,20 @@ pub fn start(install: String, version: &str, on: bool) {
     thread::spawn(move || {
         // Blocks until there is something to send, so an idle app does nothing here.
         while let Ok(first) = events.recv() {
-            let mut batch = vec![first];
+            // A null is `flush` asking for whatever is waiting to leave now.
+            let mut batch: Vec<Value> = if first.is_null() { Vec::new() } else { vec![first] };
             let until = std::time::Instant::now() + HOLD;
-            while batch.len() < FULL {
+            while !batch.is_empty() && batch.len() < FULL {
                 match events.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) {
+                    Ok(Value::Null) => break,
                     Ok(next) => batch.push(next),
                     Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => break,
                 }
             }
-            post(&url, &key, batch, Duration::from_secs(10));
+            let batch = leaving(batch, ON.load(Ordering::SeqCst));
+            if !batch.is_empty() {
+                post(&url, &key, batch, Duration::from_secs(10));
+            }
         }
     });
     // A crash is reported before the process goes.
@@ -115,6 +120,23 @@ pub fn start(install: String, version: &str, on: bool) {
             post(&url, &key, vec![event], Duration::from_secs(3));
         }
     }));
+}
+
+/// What of a waiting batch may be sent: nothing once the setting is off, even though its
+/// events were recorded while it was still on.
+fn leaving(batch: Vec<Value>, on: bool) -> Vec<Value> {
+    if on { batch } else { Vec::new() }
+}
+
+/// A message up to the first thing in it that looks like a file path or an address. Clipframes'
+/// own messages hold neither, but an error from the system or a library can name a file, and a
+/// path can hold the account's name. The rest of the message goes with it, because a path
+/// with spaces in it has no clear end.
+fn scrub(message: &str) -> String {
+    match message.split(' ').position(|word| word.contains('/') || word.contains('\\')) {
+        Some(at) => message.split(' ').take(at).chain(Some("<path>")).collect::<Vec<_>>().join(" "),
+        None => message.to_string(),
+    }
 }
 
 /// The user's setting changed.
@@ -142,7 +164,7 @@ pub fn event(name: &str, properties: Value) {
 }
 
 fn exception(kind: &str, message: &str, at: &str) -> Value {
-    let message: String = message.chars().take(300).collect();
+    let message: String = scrub(message).chars().take(300).collect();
     json!({
         "$exception_list": [{ "type": kind, "value": message, "mechanism": { "handled": kind != "panic", "synthetic": false } }],
         "$exception_fingerprint": format!("{kind}:{at}:{}", message.chars().take(60).collect::<String>()),
@@ -153,6 +175,15 @@ fn exception(kind: &str, message: &str, at: &str) -> Value {
 /// Records an error: something that should have worked and did not.
 pub fn error(kind: &str, message: &str, at: &str) {
     event("$exception", exception(kind, message, at));
+}
+
+/// Sends what is waiting and gives it a moment to leave. For just before the app goes away.
+pub fn flush() {
+    if let Some(sink) = SINK.get() {
+        if ON.load(Ordering::SeqCst) && sink.queue.lock().unwrap().send(Value::Null).is_ok() {
+            thread::sleep(Duration::from_millis(1500));
+        }
+    }
 }
 
 /// Says how the round about to open was asked for.
@@ -181,5 +212,21 @@ mod tests {
         let report = exception("capture", &"x".repeat(1000), "shot.rs:10");
         assert_eq!(report["$exception_list"][0]["value"].as_str().unwrap().len(), 300);
         assert!(report["$exception_fingerprint"].as_str().unwrap().starts_with("capture:shot.rs:10:"));
+    }
+
+    #[test]
+    fn an_error_report_never_carries_a_path() {
+        assert_eq!(scrub("The screen could not be captured."), "The screen could not be captured.");
+        assert_eq!(scrub(r"could not open C:\Users\Sam Lee\AppData\Local\Temp\x.png: denied"), "could not open <path>");
+        let report = exception("panic", "failed to read /Users/sam lee/Clipframes/1.png", "store.rs:5");
+        assert_eq!(report["$exception_list"][0]["value"], "failed to read <path>");
+        assert_eq!(report["$exception_fingerprint"], "panic:store.rs:5:failed to read <path>");
+    }
+
+    #[test]
+    fn nothing_waiting_is_sent_once_the_setting_is_off() {
+        let waiting = vec![json!({ "event": "pick_added" }), json!({ "event": "round_closed" })];
+        assert_eq!(leaving(waiting.clone(), true), waiting);
+        assert_eq!(leaving(waiting, false), Vec::<Value>::new());
     }
 }

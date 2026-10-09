@@ -28,7 +28,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[cfg(all(feature = "selftest", target_os = "macos"))]
@@ -39,6 +39,8 @@ const BAR: &str = "bar";
 const NOTE: &str = "note";
 const SETTINGS: &str = "settings";
 const HISTORY: &str = "history";
+/// Overlays are "overlay-0", "overlay-1", …: one per display.
+const OVERLAY: &str = "overlay-";
 #[cfg(not(windows))]
 const TAB: &str = "tab";
 /// A clip stops by itself after this long.
@@ -51,6 +53,8 @@ const ELEMENT_WIDTH: u32 = 1600;
 const AREA_WIDTH: u32 = 2560;
 /// How long the hidden bar is kept after closing, ready to open again at once.
 const KEEP_WARM: Duration = Duration::from_secs(90);
+/// How far the clipboard and the files on disk may trail behind typing in the comment box.
+const NOTE_SETTLE: Duration = Duration::from_millis(200);
 
 /// Sizes in CSS pixels.
 const BAR_SIZE: (f64, f64) = (376.0, 64.0);
@@ -89,6 +93,10 @@ impl Screen {
 
 #[derive(Default)]
 pub struct Core {
+    /// Held for the whole of an open and of a close, so the two never run into each other:
+    /// every trigger (shortcut, Esc, tray, tab, a second launch) arrives on its own thread.
+    /// Never taken on the main thread, which the holder waits for while it builds windows.
+    gate: Mutex<()>,
     round: Mutex<Round>,
     picker: Mutex<Option<Picker>>,
     screens: Mutex<Vec<Screen>>,
@@ -98,6 +106,8 @@ pub struct Core {
     shown: Mutex<Option<Rect>>,
     /// Kept for the whole run: on Linux the clipboard's content lives only as long as its owner.
     clipboard: Mutex<Option<arboard::Clipboard>>,
+    /// What Clipframes last put on the clipboard.
+    copied: Mutex<String>,
     /// The round's folder and when it began, once something has been picked.
     folder: Mutex<Option<(PathBuf, Stamp)>>,
     /// The round's notes.md, once written: the path the pasted reference points to.
@@ -122,12 +132,18 @@ pub struct Core {
     open_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     /// The last thing the updater had to say.
     update: Mutex<String>,
+    /// When the round on screen was opened, for the report of how long it stayed.
+    began: Mutex<Option<Instant>>,
     /// Why the round could not start, for a bar that loads after the fact.
     trouble: Mutex<Option<String>>,
     /// Counts opens and closes, so a keep-warm timer knows if it is out of date.
     turn: AtomicU64,
     /// When the bar was asked to open, to time how long until it can draw.
     opened: Mutex<Option<Instant>>,
+    /// A comment was typed that the clipboard and the round's folder do not have yet.
+    note_unsaved: AtomicBool,
+    /// A thread is waiting to write that comment out.
+    note_timer: AtomicBool,
 }
 
 /// A clip in the making.
@@ -223,12 +239,30 @@ fn copy_text(app: &AppHandle, text: &str) {
     if let Some(c) = clipboard.as_mut() {
         // Windows programs expect CRLF; a terminal there joins lines that end in a bare LF.
         let _ = c.set_text(if cfg!(windows) { text.replace('\n', "\r\n") } else { text.to_string() });
+        *core.copied.lock().unwrap() = text.to_string();
     }
+}
+
+/// Empties the clipboard if what is on it is still what Clipframes put there. Anything the
+/// user has copied since is theirs and stays.
+fn uncopy(app: &AppHandle) {
+    let core = app.state::<Core>();
+    let ours = core.copied.lock().unwrap().clone();
+    let now = core.clipboard.lock().unwrap().as_mut().and_then(|c| c.get_text().ok());
+    if now.is_some_and(|now| same_text(&now, &ours)) {
+        copy_text(app, "");
+    }
+}
+
+/// Whether two pieces of clipboard text are the same, however their lines end.
+fn same_text(a: &str, b: &str) -> bool {
+    !a.is_empty() && a.replace("\r\n", "\n") == b.replace("\r\n", "\n")
 }
 
 /// Tells every window what the round looks like now, and puts it on the clipboard.
 fn publish(app: &AppHandle) {
     let core = app.state::<Core>();
+    core.note_unsaved.store(false, Ordering::SeqCst);
     save(&core);
     let state = view(app);
     if !state.reference.is_empty() {
@@ -262,23 +296,31 @@ fn remember(app: &AppHandle, element: &ElementInfo) {
     *core.over.lock().unwrap() = Some(place);
 }
 
-/// Where the tab sits: in the middle of where the bar opens. Physical pixels.
-fn tab_position(app: &AppHandle, side: f64) -> Option<PhysicalPosition<i32>> {
-    let (bar, scale) = bar_position(app)?;
-    Some(PhysicalPosition::new(bar.x + ((BAR_SIZE.0 * scale - side) / 2.0) as i32, bar.y + ((BAR_SIZE.1 * scale - side) / 2.0) as i32))
+/// Where the tab sits: in the middle of where the bar would open on the display that shows
+/// `near`. `side` is the tab's side in physical pixels of that display.
+fn tab_spot(app: &AppHandle, near: (f64, f64), side: impl Fn(f64) -> f64) -> Option<Spot> {
+    let bar = bar_spot(app, Some(near))?;
+    let side = side(bar.scale);
+    Some(Spot { at: PhysicalPosition::new(bar.at.x + ((BAR_SIZE.0 * bar.scale - side) / 2.0) as i32, bar.at.y + ((BAR_SIZE.1 * bar.scale - side) / 2.0) as i32), scale: bar.scale })
 }
 
+/// Shows the tab on the display that shows `near`: the middle of the window it belongs to.
 #[cfg(windows)]
-fn show_tab(app: &AppHandle) {
+fn show_tab(app: &AppHandle, near: (f64, f64)) {
     let core = app.state::<Core>();
     let mut tab = core.tab.lock().unwrap();
     if tab.is_none() {
         let handle = app.clone();
-        *tab = tab::Tab::start(protected(), move || later(&handle, open));
+        *tab = tab::Tab::start(protected(), move || {
+            telemetry::via("tab");
+            later(&handle, open)
+        });
     }
     if let Some(tab) = tab.as_ref() {
-        if let Some(at) = tab_position(app, tab.side() as f64) {
-            tab.show(at.x, at.y);
+        // The native tab keeps the size it was made at, whatever the display.
+        let side = tab.side() as f64;
+        if let Some(spot) = tab_spot(app, near, |_| side) {
+            tab.show(spot.at.x, spot.at.y);
         }
     }
 }
@@ -292,12 +334,12 @@ fn hide_tab(app: &AppHandle) {
 
 /// Elsewhere the tab is a very small window of the app's own.
 #[cfg(not(windows))]
-fn show_tab(app: &AppHandle) {
+fn show_tab(app: &AppHandle, near: (f64, f64)) {
     let window = app.get_webview_window(TAB).or_else(|| small_window(app, TAB, (tab::SIZE + 12.0, tab::SIZE + 12.0)).build().ok());
     let Some(window) = window else { return };
-    let scale = window.scale_factor().unwrap_or(1.0);
-    if let Some(at) = tab_position(app, (tab::SIZE + 12.0) * scale) {
-        let _ = window.set_position(at);
+    // A web view keeps its size in CSS pixels, so in pixels it is as large as its display says.
+    if let Some(spot) = tab_spot(app, near, |scale| (tab::SIZE + 12.0) * scale) {
+        spot.put(&window);
     }
     let _ = window.show();
 }
@@ -316,9 +358,19 @@ fn watch(app: AppHandle) {
     let mut seen: Option<(i32, String)> = None;
     let mut read_at = Instant::now();
     let mut showing = false;
+    // The middle of the window the tab was last placed for.
+    let mut placed = (f64::NAN, f64::NAN);
+    let mut tidied = Instant::now();
     loop {
         thread::sleep(Duration::from_secs(1));
         let core = app.state::<Core>();
+        // Once a minute: apps that were asked for their page structure and have not been
+        // looked at for five minutes get to switch it off again. Done here and not during a
+        // round, because a round is over long before this would ever come up.
+        if tidied.elapsed() >= Duration::from_secs(60) {
+            element::sleep_idle(Duration::from_secs(300));
+            tidied = Instant::now();
+        }
         if core.picker.lock().unwrap().is_some() {
             if showing {
                 hide_tab(&app);
@@ -327,19 +379,35 @@ fn watch(app: AppHandle) {
             continue;
         }
         let Some(front) = element::foreground() else { continue };
+        // One of Clipframes' own windows in front (Settings, History, the tab itself) says
+        // nothing about where the user is working, and is never read as if it were a page.
+        if front.pid == std::process::id() as i32 {
+            continue;
+        }
         let key = (front.pid, front.title.clone());
         if seen.as_ref() != Some(&key) {
             if seen.is_some() && read_at.elapsed() < Duration::from_millis(1500) {
                 continue; // titles that change all the time do not get a reading each
             }
-            let url = if element::permitted() { element::element_full_at(front.frame.x + front.frame.width / 2.0, front.frame.y + front.frame.height / 2.0).map(|e| e.url).unwrap_or_default() } else { String::new() };
+            // The address is only worth switching an app's page structure on for where the
+            // tab could appear on a site in that app. Otherwise every Chromium and Electron
+            // app would have it forced on just for coming to the front while Clipframes runs.
+            let wake = core.places.lock().unwrap().has_site(&front.app, places::now());
+            let url = if element::permitted() { element::page_at(front.frame.x + front.frame.width / 2.0, front.frame.y + front.frame.height / 2.0, wake) } else { String::new() };
             *core.front.lock().unwrap() = Some(Place::new(&front.app, &url));
             seen = Some(key);
             read_at = Instant::now();
         }
         let wanted = core.front.lock().unwrap().as_ref().is_some_and(|p| core.places.lock().unwrap().wants(p, places::now()));
-        if wanted != showing {
-            if wanted { show_tab(&app) } else { hide_tab(&app) }
+        // The tab goes to the display its window is on, and follows when the window moves.
+        let middle = (front.frame.x + front.frame.width / 2.0, front.frame.y + front.frame.height / 2.0);
+        if wanted != showing || (wanted && middle != placed) {
+            if wanted {
+                show_tab(&app, middle);
+                placed = middle;
+            } else {
+                hide_tab(&app);
+            }
             showing = wanted;
         }
     }
@@ -417,92 +485,211 @@ fn small_window<'a>(app: &'a AppHandle, label: &str, size: (f64, f64)) -> Webvie
         })
 }
 
-/// Where the bar goes: bottom centre of the main display, in physical pixels.
-fn bar_position(app: &AppHandle) -> Option<(PhysicalPosition<i32>, f64)> {
-    let m = app.primary_monitor().ok()??;
+/// A place for one of Clipframes' windows: its top-left corner in the physical pixels of the
+/// display it is on, and that display's scale.
+struct Spot {
+    at: PhysicalPosition<i32>,
+    scale: f64,
+}
+
+impl Spot {
+    fn put(&self, window: &WebviewWindow) {
+        let _ = if cfg!(target_os = "macos") {
+            // In points, for the reason given in `open_overlays`: macOS converts pixels with
+            // the scale of the display the window is on now, not the one it is going to.
+            window.set_position(LogicalPosition::new(self.at.x as f64 / self.scale, self.at.y as f64 / self.scale))
+        } else {
+            window.set_position(self.at)
+        };
+    }
+}
+
+/// Which display a point is on: the first whose rectangle holds it. A display's left and top
+/// edges belong to it, its right and bottom edges to the neighbour.
+fn monitor_at(monitors: &[Rect], x: f64, y: f64) -> Option<usize> {
+    monitors.iter().position(|m| x >= m.x && x < m.x + m.width && y >= m.y && y < m.y + m.height)
+}
+
+/// The display that shows `near` (a point in picker units), or the main one when there is no
+/// point or it is on none.
+fn monitor_near(app: &AppHandle, near: Option<(f64, f64)>) -> Option<tauri::Monitor> {
+    let found = near.and_then(|(x, y)| {
+        let mut monitors = app.available_monitors().ok()?;
+        let frames: Vec<Rect> = monitors.iter().map(|m| display(m).0).collect();
+        Some(monitors.swap_remove(monitor_at(&frames, x, y)?))
+    });
+    found.or_else(|| app.primary_monitor().ok()?)
+}
+
+/// Where the bar goes: bottom centre of the display that shows `near`.
+fn bar_spot(app: &AppHandle, near: Option<(f64, f64)>) -> Option<Spot> {
+    let m = monitor_near(app, near)?;
     let (pos, size, scale) = (m.position(), m.size(), m.scale_factor());
     let (w, h) = (BAR_SIZE.0 * scale, BAR_SIZE.1 * scale);
     let x = pos.x as f64 + (size.width as f64 - w) / 2.0;
     let y = pos.y as f64 + size.height as f64 - h - 96.0 * scale;
-    Some((PhysicalPosition::new(x as i32, y as i32), scale))
+    Some(Spot { at: PhysicalPosition::new(x as i32, y as i32), scale })
 }
 
-/// The bar, on screen. A kept one is moved and shown; a new one is built where it belongs and
-/// already visible, so nothing waits for a second step once the web view is up.
+/// The bar, on screen, on the display the pointer is on: that is where the user is working.
+/// A kept one is moved and shown; a new one is built where it belongs and already visible,
+/// so nothing waits for a second step once the web view is up.
 fn show_bar(app: &AppHandle) -> Option<WebviewWindow> {
-    let place = bar_position(app);
+    let spot = bar_spot(app, element::pointer());
     if let Some(bar) = app.get_webview_window(BAR) {
-        if let Some((position, _)) = place {
-            let _ = bar.set_position(position);
+        if let Some(spot) = &spot {
+            spot.put(&bar);
         }
         let _ = bar.show();
         return Some(bar);
     }
     let mut builder = small_window(app, BAR, BAR_SIZE).visible(true);
-    if let Some((position, scale)) = place {
-        builder = builder.position(position.x as f64 / scale, position.y as f64 / scale);
+    if let Some(spot) = &spot {
+        builder = builder.position(spot.at.x as f64 / spot.scale, spot.at.y as f64 / spot.scale);
     }
-    builder.build().ok()
+    let bar = builder.build().ok()?;
+    // The builder is given the place in the display's own units and finds the display from
+    // that. With displays of different scales the same numbers can fit two of them, so the
+    // place is said once more in a way that cannot be misread.
+    if let Some(spot) = &spot {
+        spot.put(&bar);
+    }
+    Some(bar)
 }
 
 /// One click-through window per display. They only paint; the picker owns the input.
 fn open_overlays(app: &AppHandle) -> Vec<Screen> {
     let mut screens = Vec::new();
     for (i, m) in app.available_monitors().unwrap_or_default().iter().enumerate() {
-        let label = format!("overlay-{i}");
-        let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
-            .title("Clipframes")
-            .decorations(false)
-            .transparent(true)
-            .shadow(false)
-            .resizable(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .visible_on_all_workspaces(true)
-            .focused(false)
-            .visible(false)
-            .content_protected(protected())
-            .build();
+        let label = format!("{OVERLAY}{i}");
+        // One left over from a round that ended badly is used again: a label can only be
+        // built once, and a display without its overlay shows no highlight and no marks.
+        let built = app.get_webview_window(&label).map(Ok).unwrap_or_else(|| {
+            WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+                .title("Clipframes")
+                .decorations(false)
+                .transparent(true)
+                .shadow(false)
+                .resizable(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .visible_on_all_workspaces(true)
+                .focused(false)
+                .visible(false)
+                .content_protected(protected())
+                .build()
+        });
         let Ok(w) = built else { continue };
-        let (pos, size, scale) = (*m.position(), *m.size(), m.scale_factor());
-        let _ = w.set_position(PhysicalPosition::new(pos.x, pos.y));
-        let _ = w.set_size(PhysicalSize::new(size.width, size.height));
+        let (pos, size) = (*m.position(), *m.size());
+        let (frame, css) = display(m);
+        if cfg!(target_os = "macos") {
+            // In points. macOS turns a position or size given in pixels into points with the
+            // scale of the display the window is on at that moment, not the one it is going
+            // to. With a Retina and an ordinary display side by side that put the overlay in
+            // the wrong place at the wrong size, and every highlight with it.
+            let _ = w.set_position(LogicalPosition::new(frame.x, frame.y));
+            let _ = w.set_size(LogicalSize::new(frame.width, frame.height));
+        } else {
+            let _ = w.set_position(PhysicalPosition::new(pos.x, pos.y));
+            let _ = w.set_size(PhysicalSize::new(size.width, size.height));
+        }
         let _ = w.set_ignore_cursor_events(true);
         let _ = w.show();
-        // macOS reports points, everything else physical pixels.
-        let unit = if cfg!(target_os = "macos") { scale } else { 1.0 };
-        screens.push(Screen {
-            label,
-            frame: Rect { x: pos.x as f64 / unit, y: pos.y as f64 / unit, width: size.width as f64 / unit, height: size.height as f64 / unit },
-            css: unit / scale,
-        });
+        screens.push(Screen { label, frame, css });
     }
     screens
 }
 
+/// A display in picker units, and how many CSS pixels one unit is there.
+fn display(m: &tauri::Monitor) -> (Rect, f64) {
+    let (pos, size, scale) = (m.position(), m.size(), m.scale_factor());
+    // macOS reports points, everything else physical pixels.
+    let unit = if cfg!(target_os = "macos") { scale } else { 1.0 };
+    (Rect { x: pos.x as f64 / unit, y: pos.y as f64 / unit, width: size.width as f64 / unit, height: size.height as f64 / unit }, unit / scale)
+}
+
+/// Every display in picker units.
+fn displays(app: &AppHandle) -> Vec<Rect> {
+    let known: Vec<Rect> = app.state::<Core>().screens.lock().unwrap().iter().map(|s| s.frame).collect();
+    if !known.is_empty() {
+        return known;
+    }
+    // A pick can come before the overlays are up: input starts first.
+    app.available_monitors().unwrap_or_default().iter().map(|m| display(m).0).collect()
+}
+
+/// The part of `rect` on the display that shows the most of it, if any display shows it at
+/// all. A display left of or above the main one has negative coordinates, and an app may
+/// report an element far larger than any screen (the container of a long page): a picture is
+/// only ever of what one display shows.
+fn on_display(rect: &Rect, displays: &[Rect]) -> Option<Rect> {
+    let shared = |d: &Rect| {
+        let (x, y) = (rect.x.max(d.x), rect.y.max(d.y));
+        let (right, bottom) = ((rect.x + rect.width).min(d.x + d.width), (rect.y + rect.height).min(d.y + d.height));
+        (right > x && bottom > y).then(|| Rect { x, y, width: right - x, height: bottom - y })
+    };
+    displays.iter().filter_map(shared).max_by(|a, b| (a.width * a.height).total_cmp(&(b.width * b.height)))
+}
+
 fn close_round_windows(app: &AppHandle) {
-    let core = app.state::<Core>();
-    for screen in core.screens.lock().unwrap().drain(..) {
-        if let Some(w) = app.get_webview_window(&screen.label) {
+    app.state::<Core>().screens.lock().unwrap().clear();
+    // Every overlay there is, not only the ones this round knows about.
+    for (label, w) in app.webview_windows() {
+        if label == NOTE || label.starts_with(OVERLAY) {
             let _ = w.destroy();
         }
     }
-    if let Some(w) = app.get_webview_window(NOTE) {
-        let _ = w.destroy();
+}
+
+fn bar_visible(app: &AppHandle) -> bool {
+    app.get_webview_window(BAR).is_some_and(|w| w.is_visible().unwrap_or(false))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Turn {
+    Open,
+    Close,
+    Stay,
+}
+
+/// What a request does, given what is running. `toggle` is the shortcut; anything else (the
+/// tray, the tab, a second launch) asks to open.
+fn turn(toggle: bool, picking: bool, bar_visible: bool) -> Turn {
+    match (toggle, picking, bar_visible) {
+        (true, false, false) => Turn::Open,
+        // The shortcut always gets the user out of a round, also one whose bar is not there.
+        (true, _, _) => Turn::Close,
+        (false, true, true) => Turn::Stay,
+        // Clicks are being taken and there is nothing to see or press: end it.
+        (false, true, false) => Turn::Close,
+        (false, false, _) => Turn::Open,
+    }
+}
+
+fn take_turn(app: &AppHandle, toggle: bool) {
+    let core = app.state::<Core>();
+    let _gate = core.gate.lock().unwrap();
+    let picking = core.picker.lock().unwrap().is_some();
+    match turn(toggle, picking, bar_visible(app)) {
+        Turn::Open => open_now(app),
+        Turn::Close => close_now(app),
+        Turn::Stay => {}
     }
 }
 
 /// Opens the bar and starts picking. Call from a thread that may wait: it builds windows.
 fn open(app: &AppHandle) {
+    take_turn(app, false);
+}
+
+fn open_now(app: &AppHandle) {
     let core = app.state::<Core>();
-    if core.picker.lock().unwrap().is_some() {
-        return;
-    }
     trace("open: begin");
     let started = Instant::now();
     let via = telemetry::take_via();
     core.turn.fetch_add(1, Ordering::SeqCst);
     *core.opened.lock().unwrap() = Some(started);
+    *core.began.lock().unwrap() = Some(started);
     *core.round.lock().unwrap() = Round::default();
     *core.noting.lock().unwrap() = None;
     *core.shown.lock().unwrap() = None;
@@ -513,9 +700,23 @@ fn open(app: &AppHandle) {
     core.files.store(0, Ordering::SeqCst);
     *core.folder.lock().unwrap() = None;
     *core.notes.lock().unwrap() = None;
-    *core.trouble.lock().unwrap() = (!element::permitted()).then(|| "permission".to_string());
+    // Both permissions are settled before a round starts, so the system never has to ask for
+    // one while clicks are being taken as picks.
+    let missing = if !element::permitted() {
+        Some("permission")
+    } else if !shot::permitted() {
+        Some("screen")
+    } else {
+        None
+    };
+    *core.trouble.lock().unwrap() = missing.map(String::from);
 
     let was_warm = app.get_webview_window(BAR).is_some();
+    if was_warm {
+        // A kept bar is shown at once, long before the rest is up: it must not come back
+        // showing the count of the round before.
+        let _ = app.emit("round", view(app));
+    }
     if core.trouble.lock().unwrap().is_none() {
         // Input first: clicks are picks from here on. The windows that show it follow, and
         // starting a web view is the slow part of opening.
@@ -535,8 +736,9 @@ fn open(app: &AppHandle) {
     }
     trace("open: bar on screen");
     if let Some(trouble) = core.trouble.lock().unwrap().as_deref() {
-        // "permission" is a known state; anything else is the picker's own error message.
-        let kind = if trouble == "permission" { "permission" } else { "picker" };
+        // "permission" and "screen" are known states; anything else is the picker's own
+        // error message.
+        let kind = if trouble == "permission" || trouble == "screen" { trouble } else { "picker" };
         telemetry::event("round_blocked", json!({ "via": via, "why": kind }));
         if kind == "picker" {
             telemetry::error("picker", trouble, "picker::start");
@@ -564,11 +766,20 @@ fn open(app: &AppHandle) {
     telemetry::event("round_opened", json!({ "via": via, "warm": was_warm, "ms_to_input": picking.as_millis() as u64, "ms_to_windows": started.elapsed().as_millis() as u64, "displays": core.screens.lock().unwrap().len() }));
 }
 
-/// Ends the round and hides everything. What was picked stays on the clipboard.
+/// Ends the round and hides everything. What was picked stays on the clipboard. Call from a
+/// thread that may wait: stopping the picker waits for its threads.
 fn close(app: &AppHandle) {
+    let core = app.state::<Core>();
+    let _gate = core.gate.lock().unwrap();
+    close_now(app);
+}
+
+fn close_now(app: &AppHandle) {
     trace("close: begin");
     let core = app.state::<Core>();
-    let was_open = core.picker.lock().unwrap().is_some();
+    // The overlays are there for as long as a round is, also one that has stopped taking
+    // input because the screen could not be captured.
+    let was_open = core.picker.lock().unwrap().is_some() || !core.screens.lock().unwrap().is_empty();
     // A clip still recording is finished first, so it is kept.
     stop_recording(app);
     let waiting = Instant::now();
@@ -581,10 +792,12 @@ fn close(app: &AppHandle) {
     drop(picker);
     trace("close: picker stopped");
     *core.noting.lock().unwrap() = None;
+    // What was being typed in the comment box goes with the round, however it was closed.
+    settle_note(app);
     if was_open {
         let round = core.round.lock().unwrap();
         let count = |kind: Kind| round.picks.iter().filter(|p| p.kind == kind).count();
-        let seconds = core.opened.lock().unwrap().map(|t| t.elapsed().as_secs()).unwrap_or(0);
+        let seconds = core.began.lock().unwrap().take().map(|t| t.elapsed().as_secs()).unwrap_or(0);
         telemetry::event("round_closed", json!({ "picks": round.picks.len(), "elements": count(Kind::Element), "areas": count(Kind::Area), "clips": count(Kind::Clip), "notes": round.picks.iter().filter(|p| !p.note.is_empty()).count(), "seconds": seconds }));
     }
     close_round_windows(app);
@@ -599,7 +812,10 @@ fn close(app: &AppHandle) {
     let app = app.clone();
     thread::spawn(move || {
         thread::sleep(KEEP_WARM);
-        if app.state::<Core>().turn.load(Ordering::SeqCst) == turn {
+        let core = app.state::<Core>();
+        // Held so that an open cannot begin between the check and the bar going away.
+        let _gate = core.gate.lock().unwrap();
+        if core.turn.load(Ordering::SeqCst) == turn && core.picker.lock().unwrap().is_none() {
             if let Some(bar) = app.get_webview_window(BAR) {
                 let _ = bar.destroy();
             }
@@ -608,8 +824,7 @@ fn close(app: &AppHandle) {
 }
 
 fn toggle(app: &AppHandle) {
-    let open_now = app.get_webview_window(BAR).is_some_and(|w| w.is_visible().unwrap_or(false));
-    if open_now { close(app) } else { open(app) }
+    take_turn(app, true);
 }
 
 /// Runs `f` off the calling thread. The picker's own threads must never stop the picker, and
@@ -641,8 +856,8 @@ fn on_event(app: &AppHandle, event: Event) {
             let frame = element.frame;
             // A picture of the element with a little space around it. Not having one is fine.
             let pad = if cfg!(windows) { 18.0 } else { 12.0 };
-            let around = Rect { x: (frame.x - pad).max(0.0), y: (frame.y - pad).max(0.0), width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
-            let (image, pixels) = snap(&core, &around, ELEMENT_WIDTH).unwrap_or_default();
+            let around = Rect { x: frame.x - pad, y: frame.y - pad, width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
+            let (image, pixels) = on_display(&around, &displays(app)).and_then(|seen| snap(&core, &seen, ELEMENT_WIDTH)).unwrap_or_default();
             telemetry::event("pick_added", json!({ "kind": "element", "picture": !image.is_empty(), "selector": !element.selector().is_empty(), "named": !element.name.is_empty(), "web": !element.url.is_empty() }));
             remember(app, &element);
             let index = core.round.lock().unwrap().push(Pick { element, image, pixels, ..Default::default() });
@@ -700,6 +915,22 @@ fn cannot_capture(app: &AppHandle) {
     let core = app.state::<Core>();
     telemetry::error("capture", "the screen could not be captured", "app::cannot_capture");
     *core.trouble.lock().unwrap() = Some(if cfg!(target_os = "macos") { "screen".into() } else { "The screen could not be captured.".into() });
+    // Nothing more can be picked, so the round stops taking input. Left on, it would swallow
+    // the clicks the user now needs elsewhere: on the system's own question about the
+    // permission, or in System Settings. Never called from the picker's own threads.
+    let picker = core.picker.lock().unwrap().take();
+    drop(picker);
+    // The round's folder was made for the picture that failed. With nothing picked it is
+    // empty, and would sit among the captures for good.
+    {
+        let round = core.round.lock().unwrap();
+        if round.picks.is_empty() {
+            if let Some((path, _)) = core.folder.lock().unwrap().take() {
+                let _ = std::fs::remove_dir_all(path);
+            }
+            core.files.store(0, Ordering::SeqCst);
+        }
+    }
     let _ = app.emit("round", view(app));
 }
 
@@ -745,24 +976,35 @@ fn start_recording(app: &AppHandle, rect: Rect) {
     let app = app.clone();
     thread::spawn(move || {
         let (mut frames, mut pixels, mut times) = (0u32, (0u32, 0u32), Vec::new());
+        let (mut tries, mut failed) = (0u32, 0u32);
         loop {
             let at = recording.started.elapsed();
             if recording.stop.load(Ordering::SeqCst) || at > LONGEST_CLIP {
                 break;
             }
+            tries += 1;
             match shot::capture_to_file(&rect, &dir.join(format!("{:03}.png", frames + 1)), Some(FRAME_WIDTH)) {
                 Ok(size) => {
                     frames += 1;
+                    failed = 0;
                     pixels = size;
                     times.push(at.as_secs_f64());
                 }
                 Err(_) if frames == 0 => break,
-                Err(_) => {}
+                // A capture that keeps failing (a full disk) ends the clip with what it has.
+                Err(_) => {
+                    failed += 1;
+                    if failed >= 8 {
+                        break;
+                    }
+                }
             }
             if frames % 4 == 0 {
                 let _ = app.emit("round", view(&app)); // the clock in the bar
             }
-            let next = FRAME_EVERY * frames.max(1);
+            // By tries, not frames: a failed frame waits its turn like any other, instead of
+            // being tried again a hundred times a second.
+            let next = FRAME_EVERY * tries;
             thread::sleep(next.saturating_sub(recording.started.elapsed()).max(Duration::from_millis(10)));
         }
         let seconds = recording.started.elapsed().as_secs_f64();
@@ -812,7 +1054,7 @@ fn show_note(app: &AppHandle, frame: &Rect) {
     let y = if below + h <= s.y + s.height - gap { below } else { (frame.y - h - gap).max(s.y + gap) };
     drop(screens);
     let _ = if cfg!(target_os = "macos") {
-        note.set_position(tauri::LogicalPosition::new(x, y))
+        note.set_position(LogicalPosition::new(x, y))
     } else {
         note.set_position(PhysicalPosition::new(x as i32, y as i32))
     };
@@ -858,10 +1100,29 @@ fn round_state(app: AppHandle, window: WebviewWindow) -> RoundView {
     view(&app)
 }
 
+/// The comment box sends its text as it is typed, so closing the round in any way keeps it.
+/// The round has the text at once; the clipboard and the files follow a moment later, once
+/// for a run of keystrokes.
 #[tauri::command]
 fn note_set(app: AppHandle, index: usize, note: String) {
-    app.state::<Core>().round.lock().unwrap().set_note(index, &note);
-    publish(&app);
+    let core = app.state::<Core>();
+    core.round.lock().unwrap().set_note(index, &note);
+    core.note_unsaved.store(true, Ordering::SeqCst);
+    if !core.note_timer.swap(true, Ordering::SeqCst) {
+        let app = app.clone();
+        thread::spawn(move || {
+            thread::sleep(NOTE_SETTLE);
+            app.state::<Core>().note_timer.store(false, Ordering::SeqCst);
+            settle_note(&app);
+        });
+    }
+}
+
+/// Writes out a comment that was typed but not yet saved or copied.
+fn settle_note(app: &AppHandle) {
+    if app.state::<Core>().note_unsaved.load(Ordering::SeqCst) {
+        publish(app);
+    }
 }
 
 #[tauri::command]
@@ -880,7 +1141,7 @@ fn pick_remove(app: AppHandle, index: usize) {
     };
     // The clipboard and the round's folder still hold the pick that was just taken back.
     if nothing_left {
-        copy_text(&app, "");
+        uncopy(&app);
         let folder = core.folder.lock().unwrap().take();
         if let Some((path, _)) = folder {
             let _ = std::fs::remove_dir_all(path);
@@ -909,9 +1170,19 @@ fn round_done(app: AppHandle) {
 #[tauri::command]
 fn permission_open(app: AppHandle, kind: String) {
     use tauri_plugin_opener::OpenerExt;
+    // The system's own question first: being asked is what puts Clipframes in the list the
+    // user is about to look at.
+    if kind == "screen" {
+        shot::ask_permission();
+    } else {
+        element::ask_permission();
+    }
     let pane = if kind == "screen" { "Privacy_ScreenCapture" } else { "Privacy_Accessibility" };
     let _ = app.opener().open_url(format!("x-apple.systempreferences:com.apple.preference.security?{pane}"), None::<&str>);
     *app.state::<Core>().trouble.lock().unwrap() = None;
+    // The round ends and the bar goes: nothing of Clipframes may be in the way, or taking
+    // clicks, while the user is in System Settings.
+    later(&app, close);
 }
 
 #[tauri::command]
@@ -938,12 +1209,6 @@ fn recording_stop(app: AppHandle) {
     stop_recording(&app);
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct HistoryPage {
-    entries: Vec<store::Entry>,
-    total: usize,
-}
-
 #[tauri::command]
 fn history_open(app: AppHandle) {
     later(&app, |app| {
@@ -953,7 +1218,7 @@ fn history_open(app: AppHandle) {
             let _ = window.set_focus();
             return;
         }
-        let built = WebviewWindowBuilder::new(app, HISTORY, WebviewUrl::App("index.html".into())).title("Clipframes History").inner_size(680.0, 620.0).min_inner_size(520.0, 320.0).center().build();
+        let built = WebviewWindowBuilder::new(app, HISTORY, WebviewUrl::App("index.html".into())).title("Clipframes History").inner_size(680.0, 620.0).min_inner_size(520.0, 320.0).center().background_color(tauri::window::Color(18, 18, 19, 255)).build();
         if let Ok(window) = built {
             let _ = window.set_focus();
         }
@@ -961,9 +1226,8 @@ fn history_open(app: AppHandle) {
 }
 
 #[tauri::command]
-fn history_list(from: usize, count: usize) -> HistoryPage {
-    let (entries, total) = store::list(&store::root(), from, count.min(200));
-    HistoryPage { entries, total }
+fn history_list(from: usize, count: usize) -> store::Page {
+    store::list(&store::root(), from, count.min(200))
 }
 
 /// Puts a past round back on the clipboard.
@@ -1094,10 +1358,46 @@ fn set_launch_at_login(app: &AppHandle, on: bool) {
     }
 }
 
+/// Whether Clipframes has an entry among the programs Windows starts at login. `None` where
+/// the system keeps no on/off choice of its own beside the entry.
+#[cfg(windows)]
+fn login_entry_present(name: &str) -> Option<bool> {
+    use std::ffi::c_void;
+    #[link(name = "advapi32")]
+    extern "system" {
+        fn RegGetValueW(key: *mut c_void, sub_key: *const u16, value: *const u16, flags: u32, kind: *mut u32, data: *mut c_void, size: *mut u32) -> i32;
+    }
+    const HKEY_CURRENT_USER: isize = 0x8000_0001u32 as i32 as isize;
+    const HKEY_LOCAL_MACHINE: isize = 0x8000_0002u32 as i32 as isize;
+    const RRF_RT_ANY: u32 = 0x0000_ffff;
+    let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
+    let (run, name) = (wide(r"Software\Microsoft\Windows\CurrentVersion\Run"), wide(name));
+    // Zero is success: the value is there. Its content is not needed.
+    let found = |root: isize| unsafe { RegGetValueW(root as *mut c_void, run.as_ptr(), name.as_ptr(), RRF_RT_ANY, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()) } == 0;
+    Some(found(HKEY_CURRENT_USER) || found(HKEY_LOCAL_MACHINE))
+}
+
+#[cfg(not(windows))]
+fn login_entry_present(_name: &str) -> Option<bool> {
+    None
+}
+
+/// What to do about the login entry when the app starts: add it, remove it, or (`None`) leave
+/// it alone. On Windows, Task Manager and Settings keep the user's own on/off beside the
+/// entry, and writing the entry again switches it back on. So an entry that is there is never
+/// written again: it is only added when missing (the first run, or an install after an
+/// uninstall) and removed when the setting says off.
+fn login_entry_at_start(wanted: bool, present: Option<bool>) -> Option<bool> {
+    match present {
+        Some(present) => (wanted != present).then_some(wanted),
+        None => Some(wanted),
+    }
+}
+
 /// Nothing of Clipframes is on screen: a safe moment to restart for an update.
 pub fn idle(app: &AppHandle) -> bool {
     let visible = |label: &str| app.get_webview_window(label).is_some_and(|w| w.is_visible().unwrap_or(false));
-    app.state::<Core>().picker.lock().unwrap().is_none() && !visible(BAR) && !visible(SETTINGS) && !visible(HISTORY)
+    app.state::<Core>().picker.lock().unwrap().is_none() && !bar_visible(app) && !visible(SETTINGS) && !visible(HISTORY)
 }
 
 pub fn set_update_status(app: &AppHandle, status: String) {
@@ -1114,11 +1414,12 @@ fn open_settings(app: &AppHandle) {
     // An ordinary window, built when asked for and gone when closed.
     let built = WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("index.html".into()))
         .title("Clipframes")
-        .inner_size(440.0, 420.0)
+        .inner_size(440.0, if telemetry::available() { 525.0 } else { 420.0 })
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
         .center()
+        .background_color(tauri::window::Color(18, 18, 19, 255))
         .build();
     if let Ok(window) = built {
         let _ = window.set_focus();
@@ -1190,7 +1491,11 @@ fn update_check(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         // Starting Clipframes while it is running opens the bar of the one that is.
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            // `clipframes --settings` opens Settings in the copy that is running.
+            if args.iter().any(|a| a == "--settings") {
+                return later(app, open_settings);
+            }
             telemetry::via("launch");
             later(app, open)
         }))
@@ -1200,6 +1505,17 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Core::default())
+        // The system asking one of the round's windows to close (Alt+F4 on Windows) would
+        // leave the round running without it. The window stays and the round ends properly.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let label = window.label();
+                if label == BAR || label == NOTE || label.starts_with(OVERLAY) {
+                    api.prevent_close();
+                    later(window.app_handle(), close);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             round_state,
             note_set,
@@ -1229,6 +1545,9 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let handle = app.handle().clone();
             let core = app.state::<Core>();
+            if let Ok(home) = app.path().home_dir() {
+                store::set_home(home);
+            }
 
             let (saved, existed) = app.path().app_config_dir().map(|dir| settings::load(&dir)).unwrap_or_default();
             let mut saved = saved;
@@ -1243,7 +1562,9 @@ pub fn run() {
             telemetry::start(saved.install_id.clone(), &app.package_info().version.to_string(), saved.share_usage);
             // Every start, so the login entry matches the setting even when the settings were
             // there before this copy was installed.
-            set_launch_at_login(&handle, saved.launch_at_login);
+            if let Some(on) = login_entry_at_start(saved.launch_at_login, login_entry_present(&app.package_info().name)) {
+                set_launch_at_login(&handle, on);
+            }
 
             // Another app may own the shortcut already. Clipframes still runs: the tray opens
             // it, and Settings offers another shortcut.
@@ -1263,7 +1584,11 @@ pub fn run() {
                     later(app, open)
                 }
                 "settings" => later(app, open_settings),
-                "quit" => app.exit(0),
+                "quit" => {
+                    settle_note(app);
+                    telemetry::flush();
+                    app.exit(0)
+                }
                 _ => {}
             });
             // macOS menu bar icons are one colour and take the bar's own; elsewhere the app icon.
@@ -1313,8 +1638,122 @@ pub fn run() {
                 telemetry::via("launch");
                 later(app, open)
             }
+            // Quit, an update's restart, the system shutting down: a comment still being
+            // typed is written out first.
+            tauri::RunEvent::Exit => {
+                settle_note(app);
+                // Apps asked for their page structure are not left with it on.
+                element::sleep_idle(Duration::ZERO);
+            }
             _ => {
                 let _ = app;
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MAIN: Rect = Rect { x: 0.0, y: 0.0, width: 1920.0, height: 1080.0 };
+    const LEFT: Rect = Rect { x: -1920.0, y: 0.0, width: 1920.0, height: 1080.0 };
+    const ABOVE: Rect = Rect { x: 200.0, y: -1440.0, width: 2560.0, height: 1440.0 };
+
+    #[test]
+    fn a_point_is_on_the_display_that_holds_it_also_left_of_or_above_the_main_one() {
+        let all = [MAIN, LEFT, ABOVE];
+        assert_eq!(monitor_at(&all, 960.0, 540.0), Some(0));
+        assert_eq!(monitor_at(&all, -1500.0, 300.0), Some(1));
+        assert_eq!(monitor_at(&all, 1400.0, -700.0), Some(2));
+        assert_eq!(monitor_at(&all, -0.5, 1079.5), Some(1));
+    }
+
+    #[test]
+    fn a_point_on_an_edge_two_displays_share_is_on_the_one_that_begins_there() {
+        let all = [MAIN, LEFT, ABOVE];
+        assert_eq!(monitor_at(&all, 0.0, 500.0), Some(0), "the main display's left edge is its own");
+        assert_eq!(monitor_at(&all, -1920.0, 0.0), Some(1), "a display's top-left corner is its own");
+        assert_eq!(monitor_at(&all, 500.0, 0.0), Some(0), "the top edge of the main one, not the bottom of the one above");
+        assert_eq!(monitor_at(&all, 500.0, -0.01), Some(2));
+        assert_eq!(monitor_at(&all, 1920.0, 500.0), None, "a right edge belongs to no one when nothing is beyond it");
+        assert_eq!(monitor_at(&all, 500.0, 1080.0), None);
+    }
+
+    #[test]
+    fn a_point_on_no_display_is_on_none() {
+        let all = [MAIN, LEFT, ABOVE];
+        assert_eq!(monitor_at(&all, 5000.0, 100.0), None);
+        assert_eq!(monitor_at(&all, -100.0, -100.0), None, "in the corner between two displays");
+        assert_eq!(monitor_at(&[], 0.0, 0.0), None);
+        assert_eq!(monitor_at(&all, f64::NAN, 0.0), None);
+    }
+
+    #[test]
+    fn an_element_on_a_display_left_of_the_main_one_is_pictured_where_it_is() {
+        let around = Rect { x: -1518.0, y: 182.0, width: 136.0, height: 76.0 };
+        assert_eq!(on_display(&around, &[MAIN, LEFT]), Some(around));
+        // At the very edge of that display the padding is cut off, not moved to the main one.
+        let edge = Rect { x: -1938.0, y: -18.0, width: 136.0, height: 76.0 };
+        assert_eq!(on_display(&edge, &[MAIN, LEFT]), Some(Rect { x: -1920.0, y: 0.0, width: 118.0, height: 58.0 }));
+    }
+
+    #[test]
+    fn an_element_far_larger_than_the_screen_is_pictured_only_where_it_shows() {
+        let page = Rect { x: 200.0, y: -3000.0, width: 1400.0, height: 40000.0 };
+        assert_eq!(on_display(&page, &[MAIN, LEFT]), Some(Rect { x: 200.0, y: 0.0, width: 1400.0, height: 1080.0 }));
+    }
+
+    #[test]
+    fn an_element_across_two_displays_is_pictured_on_the_one_showing_more_of_it() {
+        let across = Rect { x: -100.0, y: 100.0, width: 400.0, height: 50.0 };
+        assert_eq!(on_display(&across, &[MAIN, LEFT]), Some(Rect { x: 0.0, y: 100.0, width: 300.0, height: 50.0 }));
+    }
+
+    #[test]
+    fn the_clipboard_is_only_ours_while_it_holds_what_we_put_there() {
+        assert!(same_text("[Clipframes: 2 things]\r\n1. Button\r\n2. Link", "[Clipframes: 2 things]\n1. Button\n2. Link"));
+        assert!(!same_text("something the user copied since", "[Button \"Save\"]"));
+        assert!(!same_text("", ""), "an empty clipboard needs no emptying");
+    }
+
+    #[test]
+    fn a_login_entry_switched_off_in_task_manager_is_not_written_again() {
+        // Windows: the entry is there, and whether it is on is the user's business.
+        assert_eq!(login_entry_at_start(true, Some(true)), None);
+        // First run, or installed again after an uninstall: add it.
+        assert_eq!(login_entry_at_start(true, Some(false)), Some(true));
+        // The setting says off: take it away, and do nothing when it is already gone.
+        assert_eq!(login_entry_at_start(false, Some(true)), Some(false));
+        assert_eq!(login_entry_at_start(false, Some(false)), None);
+        // Elsewhere the entry simply follows the setting.
+        assert_eq!(login_entry_at_start(true, None), Some(true));
+        assert_eq!(login_entry_at_start(false, None), Some(false));
+    }
+
+    #[test]
+    fn an_element_on_no_display_gets_no_picture() {
+        assert_eq!(on_display(&Rect { x: 5000.0, y: 5000.0, width: 100.0, height: 100.0 }, &[MAIN, LEFT]), None);
+        assert_eq!(on_display(&MAIN, &[]), None);
+    }
+
+    #[test]
+    fn the_shortcut_opens_when_nothing_is_running_and_closes_otherwise() {
+        assert_eq!(turn(true, false, false), Turn::Open);
+        assert_eq!(turn(true, true, true), Turn::Close);
+        // The bar showing a message, with no round behind it.
+        assert_eq!(turn(true, false, true), Turn::Close);
+    }
+
+    #[test]
+    fn the_shortcut_ends_a_round_whose_bar_is_not_on_screen() {
+        assert_eq!(turn(true, true, false), Turn::Close);
+    }
+
+    #[test]
+    fn asking_to_open_leaves_an_open_round_alone_and_ends_one_with_no_bar() {
+        assert_eq!(turn(false, false, false), Turn::Open);
+        assert_eq!(turn(false, false, true), Turn::Open);
+        assert_eq!(turn(false, true, true), Turn::Stay);
+        assert_eq!(turn(false, true, false), Turn::Close);
+    }
 }

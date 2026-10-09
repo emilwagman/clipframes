@@ -45,6 +45,8 @@ $exe = "C:\Users\User\Development\clipframes\desktop\src-tauri\target\release\cl
 # Clipframes leaves its own windows out of captures; for a demo of itself they must be in.
 $env:CLIPFRAMES_CAPTURABLE = "1"
 if (-not (Get-Process clipframes -ErrorAction SilentlyContinue)) { Start-Process $exe -ArgumentList "--hidden"; Wait 2500 }
+# The site in front before anything is recorded, so the tab is where a viewer expects it.
+[H]::Glide(1200, 1700, 250); [H]::Click(); Wait 300
 [H]::Glide(1500, 1250, 300)
 $ff = Start-Process ffmpeg -ArgumentList "-y","-filter_complex","ddagrab=output_idx=0:framerate=30:video_size=3840x2088,hwdownload,format=bgra","-c:v","libx264","-preset","ultrafast","-crf","12","-pix_fmt","yuv420p","-t","$Seconds","$demo\$Name.mkv" -WindowStyle Hidden -PassThru -RedirectStandardError "$demo\$Name.log"
 Wait 2500
@@ -94,6 +96,19 @@ if ($Scene -eq "show") {
   Go $prompt 950; Wait 300; [H]::Click(); Wait 700
   [H]::Key(0x11, 0x56); Wait 1500
   [H]::Glide(3300, 1500, 700)
+}
+
+if ($Scene -eq "which") {
+  # Things that appear more than once on the page: the reference has to say which one.
+  [H]::Key(0x11, 0x12, 0x20)
+  Wait 1500
+  [H]::Glide(1253, 770, 800); Wait 600; [H]::Click(); Wait 1200    # the second "Paid" badge
+  [H]::Type("make these grey"); Wait 300; [H]::Key(0x0D); Wait 800
+  [H]::Glide(1253, 626, 600); Wait 600; [H]::Click(); Wait 1200    # the first "Due" badge
+  [H]::Key(0x0D); Wait 800
+  [H]::Glide(2189, 230, 700); Wait 600; [H]::Click(); Wait 1200    # New invoice: only one of those
+  [H]::Key(0x0D); Wait 800
+  Go $done 700; Wait 300; [H]::Click(); Wait 1000
 }
 
 if ($Scene -eq "return") {

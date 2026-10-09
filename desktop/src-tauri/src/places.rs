@@ -107,6 +107,13 @@ impl Places {
         self.places.get(&place.key()).is_some_and(|e| e.auto)
     }
 
+    /// Whether the tab could appear on some site inside this app. Only then is it worth
+    /// finding out which site the app is showing.
+    pub fn has_site(&self, app: &str, now: u64) -> bool {
+        let sites = format!("{}|", app.trim());
+        self.places.iter().any(|(key, e)| key.starts_with(&sites) && e.auto && now.saturating_sub(e.last_used) < RECENT)
+    }
+
     /// Whether the tab should appear now that this place is in front.
     pub fn wants(&self, place: &Place, now: u64) -> bool {
         self.places.get(&place.key()).is_some_and(|e| e.auto && now.saturating_sub(e.last_used) < RECENT)
@@ -144,6 +151,21 @@ mod tests {
         assert!(places.wants(&app, 1000 + DAY));
         assert!(!places.wants(&Place::new("Google Chrome", "https://github.com/"), 1000), "another site in the same browser is another place");
         assert!(!places.wants(&Place::new("Slack", ""), 1000));
+    }
+
+    #[test]
+    fn only_an_app_with_a_site_the_tab_appears_on_has_its_pages_read() {
+        let mut places = Places::default();
+        places.used(&Place::new("Slack", ""), 0);
+        assert!(!places.has_site("Slack", DAY), "used as an app, never on a page");
+        assert!(!places.has_site("Google Chrome", DAY));
+        let site = Place::new("Google Chrome", "http://localhost:3000/");
+        places.used(&site, 0);
+        assert!(places.has_site("Google Chrome", DAY));
+        assert!(!places.has_site("Google Chrome Canary", DAY));
+        assert!(!places.has_site("Google Chrome", 31 * DAY), "not used there for a month");
+        places.set_auto(&site, false, DAY);
+        assert!(!places.has_site("Google Chrome", 2 * DAY), "the tab was turned off there");
     }
 
     #[test]

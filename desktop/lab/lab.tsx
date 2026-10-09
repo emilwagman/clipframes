@@ -1,5 +1,6 @@
 // The real bar, comment box and overlay over the demo page, in one browser window, so the look
 // can be judged without running the app. ?state=empty|picked|area|recording picks the moment.
+// ?page=dark shows it over a dark page, and ?tab=1 adds the tab beside the bar.
 import { createRoot } from "react-dom/client";
 import "../ui/style.css";
 import { Bar } from "../ui/Bar";
@@ -10,6 +11,7 @@ import { EMPTY_ROUND } from "../ui/platform";
 import { connect, useStore } from "../ui/store";
 import { History } from "../src/History";
 import type { HistoryApi } from "../src/History";
+import { TabMark } from "../src/TabMark";
 
 const query = new URLSearchParams(location.search);
 const state = query.get("state") ?? "picked";
@@ -22,6 +24,7 @@ const NOTE = { w: 316, h: 172 };
 const examples: HistoryApi = {
   list: async () => ({
     total: 4,
+    next: 4,
     entries: [
       { id: "a", title: 'Button "New invoice" and 2 more', when: "2026-10-09 11:42", count: 3, images: ["/lab/thumbs/1.png", "/lab/thumbs/2.png", "/lab/thumbs/3.png"] },
       { id: "b", title: "Screen clip, 6 s", when: "2026-10-09 10:15", count: 1, images: ["/lab/thumbs/4.png"] },
@@ -34,7 +37,9 @@ const examples: HistoryApi = {
 };
 
 const frame = document.getElementById("page") as HTMLIFrameElement;
-frame.addEventListener("load", () => {
+// The demo page with its colours turned over: what a dark editor or terminal is to the bar.
+if (query.get("page") === "dark") frame.style.filter = "invert(1) hue-rotate(180deg)";
+const start = () => {
   const doc = frame.contentDocument as Document;
   const rect = (selector: string): Rect => {
     const r = (doc.querySelector(selector) as Element).getBoundingClientRect();
@@ -84,6 +89,12 @@ frame.addEventListener("load", () => {
   mount("bar", (innerWidth - BAR.w) / 2, innerHeight - BAR.h - 40, BAR.w, BAR.h, <Bar />);
   // Kept on screen, the way the app clamps it to the display.
   mount("note", Math.min(overdue.x, innerWidth - NOTE.w - 8), overdue.y + overdue.height + 8, NOTE.w, NOTE.h, <Note />);
+  if (query.get("tab")) {
+    const host = document.body.appendChild(document.createElement("div"));
+    host.id = "tab";
+    host.style.position = "absolute";
+    mount("tab", (innerWidth - BAR.w) / 2 - 72, innerHeight - BAR.h - 40 + 4, 56, 56, <TabMark />);
+  }
   if (state === "history") {
     // A window of its own in the app; here a panel in the middle of the page.
     const panel = document.getElementById("history") as HTMLElement;
@@ -91,4 +102,7 @@ frame.addEventListener("load", () => {
     createRoot(panel).render(<History api={examples} />);
   }
   setTimeout(() => (document.body.dataset.ready = "1"), 150);
-});
+};
+// The page inside may have finished loading before this script ran.
+if (frame.contentDocument?.readyState === "complete" && frame.contentDocument.querySelector("#new-invoice")) start();
+else frame.addEventListener("load", start);

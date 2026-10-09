@@ -92,6 +92,8 @@ struct Shared {
     mode: AtomicU8,
     /// Where the drag in progress began.
     drag: Mutex<Option<(f64, f64)>>,
+    /// The last press was on one of Clipframes' own windows and went to it.
+    own_press: AtomicBool,
     running: AtomicBool,
 }
 
@@ -116,9 +118,19 @@ impl Picker {
 
         let source = {
             let (shared, emit) = (shared.clone(), emit.clone());
-            platform::Source::start(move |input| handle(&shared, &emit, input))?
+            platform::Source::start(move |input| handle(&shared, &emit, input))
         };
-        Ok(Picker { shared, source: Some(source), worker: Some(worker) })
+        match source {
+            Ok(source) => Ok(Picker { shared, source: Some(source), worker: Some(worker) }),
+            Err(message) => {
+                // The reader was already started: without this it would wake twice a second
+                // for the rest of the run, one more for every failed open.
+                shared.running.store(false, Ordering::SeqCst);
+                shared.wake.notify_all();
+                let _ = worker.join();
+                Err(message)
+            }
+        }
     }
 
     /// Where Clipframes' own windows are, so clicks on the bar or the comment box pass through.
@@ -150,6 +162,10 @@ fn exempt(shared: &Shared, x: f64, y: f64) -> bool {
 
 /// Runs on the system's input thread: must return at once. Returns true to swallow the input.
 fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input) -> bool {
+    // An input source that outlives its round must be harmless: nothing is swallowed.
+    if !shared.running.load(Ordering::SeqCst) {
+        return false;
+    }
     let mode = Mode::from(shared.mode.load(Ordering::SeqCst));
     match input {
         Input::Move(x, y) => {
@@ -162,7 +178,9 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             false
         }
         Input::Down(x, y) => {
-            if exempt(shared, x, y) {
+            let own = exempt(shared, x, y);
+            shared.own_press.store(own, Ordering::SeqCst);
+            if own {
                 return false;
             }
             match mode {
@@ -180,6 +198,11 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             }
         }
         Input::Up(x, y) => {
+            // A press the bar got is the bar's to the end: dragged off and let go elsewhere,
+            // it is not a pick, and the bar must see the button come up.
+            if shared.own_press.swap(false, Ordering::SeqCst) {
+                return false;
+            }
             if let Some(start) = shared.drag.lock().unwrap().take() {
                 let rect = span(start, (x, y));
                 *shared.pending.lock().unwrap() = None;
@@ -222,7 +245,7 @@ fn quick(_x: f64, _y: f64) -> Option<ElementInfo> {
 
 #[cfg(not(test))]
 fn full(x: f64, y: f64) -> Option<ElementInfo> {
-    element::element_full_at(x, y).ok()
+    element::element_picked_at(x, y).ok()
 }
 
 /// Tests never read the real screen.
@@ -236,7 +259,6 @@ fn contains(r: &Rect, x: f64, y: f64) -> bool {
 }
 
 fn read_loop(shared: Arc<Shared>, emit: Arc<dyn Fn(Event) + Send + Sync>) {
-    let mut last_housekeeping = Instant::now();
     while shared.running.load(Ordering::SeqCst) {
         let next = {
             let mut pending = shared.pending.lock().unwrap();
@@ -260,11 +282,6 @@ fn read_loop(shared: Arc<Shared>, emit: Arc<dyn Fn(Event) + Send + Sync>) {
         let read_ms = started.elapsed().as_secs_f64() * 1000.0;
         *shared.last.lock().unwrap() = element.clone().map(|e| (x, y, e));
         emit(Event::Hover { x, y, element, read_ms });
-
-        if last_housekeeping.elapsed() > Duration::from_secs(60) {
-            element::sleep_idle(Duration::from_secs(300));
-            last_housekeeping = Instant::now();
-        }
     }
 }
 
@@ -279,7 +296,9 @@ mod tests {
         let emit: Arc<dyn Fn(Event) + Send + Sync> = Arc::new(move |e| {
             let _ = tx.lock().unwrap().send(e);
         });
-        (Arc::new(Shared::default()), emit, rx)
+        let shared = Arc::new(Shared::default());
+        shared.running.store(true, Ordering::SeqCst);
+        (shared, emit, rx)
     }
 
     #[test]
@@ -305,6 +324,21 @@ mod tests {
         assert!(!handle(&shared, &emit, Input::Up(150.0, 820.0)));
         handle(&shared, &emit, Input::Move(150.0, 820.0));
         assert_eq!(*shared.pending.lock().unwrap(), None, "hovering our own bar must not ask for an element");
+    }
+
+    #[test]
+    fn a_press_on_the_bar_released_outside_it_is_not_a_pick() {
+        let (shared, emit, rx) = round();
+        *shared.exempt.lock().unwrap() = vec![Rect { x: 100.0, y: 800.0, width: 400.0, height: 60.0 }];
+        let under = ElementInfo { role: "Button".into(), frame: Rect { x: 250.0, y: 250.0, width: 100.0, height: 100.0 }, ..Default::default() };
+        *shared.last.lock().unwrap() = Some((300.0, 300.0, under));
+        assert!(!handle(&shared, &emit, Input::Down(150.0, 820.0)), "the bar gets the press");
+        assert!(!handle(&shared, &emit, Input::Up(300.0, 300.0)), "and the release that belongs to it");
+        assert!(rx.recv_timeout(Duration::from_millis(300)).is_err(), "nothing the user never clicked is picked");
+        // The next click is an ordinary one again.
+        assert!(handle(&shared, &emit, Input::Down(300.0, 300.0)));
+        assert!(handle(&shared, &emit, Input::Up(300.0, 300.0)));
+        assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Pick { .. })));
     }
 
     #[test]
@@ -355,5 +389,15 @@ mod tests {
         let (shared, emit, rx) = round();
         assert!(handle(&shared, &emit, Input::Cancel));
         assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Cancel)));
+    }
+
+    #[test]
+    fn a_round_that_has_stopped_swallows_nothing_even_if_its_input_source_lives_on() {
+        let (shared, emit, rx) = round();
+        shared.running.store(false, Ordering::SeqCst); // what Picker::drop sets first
+        assert!(!handle(&shared, &emit, Input::Down(300.0, 300.0)));
+        assert!(!handle(&shared, &emit, Input::Up(300.0, 300.0)));
+        assert!(!handle(&shared, &emit, Input::Cancel));
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "and nothing is picked");
     }
 }
