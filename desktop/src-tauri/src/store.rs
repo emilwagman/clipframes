@@ -210,15 +210,22 @@ pub struct Entry {
 }
 
 /// Past rounds, newest first: `count` of them starting at `from`, and how many there are in
-/// all. Only the page asked for is read from disk, so a long history opens as fast as a short one.
+/// all. Only the page asked for is read from disk, so a long history opens as fast as a short
+/// one: the folder is listed once, by name, and nothing else is touched.
 pub fn list(root: &Path, from: usize, count: usize) -> (Vec<Entry>, usize) {
     let mut names: Vec<String> = fs::read_dir(root)
-        .map(|dir| dir.filter_map(|e| e.ok()).filter(|e| e.path().join("capture.json").is_file()).filter_map(|e| e.file_name().into_string().ok()).collect())
+        .map(|dir| dir.filter_map(|e| e.ok()).filter(|e| e.file_type().is_ok_and(|t| t.is_dir())).filter_map(|e| e.file_name().into_string().ok()).filter(|name| is_stamp(name)).collect())
         .unwrap_or_default();
     names.sort_unstable_by(|a, b| b.cmp(a));
     let total = names.len();
     let entries = names.into_iter().skip(from).take(count).filter_map(|id| entry(root, id)).collect();
     (entries, total)
+}
+
+/// Whether a folder is named the way rounds are: "2026-10-09_11-42-30", maybe with "-2" after.
+fn is_stamp(name: &str) -> bool {
+    let b = name.as_bytes();
+    b.len() >= 19 && b[4] == b'-' && b[7] == b'-' && b[10] == b'_' && b[..4].iter().all(u8::is_ascii_digit)
 }
 
 fn entry(root: &Path, id: String) -> Option<Entry> {
