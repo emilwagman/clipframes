@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description,
   applicationName: SITE_NAME,
   referrer: "no-referrer",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: [{ url: "/icon-64.png", sizes: "64x64", type: "image/png" }, { url: "/icon.png", sizes: "512x512", type: "image/png" }], apple: "/apple-icon.png" },
   openGraph: { title: SITE_NAME, description, url: SITE_URL, siteName: SITE_NAME, type: "website" },
 };
 
