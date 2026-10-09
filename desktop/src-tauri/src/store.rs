@@ -233,26 +233,22 @@ pub struct Entry {
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Page {
     pub entries: Vec<Entry>,
-    /// How many captures there are in all.
+    /// How many round folders there are in all. A folder without a readable capture (left by
+    /// a screenshot that failed, in versions that did not remove it) is among them.
     pub total: usize,
-    /// Where the page after this one starts. Not `from` plus the number of entries: a capture
-    /// that cannot be read is left out of the page but still has its place in the order.
+    /// Where the page after this one starts. Not `from` plus the number of entries: a folder
+    /// that is left out of the page still has its place in the order. `next - from` minus
+    /// the number of entries is how many of this page's folders were not captures.
     pub next: usize,
 }
 
 /// Past rounds, newest first: `count` of them starting at `from`. Only the page asked for is
 /// read from disk, so a long history opens as fast as a short one: the folder is listed once,
-/// by name, and each round's folder is only asked whether it holds a capture. One that does
-/// not (a round whose only screenshot failed) is not a capture and is not counted.
+/// by name, and nothing else is touched. (Asking each folder whether it holds a capture takes
+/// 400 ms for 5,000 of them on Windows; see PERFORMANCE.md.)
 pub fn list(root: &Path, from: usize, count: usize) -> Page {
     let mut names: Vec<String> = fs::read_dir(root)
-        .map(|dir| {
-            dir.filter_map(|e| e.ok())
-                .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-                .filter_map(|e| e.file_name().into_string().ok())
-                .filter(|name| is_stamp(name) && root.join(name).join("capture.json").is_file())
-                .collect()
-        })
+        .map(|dir| dir.filter_map(|e| e.ok()).filter(|e| e.file_type().is_ok_and(|t| t.is_dir())).filter_map(|e| e.file_name().into_string().ok()).filter(|name| is_stamp(name)).collect())
         .unwrap_or_default();
     names.sort_unstable_by(|a, b| b.cmp(a));
     let total = names.len();
@@ -423,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn a_folder_without_a_capture_is_not_counted_and_no_page_repeats_an_entry() {
+    fn a_folder_without_a_capture_never_makes_a_page_repeat_an_entry() {
         let root = scratch("paging-empty");
         // What a failed screenshot used to leave behind: the round's folder, with nothing in it.
         fs::create_dir_all(root.join("2026-10-09_12-00-00")).unwrap();
@@ -434,11 +430,13 @@ mod tests {
         }
         // History asks for a page, then for the next one from where the first says to go on.
         let first = list(&root, 0, 2);
-        assert_eq!(first.total, 3, "the empty folder is not a capture");
-        assert_eq!(ids(&first), ["2026-10-09_11-00-00", "2026-10-08_10-00-00"]);
+        assert_eq!(ids(&first), ["2026-10-09_11-00-00"], "the page comes back short");
+        assert_eq!((first.total, first.next), (4, 2));
+        // What History takes off the count it shows: this page's folders that were no captures.
+        assert_eq!(first.next - first.entries.len(), 1);
         let second = list(&root, first.next, 2);
-        assert_eq!(ids(&second), ["2026-10-07_09-00-00"]);
-        assert_eq!(second.next, second.total, "and that was the last page");
+        assert_eq!(ids(&second), ["2026-10-08_10-00-00", "2026-10-07_09-00-00"], "and the next one does not show that entry again");
+        assert_eq!(second.next, second.total, "that was the last page");
         fs::remove_dir_all(&root).unwrap();
     }
 

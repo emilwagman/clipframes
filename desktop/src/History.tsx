@@ -48,17 +48,23 @@ export function History({ api = core }: { api?: HistoryApi }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const loading = useRef(false);
-  // Where the next page starts. Not the number of rows shown: a capture that could not be
-  // read has no row, and counting rows would ask for some of them twice.
+  // Where the next page starts, and how many folders there are to page through. Not the
+  // number of rows shown: a folder without a readable capture has no row, and counting rows
+  // would ask for some of them twice.
   const next = useRef(0);
+  const folders = useRef(0);
+  // Folders met so far that were not captures: they are taken off the count shown.
+  const missing = useRef(0);
 
   const load = useCallback(async (from: number) => {
     if (loading.current) return;
     loading.current = true;
     const page = await api.list(from, PAGE);
     setEntries((before) => (from === 0 ? page.entries : [...before, ...page.entries]));
-    setTotal(page.total);
+    missing.current = (from === 0 ? 0 : missing.current) + (page.next - from - page.entries.length);
+    folders.current = page.total;
     next.current = page.next;
+    setTotal(page.total - missing.current);
     loading.current = false;
   }, [api]);
 
@@ -69,7 +75,7 @@ export function History({ api = core }: { api?: HistoryApi }) {
 
   const onScroll = (event: React.UIEvent<HTMLElement>) => {
     const node = event.currentTarget;
-    if (total !== null && next.current < total && node.scrollTop + node.clientHeight > node.scrollHeight - 600) void load(next.current);
+    if (total !== null && next.current < folders.current && node.scrollTop + node.clientHeight > node.scrollHeight - 600) void load(next.current);
   };
 
   const copy = async (id: string) => {
@@ -83,6 +89,7 @@ export function History({ api = core }: { api?: HistoryApi }) {
     setTotal((n) => (n === null ? n : n - 1));
     // Everything after it moved up one place.
     next.current = Math.max(0, next.current - 1);
+    folders.current = Math.max(0, folders.current - 1);
     setConfirming(null);
   };
 
