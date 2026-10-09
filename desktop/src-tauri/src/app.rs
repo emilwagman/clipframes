@@ -488,20 +488,46 @@ fn open_overlays(app: &AppHandle) -> Vec<Screen> {
                 .build()
         });
         let Ok(w) = built else { continue };
-        let (pos, size, scale) = (*m.position(), *m.size(), m.scale_factor());
+        let (pos, size) = (*m.position(), *m.size());
         let _ = w.set_position(PhysicalPosition::new(pos.x, pos.y));
         let _ = w.set_size(PhysicalSize::new(size.width, size.height));
         let _ = w.set_ignore_cursor_events(true);
         let _ = w.show();
-        // macOS reports points, everything else physical pixels.
-        let unit = if cfg!(target_os = "macos") { scale } else { 1.0 };
-        screens.push(Screen {
-            label,
-            frame: Rect { x: pos.x as f64 / unit, y: pos.y as f64 / unit, width: size.width as f64 / unit, height: size.height as f64 / unit },
-            css: unit / scale,
-        });
+        let (frame, css) = display(m);
+        screens.push(Screen { label, frame, css });
     }
     screens
+}
+
+/// A display in picker units, and how many CSS pixels one unit is there.
+fn display(m: &tauri::Monitor) -> (Rect, f64) {
+    let (pos, size, scale) = (m.position(), m.size(), m.scale_factor());
+    // macOS reports points, everything else physical pixels.
+    let unit = if cfg!(target_os = "macos") { scale } else { 1.0 };
+    (Rect { x: pos.x as f64 / unit, y: pos.y as f64 / unit, width: size.width as f64 / unit, height: size.height as f64 / unit }, unit / scale)
+}
+
+/// Every display in picker units.
+fn displays(app: &AppHandle) -> Vec<Rect> {
+    let known: Vec<Rect> = app.state::<Core>().screens.lock().unwrap().iter().map(|s| s.frame).collect();
+    if !known.is_empty() {
+        return known;
+    }
+    // A pick can come before the overlays are up: input starts first.
+    app.available_monitors().unwrap_or_default().iter().map(|m| display(m).0).collect()
+}
+
+/// The part of `rect` on the display that shows the most of it, if any display shows it at
+/// all. A display left of or above the main one has negative coordinates, and an app may
+/// report an element far larger than any screen (the container of a long page): a picture is
+/// only ever of what one display shows.
+fn on_display(rect: &Rect, displays: &[Rect]) -> Option<Rect> {
+    let shared = |d: &Rect| {
+        let (x, y) = (rect.x.max(d.x), rect.y.max(d.y));
+        let (right, bottom) = ((rect.x + rect.width).min(d.x + d.width), (rect.y + rect.height).min(d.y + d.height));
+        (right > x && bottom > y).then(|| Rect { x, y, width: right - x, height: bottom - y })
+    };
+    displays.iter().filter_map(shared).max_by(|a, b| (a.width * a.height).total_cmp(&(b.width * b.height)))
 }
 
 fn close_round_windows(app: &AppHandle) {
@@ -712,8 +738,8 @@ fn on_event(app: &AppHandle, event: Event) {
             let frame = element.frame;
             // A picture of the element with a little space around it. Not having one is fine.
             let pad = if cfg!(windows) { 18.0 } else { 12.0 };
-            let around = Rect { x: (frame.x - pad).max(0.0), y: (frame.y - pad).max(0.0), width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
-            let (image, pixels) = snap(&core, &around, ELEMENT_WIDTH).unwrap_or_default();
+            let around = Rect { x: frame.x - pad, y: frame.y - pad, width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
+            let (image, pixels) = on_display(&around, &displays(app)).and_then(|seen| snap(&core, &seen, ELEMENT_WIDTH)).unwrap_or_default();
             telemetry::event("pick_added", json!({ "kind": "element", "picture": !image.is_empty(), "selector": !element.selector().is_empty(), "named": !element.name.is_empty(), "web": !element.url.is_empty() }));
             remember(app, &element);
             let index = core.round.lock().unwrap().push(Pick { element, image, pixels, ..Default::default() });
@@ -1435,6 +1461,36 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const MAIN: Rect = Rect { x: 0.0, y: 0.0, width: 1920.0, height: 1080.0 };
+    const LEFT: Rect = Rect { x: -1920.0, y: 0.0, width: 1920.0, height: 1080.0 };
+
+    #[test]
+    fn an_element_on_a_display_left_of_the_main_one_is_pictured_where_it_is() {
+        let around = Rect { x: -1518.0, y: 182.0, width: 136.0, height: 76.0 };
+        assert_eq!(on_display(&around, &[MAIN, LEFT]), Some(around));
+        // At the very edge of that display the padding is cut off, not moved to the main one.
+        let edge = Rect { x: -1938.0, y: -18.0, width: 136.0, height: 76.0 };
+        assert_eq!(on_display(&edge, &[MAIN, LEFT]), Some(Rect { x: -1920.0, y: 0.0, width: 118.0, height: 58.0 }));
+    }
+
+    #[test]
+    fn an_element_far_larger_than_the_screen_is_pictured_only_where_it_shows() {
+        let page = Rect { x: 200.0, y: -3000.0, width: 1400.0, height: 40000.0 };
+        assert_eq!(on_display(&page, &[MAIN, LEFT]), Some(Rect { x: 200.0, y: 0.0, width: 1400.0, height: 1080.0 }));
+    }
+
+    #[test]
+    fn an_element_across_two_displays_is_pictured_on_the_one_showing_more_of_it() {
+        let across = Rect { x: -100.0, y: 100.0, width: 400.0, height: 50.0 };
+        assert_eq!(on_display(&across, &[MAIN, LEFT]), Some(Rect { x: 0.0, y: 100.0, width: 300.0, height: 50.0 }));
+    }
+
+    #[test]
+    fn an_element_on_no_display_gets_no_picture() {
+        assert_eq!(on_display(&Rect { x: 5000.0, y: 5000.0, width: 100.0, height: 100.0 }, &[MAIN, LEFT]), None);
+        assert_eq!(on_display(&MAIN, &[]), None);
+    }
 
     #[test]
     fn the_shortcut_opens_when_nothing_is_running_and_closes_otherwise() {
