@@ -88,21 +88,29 @@ button.quiet:hover { color: var(--text); }
 :root[data-look="mono"] .mark b { background: #121213; color: #fff; }
 :root[data-look="orange"] { --accent: #f76808; --accent-wash: rgba(247, 104, 8, 0.22); --accent-text: #ff9550; }
 
-/* Settings: an ordinary window, so it has a background and can be read like a page. */
+/* Settings and History are ordinary windows, so they have a background and read like a page. */
 html.window, html.window body { background: var(--surface); overflow: auto; }
-.settings { padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+.plain { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 13px; flex: none; border-radius: 15px; background: var(--raised); font-weight: 500; white-space: nowrap; transition: background-color 0.12s; }
+.plain:hover { background: #2e2e32; }
+.plain.danger { background: var(--record); color: #fff; font-weight: 600; }
+.plain.danger:hover { background: var(--record); filter: brightness(1.1); }
+
+.settings { padding: 22px 24px; display: flex; flex-direction: column; gap: 18px; }
 .settings h1 { margin: 0; font-size: 17px; font-weight: 650; }
-.settings h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); }
+.settings h2 { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: var(--text-2); }
 .settings section { padding-top: 16px; border-top: 1px solid var(--border); }
 .settings .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
 .settings .help { margin: 6px 0 0; color: var(--text-2); font-size: 12px; }
 .settings .row .help { margin: 0; }
 .settings .help.warn { color: #ff8a80; }
-.settings .key { min-width: 150px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--raised); font-weight: 600; }
-.settings .key.recording { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); font-weight: 500; }
-.settings .key:hover { border-color: var(--text-2); }
-.settings input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
-
+.settings .key { min-width: 150px; height: 30px; padding: 0 14px; border-radius: 15px; background: var(--raised); font-weight: 600; }
+.settings .key:hover { background: #2e2e32; }
+.settings .key.recording { color: var(--accent-text); background: var(--accent-wash); font-weight: 500; }
+/* A checkbox drawn as a switch. */
+.settings input[type="checkbox"] { appearance: none; -webkit-appearance: none; position: relative; width: 36px; height: 22px; margin: 0; flex: none; border-radius: 11px; background: var(--raised); transition: background-color 0.15s; }
+.settings input[type="checkbox"]::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.settings input[type="checkbox"]:checked { background: var(--accent); }
+.settings input[type="checkbox"]:checked::after { transform: translateX(14px); }
 
 /* History: a list to scan, newest first. */
 .history { height: 100vh; overflow-y: auto; padding: 0 20px 24px; }
@@ -113,15 +121,14 @@ html.window, html.window body { background: var(--surface); overflow: auto; }
 .history ul { list-style: none; margin: 0; padding: 0; }
 .history li { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--border); }
 .history .thumbs { display: flex; gap: 4px; flex: none; width: 150px; }
-.history .thumb { width: 48px; height: 48px; border-radius: 7px; object-fit: cover; background: var(--raised); border: 1px solid var(--border); }
+.history .thumb { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; background: var(--raised); }
 .history .thumb.none { display: grid; place-items: center; color: var(--text-2); font-weight: 650; }
 .history .about { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.history .about strong { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history .about strong { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .history .about span { color: var(--text-2); font-size: 12px; }
-.history .actions { display: flex; align-items: center; gap: 4px; flex: none; }
-.plain { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
-.plain:hover { border-color: var(--text-2); }
-.plain.danger { background: var(--record); border-color: var(--record); color: #fff; font-weight: 600; }
+.history .actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.history .actions .plain { margin-right: 4px; }
+@media (prefers-reduced-motion: reduce) { .plain, .settings input[type="checkbox"], .settings input[type="checkbox"]::after { transition: none; } }
 
 /* The tab: only the mark, on a window just large enough for it. */
 .tabmark { position: absolute; inset: 6px; padding: 0; border-radius: 12px; }
