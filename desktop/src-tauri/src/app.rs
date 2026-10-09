@@ -1208,6 +1208,19 @@ fn round_done(app: AppHandle) {
     later(&app, close);
 }
 
+/// Quits: a comment still being typed is written out and waiting reports are sent first.
+fn quit(app: &AppHandle) {
+    settle_note(app);
+    telemetry::flush();
+    app.exit(0)
+}
+
+/// The bar's "Quit Clipframes", shown when a permission only takes effect in a new start.
+#[tauri::command]
+fn app_quit(app: AppHandle) {
+    quit(&app);
+}
+
 /// Opens the system's page for a permission Clipframes needs.
 #[tauri::command]
 fn permission_open(app: AppHandle, kind: String) {
@@ -1649,6 +1662,7 @@ pub fn run() {
             round_done,
             escape_key,
             permission_open,
+            app_quit,
             tool_set,
             recording_stop,
             history_open,
@@ -1716,11 +1730,7 @@ pub fn run() {
                     later(app, open)
                 }
                 "settings" => later(app, open_settings),
-                "quit" => {
-                    settle_note(app);
-                    telemetry::flush();
-                    app.exit(0)
-                }
+                "quit" => quit(app),
                 _ => {}
             });
             // macOS menu bar icons are one colour and take the bar's own; elsewhere the app icon.

@@ -72,7 +72,7 @@ const start = () => {
   const platform: Platform = {
     tools: ["element", "area", "clip"], history: true,
     state: async () => round, onRound: none, onHover: none, onMarks: none, onArea: none,
-    setTool: none, stopRecording: none, setNote: none, closeNote: none, removePick: none, setAuto: none, openHistory: none, done: none, escape: none, openPermission: none,
+    setTool: none, stopRecording: none, setNote: none, closeNote: none, removePick: none, setAuto: none, openHistory: none, done: none, escape: none, openPermission: none, quit: none,
   };
   connect(platform);
   useStore.setState({

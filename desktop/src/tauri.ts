@@ -36,4 +36,5 @@ export const platform: Platform = {
   done: () => invoke("round_done"),
   escape: () => invoke("escape_key"),
   openPermission: (kind) => invoke("permission_open", { kind }),
+  quit: () => invoke("app_quit"),
 };

@@ -216,5 +216,6 @@ export function webPlatform(stage: Stage, options: { tools?: Tool[]; shortcut?: 
     done,
     escape: async () => (round.recording !== null ? stopRecording() : round.noting !== null ? publish({ noting: null }) : done()),
     openPermission: async () => {},
+    quit: async () => {},
   };
 }

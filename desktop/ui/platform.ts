@@ -89,6 +89,8 @@ export interface Platform {
   /** Esc, pressed while one of Clipframes' own windows has the keyboard. */
   escape(): Promise<void>;
   openPermission(kind: string): Promise<void>;
+  /** Quits the app, for a permission that only takes effect in a new start. */
+  quit(): Promise<void>;
 }
 
 export const EMPTY_ROUND: RoundView = { picking: false, tool: "element", picks: [], noting: null, recording: null, reference: "", trouble: null, shortcut: "", place: null };

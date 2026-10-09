@@ -34,9 +34,16 @@ export function Bar() {
         <span className="status" title={more}>
           {message}
         </span>
-        <button className="pill" title={screen ? more : undefined} onClick={() => void (permission ? platform.openPermission(round.trouble as string) : platform.done())}>
-          {permission ? "Open Settings" : "Close"}
-        </button>
+        {round.trouble === "screen-asked" ? (
+          // The line says what to do, and the button does it.
+          <button className="pill" title={more} onClick={() => void platform.quit()}>
+            Quit Clipframes
+          </button>
+        ) : (
+          <button className="pill" title={screen ? more : undefined} onClick={() => void (permission ? platform.openPermission(round.trouble as string) : platform.done())}>
+            {permission ? "Open Settings" : "Close"}
+          </button>
+        )}
       </div>
     );
   }
