@@ -17,7 +17,9 @@ interface SettingsView {
 
 /** "ctrl+shift+Space" from a key press, or null while only modifiers are down. */
 function combo(event: KeyboardEvent): string | null {
-  if (["Control", "Shift", "Alt", "Meta", "OS"].includes(event.key)) return null;
+  // Ctrl+Alt arrives as "AltGraph" on Windows; some keyboards and tools send no code at all.
+  if (["Control", "Shift", "Alt", "AltGraph", "Meta", "OS"].includes(event.key)) return null;
+  if (event.code === "" || /^(Control|Shift|Alt|Meta|OS)(Left|Right)$/.test(event.code)) return null;
   const parts: string[] = [];
   if (event.ctrlKey) parts.push("ctrl");
   if (event.altKey) parts.push("alt");
