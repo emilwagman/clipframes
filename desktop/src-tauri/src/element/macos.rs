@@ -148,8 +148,10 @@ fn read(x: f64, y: f64, may_wake: bool, locate: bool) -> Result<ElementInfo, Rea
             info.frame = win.frame;
         }
         if let Some(around) = around.filter(|_| locate) {
-            let target = AxNode(target);
-            if let Some(found) = locate::walk(AxNode(around), &target, &info.role, info.label(), &locate::BUDGET) {
+            // A page was found on the way up exactly when the element has an address.
+            let in_page = !info.url.is_empty() || around.role() == "WebArea";
+            let target = AxNode { element: target, in_page };
+            if let Some(found) = locate::walk(AxNode { element: around, in_page }, &target, &info.role, info.label(), &locate::BUDGET) {
                 info.occurrence = found.occurrence;
                 info.heading = found.heading;
             }
@@ -384,7 +386,13 @@ unsafe fn elements_of(v: &CFType) -> Vec<Element> {
 }
 
 /// An element as the look through a page meets it (`locate::walk`).
-struct AxNode(Element);
+struct AxNode {
+    element: Element,
+    /// The look is through a page, not a window. A window's own controls are not under the
+    /// headings of a page that happens to be shown in it, so from a window pages are not
+    /// entered.
+    in_page: bool,
+}
 
 /// What is asked about each element on the way, in this order, in one message to the app:
 /// asked one by one, a page of a thousand elements would be seven thousand messages.
@@ -399,7 +407,7 @@ impl Node for AxNode {
             let mut answers: CFArrayRef = ptr::null();
             // An attribute the element does not have comes back as an error value in its
             // place, which reads as no text and no children below.
-            if AXUIElementCopyMultipleAttributeValues(self.0 .0, asked.as_concrete_TypeRef(), 0, &mut answers) != kAXErrorSuccess || answers.is_null() {
+            if AXUIElementCopyMultipleAttributeValues(self.element.0, asked.as_concrete_TypeRef(), 0, &mut answers) != kAXErrorSuccess || answers.is_null() {
                 return opened;
             }
             let answers: CFArray<CFType> = CFArray::wrap_under_create_rule(answers);
@@ -415,15 +423,20 @@ impl Node for AxNode {
             opened.name = if !name.is_empty() { name } else if value.chars().count() < 200 { value } else { String::new() };
             if opened.role == "Heading" {
                 // A heading says its text as its title, its value, or only in the text inside it.
-                opened.heading = Some(if opened.name.is_empty() { inner_text(&self.0) } else { opened.name.clone() });
+                opened.heading = Some(if opened.name.is_empty() { inner_text(&self.element) } else { opened.name.clone() });
             }
-            opened.children = answers.get(6).map(|v| elements_of(&v)).unwrap_or_default().into_iter().map(AxNode).collect();
+            // What is inside a piece of text is its lines, one element each in Chromium: half
+            // of a page's elements, and never a heading or anything that can be picked.
+            let closed = opened.role == "StaticText" || (opened.role == "WebArea" && !self.in_page);
+            if !closed {
+                opened.children = answers.get(6).map(|v| elements_of(&v)).unwrap_or_default().into_iter().map(|element| AxNode { element, in_page: self.in_page }).collect();
+            }
         }
         opened
     }
 
     fn is(&self, other: &AxNode) -> bool {
-        unsafe { core_foundation::base::CFEqual(self.0 .0 as CFTypeRef, other.0 .0 as CFTypeRef) != 0 }
+        unsafe { core_foundation::base::CFEqual(self.element.0 as CFTypeRef, other.element.0 as CFTypeRef) != 0 }
     }
 }
 

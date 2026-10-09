@@ -130,19 +130,24 @@ fn full(automation: &UIAutomation, x: f64, y: f64) -> Result<Read, ReadError> {
 /// limited to the budget's time, and an answer longer than the budget's count is not used.
 ///
 /// A heading is an element whose ARIA role is "heading" (what browsers and web views say for
-/// h1 to h6 and role=heading) or that has a heading level (what native apps set).
+/// h1 to h6 and role=heading) or that has a heading level (what native apps set). Looking
+/// through a window and not a page, only the second kind counts: a window's own controls
+/// are not under the headings of a page that happens to be shown in it.
 fn locate_in(automation: &UIAutomation, around: &UIElement, el: &UIElement, info: &ElementInfo) -> Option<Located> {
     limit_waiting(automation, locate::BUDGET.time);
     let kind = el.get_control_type().ok()?;
     let name = info.label();
     let is = |property: UIProperty, value: Variant| automation.create_property_condition(property, value, None);
 
-    let mut headings = is(UIProperty::AriaRole, Variant::from("heading")).ok()?;
-    // Not known to Windows before 2018: then the ARIA role alone decides.
-    let leveled = is(UIProperty::HeadingLevel, Variant::from(HeadingLevel::HeadingLevelNone as i32)).and_then(|none| automation.create_not_condition(none));
-    if let Ok(leveled) = leveled {
-        headings = automation.create_or_condition(headings, leveled).ok()?;
-    }
+    let in_page = role_of(around) == "Document";
+    let by_role = is(UIProperty::AriaRole, Variant::from("heading"));
+    // Heading levels are not known to Windows before 2018: then the ARIA role alone decides.
+    let by_level = is(UIProperty::HeadingLevel, Variant::from(HeadingLevel::HeadingLevelNone as i32)).and_then(|none| automation.create_not_condition(none));
+    let headings = match (in_page, by_level) {
+        (true, Ok(by_level)) => Some(automation.create_or_condition(by_role.ok()?, by_level).ok()?),
+        (true, Err(_)) => Some(by_role.ok()?),
+        (false, by_level) => by_level.ok(),
+    };
     let mut alike = automation.create_and_condition(is(UIProperty::ControlType, Variant::from(kind as i32)).ok()?, is(UIProperty::Name, Variant::from(name)).ok()?).ok()?;
     if name.is_empty() {
         // Nothing to count, but the element itself must be in the answer to know which
@@ -151,7 +156,10 @@ fn locate_in(automation: &UIAutomation, around: &UIElement, el: &UIElement, info
             alike = automation.create_and_condition(alike, is(property, Variant::from(value)).ok()?).ok()?;
         }
     }
-    let wanted = automation.create_or_condition(headings, alike).ok()?;
+    let wanted = match headings {
+        Some(headings) => automation.create_or_condition(headings, alike).ok()?,
+        None => alike,
+    };
 
     let cache = automation.create_cache_request().ok()?;
     for property in [UIProperty::Name, UIProperty::ControlType, UIProperty::AriaRole, UIProperty::BoundingRectangle] {
@@ -169,7 +177,7 @@ fn locate_in(automation: &UIAutomation, around: &UIElement, el: &UIElement, info
     let heading = |e: &UIElement| {
         let by_role = e.get_cached_property_value(UIProperty::AriaRole).ok().and_then(|v| v.get_string().ok()).is_some_and(|role| role.eq_ignore_ascii_case("heading"));
         let by_level = e.get_cached_heading_level().is_ok_and(|level| level != HeadingLevel::HeadingLevelNone);
-        (by_role || by_level).then(|| e.get_cached_name().unwrap_or_default())
+        (if in_page { by_role || by_level } else { by_level && !by_role }).then(|| e.get_cached_name().unwrap_or_default())
     };
     // Which of them is the element that was clicked: one in the same place, confirmed by
     // asking. Only those in the same place are asked about.
