@@ -89,3 +89,17 @@ Measured at every milestone, on macOS and Windows, and recorded in `PERFORMANCE.
 Stress cases to pass before a release: a page with 50,000 elements, 30 windows open, three
 screens, 200 picks in one round, a 10-minute recording, the pointer moving at full speed for
 a minute, the app left idle for 8 hours (memory must not grow).
+
+## Idle size against opening speed
+
+Measured on Windows (PERFORMANCE.md): a web view, even hidden, holds a few hundred megabytes,
+and starting one takes most of a second. So:
+
+- While idle there is no web view. The core alone is about 15 MB and uses no CPU.
+- Opening the bar starts input first, then builds the windows. After closing, the bar stays
+  hidden for 90 s so the next open is instant; then it is destroyed.
+- Anything that is on screen for long stretches must not be a web view. The small tab that
+  appears when a remembered app or site is opened is that kind of thing: it will be a native
+  window per system (a layered window on Windows, a panel on macOS), drawn by the core.
+- Still open: the cold open takes 0.6 to 1.0 s on Windows. Choices are a longer keep-warm
+  after real use, a native bar, or accepting it.
