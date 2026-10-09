@@ -76,6 +76,8 @@ export async function lab(): Promise<Lab> {
     }),
   );
   open.addEventListener("click", () => shortcut.forEach((f) => f()));
+  // A page that cannot rely on the keyboard shortcut reaching it brings its own button.
+  document.querySelectorAll("[data-shortcut]").forEach((button) => button.addEventListener("click", () => shortcut.forEach((f) => f())));
 
   let held = clip.dataset.start ?? "";
   const show = () => {
@@ -111,7 +113,12 @@ export async function lab(): Promise<Lab> {
       set: (text) => {
         held = text;
         show();
-        void navigator.clipboard?.writeText(text).catch(() => {});
+        // The real clipboard may refuse (a frame without permission); the panel always shows it.
+        try {
+          void navigator.clipboard?.writeText(text).catch(() => {});
+        } catch {
+          // Shown on the page instead.
+        }
       },
     },
     hint: (text) => {

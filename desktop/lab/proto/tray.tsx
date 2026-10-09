@@ -80,6 +80,9 @@ function Tray({ stage }: { stage: Lab }) {
       hold(false);
     });
     window.addEventListener("blur", () => document.hasFocus() || hold(false));
+    // A click on the page's own button (or the shortcut) stands in for holding the key,
+    // for where a held Alt or Option does not reach the page.
+    stage.onShortcut(() => hold(!live.current.held));
     stage.hint(`Hold ${ALT} and click anything`);
     stage.ready();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -87,6 +90,12 @@ function Tray({ stage }: { stage: Lab }) {
   // Numbers on the page only while pointing or while looking at the tray: nothing is drawn
   // over the screen the rest of the time.
   useEffect(() => mark(stage, held || over ? items : []), [items, held, over, stage]);
+  useEffect(() => {
+    const button = document.querySelector<HTMLElement>("[data-shortcut]");
+    if (!button) return;
+    button.textContent = held ? "Stop pointing" : "Start pointing";
+    button.classList.toggle("on", held);
+  }, [held]);
   useEffect(() => stage.hint(items.length || sent.length || held ? "" : `Hold ${ALT} and click anything`), [items.length, sent.length, held, stage]);
 
   const copy = (list: Item[]) => {
