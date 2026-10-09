@@ -865,7 +865,10 @@ fn on_event(app: &AppHandle, event: Event) {
             // A picture of the element with a little space around it. Not having one is fine.
             let pad = if cfg!(windows) { 18.0 } else { 12.0 };
             let around = Rect { x: frame.x - pad, y: frame.y - pad, width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
-            let (image, pixels) = on_display(&around, &displays(app)).and_then(|seen| snap(&core, &seen, ELEMENT_WIDTH)).unwrap_or_default();
+            // Where the system says Clipframes may not take pictures (macOS without Screen
+            // Recording) none is tried: trying is what makes the system ask, and its question
+            // would come up while every click is being taken as a pick.
+            let (image, pixels) = on_display(&around, &displays(app)).filter(|_| shot::permitted()).and_then(|seen| snap(&core, &seen, ELEMENT_WIDTH)).unwrap_or_default();
             telemetry::event("pick_added", json!({ "kind": "element", "picture": !image.is_empty(), "selector": !element.selector().is_empty(), "named": !element.name.is_empty(), "web": !element.url.is_empty() }));
             remember(app, &element);
             let index = core.round.lock().unwrap().push(Pick { element, image, pixels, ..Default::default() });
@@ -1231,8 +1234,12 @@ fn tool_set(app: AppHandle, tool: Kind) {
     }
     *core.tool.lock().unwrap() = tool;
     *core.trouble.lock().unwrap() = None;
+    // A picture tool where the system says no pictures: until the trial below has shown that
+    // one can be taken after all, clicks go to the app they are on, so the system's question,
+    // should the trial bring it up, can be answered.
+    let on_trial = tool != Kind::Element && !shot::permitted();
     if let Some(picker) = core.picker.lock().unwrap().as_ref() {
-        picker.set_mode(if tool == Kind::Element { Mode::Element } else { Mode::Area });
+        picker.set_mode(if tool == Kind::Element { Mode::Element } else if on_trial { Mode::Watch } else { Mode::Area });
     }
     // The element highlight belongs to the element tool.
     *core.shown.lock().unwrap() = None;
@@ -1244,12 +1251,20 @@ fn tool_set(app: AppHandle, tool: Kind) {
     // Screen Recording). The system's answer is known to stay "no" after the user has said
     // yes, until the app is started again, so it is not taken at its word: a small picture
     // is tried, and only if that fails too does the bar say what is missing.
-    if tool != Kind::Element && !shot::permitted() {
+    if on_trial {
         thread::spawn(move || {
-            let still = |app: &AppHandle| *app.state::<Core>().tool.lock().unwrap() == tool;
-            if still(&app) && !shot::works() && still(&app) {
-                no_pictures(&app);
+            let core = app.state::<Core>();
+            let still = || *core.tool.lock().unwrap() == tool && core.trouble.lock().unwrap().is_none();
+            let works = shot::works();
+            if !still() {
+                return;
             }
+            if !works {
+                return no_pictures(&app);
+            }
+            if let Some(picker) = core.picker.lock().unwrap().as_ref() {
+                picker.set_mode(Mode::Area);
+            };
         });
     }
 }
