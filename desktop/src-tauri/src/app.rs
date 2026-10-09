@@ -402,6 +402,7 @@ pub fn run() {
                         later(app, toggle);
                     }
                 })
+                .inspect_err(|e| eprintln!("shortcut {SHORTCUT} not registered: {e}"))
                 .is_err();
 
             let open_label = if taken { "Open Clipframes (shortcut in use by another app)" } else { "Open Clipframes" };
@@ -417,6 +418,11 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+
+            // `clipframes --open` starts with the bar open: for tests and for a second launch.
+            if std::env::args().any(|a| a == "--open") {
+                later(app.handle(), open);
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
