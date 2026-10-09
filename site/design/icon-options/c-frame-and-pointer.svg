@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- C: pointing at a thing. The first tool in the bar (desktop/ui/icons.tsx, "element") made
+       the icon: the frame in the app's orange, the pointer white. -->
+  <rect width="1024" height="1024" rx="228" fill="#121213"/>
+  <path d="M700 452V340a72 72 0 0 0-72-72H300a72 72 0 0 0-72 72v328a72 72 0 0 0 72 72h152" fill="none" stroke="#f76808" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M520 500l304 113-131 52-52 131z" fill="#fff" stroke="#fff" stroke-width="56" stroke-linejoin="round"/>
+</svg>

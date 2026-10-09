@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8">
+<style>
+  body { margin: 0; font: 15px -apple-system, system-ui, sans-serif; color: #121213; background: #fafaf9; width: 1500px; }
+  h1 { font-size: 26px; margin: 0; padding: 36px 48px 6px; letter-spacing: -0.02em; }
+  p { margin: 0; padding: 0 48px 22px; color: #6c6d74; }
+  .row { display: grid; grid-template-columns: 300px 1fr 1fr; align-items: center; }
+  .row > div { padding: 30px 48px; display: flex; align-items: flex-end; gap: 26px; }
+  .name { flex-direction: column; align-items: flex-start !important; gap: 6px !important; }
+  .name b { font-size: 19px; } .name span { color: #6c6d74; line-height: 1.4; }
+  .dark { background: #1c1c1f; } .light { background: #ececea; }
+  .dock { background: linear-gradient(#3c5a78, #7a6c8c); }
+  img { display: block; }
+  .current img { border-radius: 22%; }
+</style>
+<h1>Clipframes icon: three options</h1>
+<p>Each at 256, 128, 64, 32 and 16 px, on a light and a dark ground. The last row is the icon in use today, for comparison.</p>
+<script>
+  const rows = [
+    ["A · Numbered pick", "The app's outline around a thing, with the number on its corner.", "a-numbered-pick.svg"],
+    ["B · Clipped frame", "The mark Clipframes already has, in the app's black, white and orange.", "b-clipped-frame.svg"],
+    ["C · Frame and pointer", "Pointing at a thing: the first tool in the bar, made the icon.", "c-frame-and-pointer.svg"],
+    ["Today", "The white script C on blue.", "../../public/icon.png", "current"],
+  ];
+  for (const [name, about, file, cls] of rows) {
+    const sizes = [256, 128, 64, 32, 16].map((s) => `<img src="${file}" width="${s}" height="${s}">`).join("");
+    document.body.insertAdjacentHTML("beforeend", `<div class="row ${cls ?? ""}"><div class="name"><b>${name}</b><span>${about}</span></div><div class="light">${sizes}</div><div class="dark">${sizes}</div></div>`);
+  }
+</script>

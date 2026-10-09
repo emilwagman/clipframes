@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- A: a pick. The app's outline around a thing, with the numbered dot on its corner. -->
+  <rect width="1024" height="1024" rx="228" fill="#121213"/>
+  <rect x="300" y="336" width="480" height="400" rx="56" fill="#f76808" fill-opacity="0.14" stroke="#f76808" stroke-width="56"/>
+  <circle cx="300" cy="336" r="148" fill="#f76808" stroke="#121213" stroke-width="40"/>
+  <path d="M278 262h54v150h-50v-98l-34 12v-44z" fill="#fff"/>
+</svg>
