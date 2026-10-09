@@ -1,6 +1,6 @@
 /* The copied text, in the two places the page shows it. */
 .text { margin: 0; font: 13.5px/1.65 var(--mono); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
-.copied .text { min-height: calc(3 * 1.65em + 36px); padding: 18px 22px; border-radius: 14px; background: var(--surface-2); }
+.copied .text { min-height: calc(4 * 1.65em + 36px); padding: 18px 22px; border-radius: 14px; background: var(--surface-2); }
 .none { color: var(--text-3); }
 .under { margin: 14px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--text-3); }
 

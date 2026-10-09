@@ -4,14 +4,15 @@ import { track } from "@/lib/analytics";
 import { useSite } from "./engine";
 import s from "./copied.module.css";
 
-/// The text a round of two picks copies, shown until the demo above has a round of its own.
-const TWO = `[Clipframes: 2 things in Google Chrome "Invoices"]
-1. Button "New invoice" (#new-invoice .btn.btn-primary): make this green
-2. Text "$3,120" (#overdue-total): too alarming, use the normal text colour`;
+/// The text the example round copies, shown until the demo above has a round of its own.
+const EXAMPLE = `[Clipframes: 3 things in Google Chrome "Invoices"]
+1. Button "New invoice" (#new-invoice .btn.btn-primary), under heading "Invoices": make this green
+2. Text "$3,120" (#overdue-total), under heading "Invoices": too alarming, use the normal text colour
+3. Text "Paid" (#invoice-table .badge.paid), 2nd of 4 on the page, under heading "Invoices": make this one grey`;
 
 /// A round with one of each kind, in the app's own words (desktop/src-tauri/src/round.rs).
 const MIXED = `[Clipframes: 3 things in Google Chrome "Invoices"]
-1. Button "New invoice" (#new-invoice .btn.btn-primary): make this green
+1. Button "New invoice" (#new-invoice .btn.btn-primary), under heading "Invoices": make this green
 2. Screenshot (2.png): the table is cramped
 3. Screen clip, 6 s, 24 frames (3/)`;
 
@@ -19,7 +20,10 @@ const MIXED = `[Clipframes: 3 things in Google Chrome "Invoices"]
 export function Copied() {
   const round = useSite((site) => site.rounds.picks);
   const own = useSite((site) => site.clipboard);
-  const text = round === undefined ? TWO : round.reference;
+  const playing = useSite((site) => site.playing.picks);
+  const taken = useSite((site) => site.taken.picks);
+  // Before the example has played, and when it was cut short, the block shows where it ends up.
+  const text = round?.reference || (taken || playing ? "" : EXAMPLE);
   return (
     <div className={s.copied}>
       <pre className={s.text} data-copied="picks" aria-live="polite" onCopy={() => track("reference_copied")}>{text || <span className={s.none}>Nothing is picked yet.</span>}</pre>

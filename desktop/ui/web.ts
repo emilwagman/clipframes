@@ -19,6 +19,8 @@ export interface Stage {
   place?: string;
   /** What the page is called in the copied text, e.g. `Google Chrome "Invoices"`. */
   where?: string;
+  /** The page's outermost element, when the page is a part of the document. Left out, it is the document's body. */
+  root?: Element;
   /** Puts the copied text on the clipboard. Left out, the browser's own clipboard is written. */
   copy?(text: string): void;
 }
@@ -62,11 +64,11 @@ function describe(pick: PickView, number: number): string {
 }
 
 /** Which of the page's elements that read the same this one is, and the heading it is under. */
-function placeOf(element: Element): string[] {
+function placeOf(element: Element, root?: Element): string[] {
   const said = headline(element);
   // Only something with a name is counted: `Group` alone is said of every plain container.
   const same = said.includes('"') ? (other: Element) => headline(other) === said : null;
-  return whereabouts(element.ownerDocument.body as Element, element, same);
+  return whereabouts(root ?? (element.ownerDocument.body as Element), element, same);
 }
 
 /** What goes on the clipboard: one line for one pick, a numbered list for several. */
@@ -143,7 +145,7 @@ export function webPlatform(stage: Stage, options: { tools?: Tool[]; shortcut?: 
       const element = stage.elementAt(point.x, point.y);
       if (!element) return;
       setHover({ rect: null, label: "" });
-      return add({ kind: "element", headline: headline(element), selector: selector(element), note: "", whereabouts: placeOf(element) }, element);
+      return add({ kind: "element", headline: headline(element), selector: selector(element), note: "", whereabouts: placeOf(element, stage.root) }, element);
     }
     drag = point;
     glass.setPointerCapture(event.pointerId);

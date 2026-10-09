@@ -87,13 +87,16 @@ export function HomePage({ stars, preview = false }: { stars: number | null; pre
           <div className={s.visual}>
             <Stage
               id="picks"
-              label="Two things picked in the invoicing app, each with a number: the New invoice button and the overdue total. The bar says 2 copied."
+              label="Three things picked in the invoicing app, each with a number: the New invoice button, the overdue total and one of the Paid badges. The bar says 3 copied."
               hint="Click a few things and write a comment for each."
               touchHint="Tap a few things and write a comment for each."
             />
           </div>
           <div className={s.lands}>
-            <p>This is what lands on your clipboard:</p>
+            <p>
+              This is what lands on your clipboard. When the same thing appears more than once, the line says which one
+              you picked and the heading it sits under, so the agent does not change all of them.
+            </p>
             <Copied />
           </div>
         </section>

@@ -18,7 +18,8 @@ export const EXAMPLES: Partial<Record<DemoId, (a: Actor) => Promise<void>>> = {
     await a.type("make this green");
   },
 
-  // Two things, a comment on each, and the pointer already on a third.
+  // Three things and a comment on each. The last is one of four that read the same, which the
+  // copied text tells apart. The pointer ends on a fourth thing.
   picks: async (a) => {
     await a.wait(600);
     await a.move(a.el("#new-invoice"));
@@ -30,6 +31,11 @@ export const EXAMPLES: Partial<Record<DemoId, (a: Actor) => Promise<void>>> = {
     await a.wait(380);
     await a.click();
     await a.type("too alarming, use the normal text colour");
+    await a.save();
+    await a.move(a.el("#invoice-table tbody tr:nth-child(4) .badge"));
+    await a.wait(380);
+    await a.click();
+    await a.type("make this one grey");
     await a.save();
     await a.move(a.el("#outstanding-total"));
   },

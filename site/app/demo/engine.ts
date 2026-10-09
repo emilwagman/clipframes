@@ -124,6 +124,8 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
       const r = element.getBoundingClientRect();
       return { x: r.x - box.x, y: r.y - box.y, width: r.width, height: r.height };
     },
+    // The demo's own Northwind is the page: the other demos' buttons are not counted with its own.
+    root: page,
     place: PLACE,
     where: WHERE,
     copy: () => {},

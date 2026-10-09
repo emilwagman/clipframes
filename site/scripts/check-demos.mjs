@@ -14,6 +14,7 @@ const shots = process.argv[3];
 if (shots) mkdirSync(shots, { recursive: true });
 const IDS = ["hero", "picks", "area", "clip", "tab"];
 const WHERE = 'in Google Chrome "Invoices"';
+const UNDER = ', under heading "Invoices"';
 
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 let failed = 0;
@@ -85,7 +86,7 @@ await session("desktop: the examples play by themselves and leave the clipboard 
   assert.equal(await t.note("hero").inputValue(), "make this green");
   assert.match(await t.bar("hero").innerText(), /1\s*copied/);
   await t.visit("picks");
-  assert.equal(await t.copied("picks"), `[Clipframes: 2 things ${WHERE}]\n1. Button "New invoice" (#new-invoice .btn.btn-primary): make this green\n2. Text "$3,120" (#overdue-total): too alarming, use the normal text colour`);
+  assert.equal(await t.copied("picks"), `[Clipframes: 3 things ${WHERE}]\n1. Button "New invoice" (#new-invoice .btn.btn-primary)${UNDER}: make this green\n2. Text "$3,120" (#overdue-total)${UNDER}: too alarming, use the normal text colour\n3. Text "Paid" (#invoice-table .badge.paid), 2nd of 4 on the page${UNDER}: make this one grey`);
   assert.equal(await t.stage("picks").locator(".clipframes-web:not([data-still]) .label").innerText(), 'Group "Outstanding $12,940"');
   await t.visit("area");
   assert.equal(await t.note("area").inputValue(), "put more space between these");
@@ -113,7 +114,7 @@ await session("desktop: point at an element, click it, and write a comment", des
   await t.note("hero").waitFor();
   await t.page.keyboard.type("make this smaller");
   await t.page.keyboard.press("Enter");
-  const text = `[Clipframes: 2 things ${WHERE}]\n1. Button "New invoice" (#new-invoice .btn.btn-primary): make this green\n2. Button "Export" (#export .btn): make this smaller`;
+  const text = `[Clipframes: 2 things ${WHERE}]\n1. Button "New invoice" (#new-invoice .btn.btn-primary)${UNDER}: make this green\n2. Button "Export" (#export .btn)${UNDER}: make this smaller`;
   await t.page.waitForFunction((want) => document.querySelector('[data-copied="latest"]').innerText.includes(want), "make this smaller");
   assert.equal((await t.copied("latest")).replace(/^> /, ""), text);
   assert.equal(await t.clipboard(), text);
@@ -132,19 +133,19 @@ await session("desktop: several picks, and the text follows along", desktop, asy
   await t.note("picks").waitFor();
   await t.page.keyboard.type("show last month too");
   await t.stage("picks").locator(".note button.pill").click();
-  await t.page.waitForFunction(() => document.querySelector('[data-copied="picks"]').innerText.includes("3 things"));
+  await t.page.waitForFunction(() => document.querySelector('[data-copied="picks"]').innerText.includes("4 things"));
   const lines = (await t.copied("picks")).split("\n");
-  assert.equal(lines.length, 4);
-  assert.equal(lines[3], '3. Group "Paid this month $48,210" (#paid-total .stat): show last month too');
+  assert.equal(lines.length, 5);
+  assert.equal(lines[4], `4. Group "Paid this month $48,210" (#paid-total .stat)${UNDER}: show last month too`);
   assert.equal(await t.clipboard(), lines.join("\n"));
-  assert.equal(await t.stage("picks").locator(".mark").count(), 3);
+  assert.equal(await t.stage("picks").locator(".mark").count(), 4);
   // Remove takes a pick out again.
   const second = await t.at("picks", "#export");
   await t.page.mouse.click(second.x, second.y);
   await t.note("picks").waitFor();
   await t.stage("picks").locator(".note button.quiet").click();
   await t.page.waitForTimeout(200);
-  assert.equal((await t.copied("picks")).split("\n").length, 4);
+  assert.equal((await t.copied("picks")).split("\n").length, 5);
 });
 
 await session("desktop: drag an area", desktop, async (t) => {
@@ -236,7 +237,7 @@ await session("desktop: with reduced motion each demo goes straight to its resul
   await t.page.waitForTimeout(800);
   assert.equal(await t.note("hero").inputValue(), "make this green");
   await t.visit("picks");
-  assert.match(await t.copied("picks"), /^\[Clipframes: 2 things/);
+  assert.match(await t.copied("picks"), /^\[Clipframes: 3 things/);
   await t.visit("area");
   assert.equal(await t.note("area").inputValue(), "put more space between these");
   await t.visit("clip");
@@ -247,7 +248,7 @@ await session("phone: the examples play, and nothing is wider than the screen", 
   await t.visit("hero");
   assert.equal(await t.note("hero").inputValue(), "make this green");
   await t.visit("picks");
-  assert.match(await t.copied("picks"), /^\[Clipframes: 2 things/);
+  assert.match(await t.copied("picks"), /^\[Clipframes: 3 things/);
   if (shots) await picture(t, `${shots}/phone.png`);
   assert.equal(await t.page.evaluate(() => getComputedStyle(document.querySelector("figcaption span span")).display), "none", "a phone gets the hint for a finger");
 });
@@ -259,8 +260,8 @@ await session("phone: a tap picks, and a swipe scrolls without picking", phone, 
   await t.note("picks").waitFor();
   await t.note("picks").fill("move this into a menu");
   await t.stage("picks").locator(".note button.pill").tap();
-  await t.page.waitForFunction(() => document.querySelector('[data-copied="picks"]').innerText.includes("3 things"));
-  assert.equal((await t.copied("picks")).split("\n")[3], "3. Button \"Export\" (#export .btn): move this into a menu");
+  await t.page.waitForFunction(() => document.querySelector('[data-copied="picks"]').innerText.includes("4 things"));
+  assert.equal((await t.copied("picks")).split("\n")[4], `4. Button "Export" (#export .btn)${UNDER}: move this into a menu`);
   // A swipe up over the stage scrolls the page and picks nothing.
   const client = await t.page.context().newCDPSession(t.page);
   const start = await t.at("picks", "#invoice-table", 0.5, 0.5);
@@ -268,7 +269,7 @@ await session("phone: a tap picks, and a swipe scrolls without picking", phone, 
   await client.send("Input.synthesizeScrollGesture", { x: start.x, y: start.y, yDistance: -260, speed: 900, gestureSourceType: "touch" });
   await t.page.waitForTimeout(300);
   assert.ok((await t.page.evaluate(() => scrollY)) > y0 + 150, "the swipe did not scroll the page");
-  assert.match(await t.copied("picks"), /3 things/);
+  assert.match(await t.copied("picks"), /4 things/);
 });
 
 await session("phone: a drag that starts sideways draws an area", phone, async (t) => {

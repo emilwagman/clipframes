@@ -14,10 +14,10 @@ import s from "./history.module.css";
 /// Earlier captures to start the list with: the app's own examples (desktop/lab/lab.tsx).
 const EARLIER: Capture[] = [
   { id: "a", title: 'Button "New invoice" and 2 more', when: "2026-10-09 11:42", count: 3, images: [one.src, two.src, three.src],
-    text: '[Clipframes: 3 things in Google Chrome "Invoices"]\n1. Button "New invoice" (#new-invoice .btn.btn-primary): make this green\n2. Screenshot (2.png): the table is cramped\n3. Screen clip, 6 s, 24 frames (3/)' },
+    text: '[Clipframes: 3 things in Google Chrome "Invoices"]\n1. Button "New invoice" (#new-invoice .btn.btn-primary), under heading "Invoices": make this green\n2. Screenshot (2.png): the table is cramped\n3. Screen clip, 6 s, 24 frames (3/)' },
   { id: "b", title: "Screen clip, 6 s", when: "2026-10-09 10:15", count: 1, images: [four.src], text: '[Screen clip, 6 s, 24 frames (1/) in Google Chrome "Invoices"]' },
   { id: "c", title: 'Text "$3,120" and 1 more', when: "2026-10-08 16:03", count: 2, images: [three.src, two.src],
-    text: '[Clipframes: 2 things in Google Chrome "Invoices"]\n1. Text "$3,120" (#overdue-total): too alarming, use the normal text colour\n2. Group "Outstanding $12,940" (#outstanding-total .stat)' },
+    text: '[Clipframes: 2 things in Google Chrome "Invoices"]\n1. Text "$3,120" (#overdue-total), under heading "Invoices": too alarming, use the normal text colour\n2. Group "Outstanding $12,940" (#outstanding-total .stat), under heading "Invoices"' },
   { id: "d", title: "Screenshot", when: "2026-10-08 09:27", count: 1, images: [two.src], text: '[Screenshot (1.png) in Google Chrome "Invoices": the table is cramped]' },
 ];
 
