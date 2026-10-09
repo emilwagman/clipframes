@@ -65,14 +65,22 @@ fn run(app: &AppHandle) -> Result<String, String> {
     let bytes = tauri::async_runtime::block_on(update.download(|_, _| {}, || {})).map_err(text)?;
 
     app::set_update_status(app, format!("Version {} installs as soon as Clipframes is closed.", update.version));
-    while !app::idle(app) {
-        thread::sleep(Duration::from_secs(3));
+    // Reports waiting to be sent leave first, which takes a moment, and only then is it
+    // decided that nothing is on screen: a round opened in that moment must not be restarted
+    // from under the user.
+    loop {
+        while !app::idle(app) {
+            thread::sleep(Duration::from_secs(3));
+        }
+        crate::telemetry::flush();
+        if app::idle(app) {
+            break;
+        }
     }
     if let Ok(dir) = app.path().app_config_dir() {
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join(MARKER), update.version.as_bytes());
     }
-    crate::telemetry::flush();
     // On Windows the installer takes over from here and starts the new version itself.
     if let Err(e) = update.install(bytes) {
         // Nothing was installed, so the next start is an ordinary one.
