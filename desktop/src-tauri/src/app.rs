@@ -707,6 +707,8 @@ fn open_now(app: &AppHandle) {
     *core.began.lock().unwrap() = Some(started);
     *core.round.lock().unwrap() = Round::default();
     *core.noting.lock().unwrap() = None;
+    // The round gets a new comment box, which numbers its messages from one again.
+    core.note_seq.store(0, Ordering::SeqCst);
     *core.shown.lock().unwrap() = None;
     *core.tool.lock().unwrap() = Kind::Element;
     let front = core.front.lock().unwrap().clone();
@@ -1132,8 +1134,9 @@ fn round_state(app: AppHandle, window: WebviewWindow) -> RoundView {
 /// for a run of keystrokes.
 ///
 /// Every keystroke is a message of its own, and nothing promises they arrive in the order
-/// they were sent. Each carries a number that only grows (`seq`); one with a number not above
-/// the newest seen is an older text arriving late and is dropped.
+/// they were sent. Each carries a number (`seq`) that the round's comment box counts up from
+/// one; a message with a number not above the newest seen is an older text arriving late and
+/// is dropped. The newest seen starts at nothing with every round (`open_now`).
 #[tauri::command]
 fn note_set(app: AppHandle, index: usize, note: String, seq: Option<u64>) {
     let core = app.state::<Core>();
@@ -1853,6 +1856,20 @@ mod tests {
         assert!(!newer(&newest, 1_760_000_000_002), "the keystroke before, arriving after");
         assert!(!newer(&newest, 1_760_000_000_003), "the same one twice");
         assert!(newer(&newest, 1_760_000_000_004));
+    }
+
+    #[test]
+    fn a_new_round_counts_comment_messages_from_one_again() {
+        let newest = AtomicU64::new(0);
+        for seq in 1..=40 {
+            assert!(newer(&newest, seq));
+        }
+        assert!(!newer(&newest, 1), "within the round an old number stays old");
+        // What opening a round does. Without it every keystroke of the next round would be
+        // taken for an old one.
+        newest.store(0, Ordering::SeqCst);
+        assert!(newer(&newest, 1));
+        assert!(newer(&newest, 2));
     }
 
     const HERE: &str = r"C:\Users\sam\AppData\Local\Clipframes\clipframes.exe";

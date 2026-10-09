@@ -13,10 +13,10 @@ export function listen<T>(event: string, listener: (payload: T) => void): void {
 
 export const label = here.label;
 
-// Comment text goes to the core one message per keystroke. Each carries a number that only
-// grows, also from one comment box to the next, so the core can drop one that arrives late.
+// Comment text goes to the core one message per keystroke. Each carries a number counted up
+// from one, so the core can drop one that arrives late. Every round has a new comment box
+// (this script, loaded again), and the core starts over with it.
 let noteSeq = 0;
-const nextNoteSeq = () => (noteSeq = Math.max(noteSeq + 1, Date.now()));
 
 export const platform: Platform = {
   tools: ["element", "area", "clip"],
@@ -28,7 +28,7 @@ export const platform: Platform = {
   onArea: (listener) => listen<AreaView>("area", listener),
   setTool: (tool) => invoke("tool_set", { tool }),
   stopRecording: () => invoke("recording_stop"),
-  setNote: (index, note) => invoke("note_set", { index, note, seq: nextNoteSeq() }),
+  setNote: (index, note) => invoke("note_set", { index, note, seq: ++noteSeq }),
   closeNote: () => invoke("note_close"),
   removePick: (index) => invoke("pick_remove", { index }),
   setAuto: (on) => invoke("place_auto_set", { on }),
