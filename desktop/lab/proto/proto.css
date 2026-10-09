@@ -1,0 +1,61 @@
+/* The stage the prototypes stand on, and what they add to Clipframes' own look (ui/style.css). */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
+iframe.page { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+#glass { position: absolute; inset: 0; }
+#open { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); z-index: 5; font: 600 12px/1 var(--sans); padding: 9px 13px; border-radius: 16px; background: #121213; color: #fff; cursor: pointer; user-select: none; }
+#clip { position: absolute; left: 16px; bottom: 16px; z-index: 5; width: 300px; margin: 0; padding: 10px 12px 11px; border-radius: 12px; background: #121213; color: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3), 0 2px 6px rgba(0,0,0,.26); pointer-events: none; }
+#clip span { display: block; margin-bottom: 4px; font: 500 11px/1.3 var(--sans); color: #9c9da5; }
+#clip pre { margin: 0; max-height: 150px; overflow: hidden; font: 11px/1.45 var(--mono); white-space: pre-wrap; word-break: break-word; }
+
+/* Fix prototypes. */
+.clipframes-web.using { cursor: default; }
+button.round.small { width: 26px; height: 26px; }
+button.round.small svg.icon { width: 14px; height: 14px; }
+.status.lit { color: var(--text); }
+button.status.count { flex: 1; height: 32px; margin: 0 -4px; padding: 0 8px 0 4px; border-radius: 16px; text-align: left; }
+button.status.count:hover, button.status.count.open { background: var(--raised); color: var(--text); }
+.chev { width: 10px; height: 10px; margin-left: auto; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transform: rotate(0deg); }
+.count.open .chev { transform: rotate(180deg); }
+/* The list of picks, growing up out of the bar. */
+.picks { position: absolute; left: 8px; right: 8px; bottom: calc(100% - 2px); max-height: 260px; overflow-y: auto; padding: 6px; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.pick { display: flex; align-items: center; gap: 10px; padding: 5px 4px 5px 8px; border-radius: 12px; }
+.pick:hover, .pick.on { background: var(--raised); }
+.pick .words { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; line-height: 17px; }
+.pick .name { color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick .said { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick .said.none { color: var(--text-2); font-style: italic; }
+/* A grip to move the bar by. */
+.bar.gripped { padding-left: 2px; }
+.grip { display: grid; grid-template-columns: 3px 3px; gap: 3px; padding: 12px 8px; cursor: grab; }
+.grip i { width: 3px; height: 3px; border-radius: 50%; background: var(--text-2); }
+/* The one-line comment box. */
+.note.slim { inset: 8px 8px auto 8px; flex-direction: row; align-items: flex-start; gap: 8px; padding: 9px 8px 9px 12px; border-radius: 22px; }
+.note.slim .num { margin-top: 3px; flex: none; }
+.note.slim textarea { flex: 1; height: 20px; padding: 3px 0; border: 0; background: none; border-radius: 0; }
+/* Which element is chosen among the ones around the pointer. */
+.trail { position: absolute; display: flex; align-items: center; gap: 0; padding: 4px 6px 4px 8px; border-radius: 6px; background: var(--surface); color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; pointer-events: none; }
+.trail span + span::before { content: "›"; margin: 0 6px; color: var(--text-2); font-weight: 400; }
+.trail span.on { color: var(--text); font-weight: 600; }
+.trail kbd { margin-left: 4px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 4px; background: var(--raised); color: var(--text); font: 500 10px/16px var(--sans); text-align: center; }
+.trail span + kbd { margin-left: 10px; }
+/* A hint above the bar, and what is left on screen after the bar has closed. */
+.window.tip { transform: translate(-50%, -100%); white-space: nowrap; padding: 8px 14px; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); text-align: center; pointer-events: none; }
+.window.toast { left: 50%; bottom: 32px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 16px; border-radius: 24px; background: var(--surface); box-shadow: var(--shadow); white-space: nowrap; }
+.window.toast span { display: flex; align-items: center; gap: 7px; margin-right: 6px; }
+.window.card { left: 50%; bottom: 40px; transform: translateX(-50%); width: 420px; padding: 20px 20px 10px; border-radius: 22px; background: var(--surface); box-shadow: var(--shadow), 0 18px 50px rgba(0, 0, 0, 0.28); }
+.card h2 { margin: 0; font-size: 17px; font-weight: 650; }
+.card p { margin: 6px 0 12px; color: var(--text-2); }
+.card .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--border); }
+.card .row strong { display: block; font-weight: 600; }
+.card .row span { color: var(--text-2); font-size: 12px; }
+.card .ok { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; color: var(--text); font-size: 13px; font-weight: 600; }
+.card .ok svg { width: 12px; height: 12px; fill: none; stroke: var(--accent-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Two displays side by side, for the prototype about where things open. */
+body.two { background: #26272d; }
+body.two iframe.page { inset: auto; border-radius: 10px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 20px 50px rgba(0, 0, 0, 0.35); }
+body.two iframe.page:nth-of-type(1) { left: 24px; bottom: 56px; width: 620px; height: 560px; }
+body.two iframe.page:nth-of-type(2) { left: 668px; top: 24px; width: calc(100% - 692px); height: calc(100% - 80px); }
+body.two .cap { position: absolute; bottom: 22px; color: #9c9da5; font: 12px/1 -apple-system, "Segoe UI", system-ui, sans-serif; }
+body.two #open { top: auto; bottom: 14px; right: 24px; background: #3a3b43; }
+body.two #clip { display: none; }

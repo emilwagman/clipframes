@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Terminal</title>
+<!-- A stand-in for the terminal the agent runs in, for the two-display prototype. -->
+<style>
+  body { margin: 0; height: 100vh; background: #16171b; color: #d6d8de; font: 13px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  header { display: flex; gap: 7px; padding: 12px 14px; background: #1e1f25; }
+  header i { width: 11px; height: 11px; border-radius: 50%; background: #3a3c45; }
+  main { padding: 16px 18px; }
+  .dim { color: #7d818d; }
+  .me { color: #fff; }
+  .box { margin-top: 14px; padding: 10px 12px; border: 1px solid #34363f; border-radius: 8px; }
+  .caret { display: inline-block; width: 7px; height: 15px; background: #d6d8de; vertical-align: -2px; }
+</style>
+</head>
+<body>
+<header><i></i><i></i><i></i></header>
+<main>
+  <div class="dim">~/northwind</div>
+  <div class="me" id="said">&gt; add an invoices page with a table and three totals</div>
+  <div id="answer">Added src/pages/Invoices.tsx with the table and the totals. It is running on localhost:3000.</div>
+  <div class="box" id="prompt"><span class="dim">&gt;</span> <span class="caret"></span></div>
+</main>
+</body>
+</html>

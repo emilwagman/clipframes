@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoices · Northwind</title>
+<!-- lab/northwind.html with what the fix prototypes need: a longer table to scroll, a menu that opens on a click, and a second view behind the navigation. -->
+<!-- A fictional app to record Clipframes against. Serve with: python3 -m http.server 3000 (from this folder). -->
+<style>
+  :root { --ink: #17181c; --ink-2: #5d616b; --ink-3: #9a9ea8; --line: #e8e9ee; --bg: #f7f8fa; --brand: #3b3fd8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif; color: var(--ink); background: #fff; }
+  .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+  aside { background: var(--bg); border-right: 1px solid var(--line); padding: 22px 16px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; margin-bottom: 26px; }
+  .logo i { width: 24px; height: 24px; border-radius: 7px; background: var(--brand); }
+  nav a { display: block; padding: 7px 10px; border-radius: 7px; color: var(--ink-2); text-decoration: none; margin-bottom: 2px; }
+  nav a.on { background: #ebecf3; color: var(--ink); font-weight: 550; }
+  main { padding: 30px 40px; }
+  .top { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+  h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-3); font-size: 13px; }
+  .actions { display: flex; gap: 10px; align-items: center; }
+  input[type=search] { width: 220px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+  button { font: inherit; font-weight: 550; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 26px; }
+  .stat { border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .stat span { color: var(--ink-3); font-size: 12.5px; }
+  .stat strong { display: block; font-size: 24px; font-weight: 650; margin-top: 2px; }
+  .stat.overdue strong { color: #d6333a; }
+  table { width: 100%; border-collapse: collapse; margin-top: 26px; }
+  th { text-align: left; font-size: 12px; font-weight: 550; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.04em; padding: 0 12px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 13px 12px; border-bottom: 1px solid #f1f2f5; }
+  td.amount, th.amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .badge { font-size: 12px; font-weight: 550; padding: 3px 9px; border-radius: 999px; }
+  .badge.paid { background: #e3f6ea; color: #17803d; }
+  .badge.due { background: #fff4d6; color: #9a6b00; }
+  .badge.overdue { background: #fde6e7; color: #c42a31; }
+  .menu { position: relative; }
+  .menu ul { position: absolute; right: 0; top: calc(100% + 6px); z-index: 2; margin: 0; padding: 6px; list-style: none; min-width: 150px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(23,24,28,.12); }
+  .menu li { padding: 7px 10px; border-radius: 6px; cursor: pointer; }
+  .menu li:hover { background: var(--bg); }
+  .menu li.on { font-weight: 550; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="logo"><i></i>Northwind</div>
+    <nav>
+      <a href="#">Overview</a>
+      <a href="#" class="on" id="nav-invoices">Invoices</a>
+      <a href="#" id="nav-customers">Customers</a>
+      <a href="#">Reports</a>
+      <a href="#">Settings</a>
+    </nav>
+  </aside>
+  <main>
+    <div class="top">
+      <div><h1>Invoices</h1><div class="sub">September 2026 · 128 invoices</div></div>
+      <div class="actions">
+        <input type="search" id="invoice-search" placeholder="Search" aria-label="Search invoices" style="width:150px">
+        <div class="menu"><button id="filter" class="btn" aria-haspopup="true">Status: All</button><ul id="filter-menu" hidden><li class="on">All</li><li>Paid</li><li>Due</li><li>Overdue</li></ul></div>
+        <button id="export" class="btn">Export</button>
+        <button id="new-invoice" class="btn btn-primary primary">New invoice</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat" id="paid-total"><span>Paid this month</span><strong>$48,210</strong></div>
+      <div class="stat" id="outstanding-total"><span>Outstanding</span><strong>$12,940</strong></div>
+      <div class="stat overdue" id="overdue-total"><span>Overdue</span><strong>$3,120</strong></div>
+    </div>
+    <table id="invoice-table">
+      <thead><tr><th>Invoice</th><th>Customer</th><th>Status</th><th>Due</th><th class="amount">Amount</th></tr></thead>
+      <tbody>
+        <tr><td>INV-1042</td><td>Maersk Line</td><td><span class="badge overdue">Overdue</span></td><td>Sep 12</td><td class="amount">$3,120.00</td></tr>
+        <tr><td>INV-1041</td><td>Cellmark AB</td><td><span class="badge due">Due</span></td><td>Oct 02</td><td class="amount">$8,400.00</td></tr>
+        <tr><td>INV-1040</td><td>Movia Care</td><td><span class="badge paid">Paid</span></td><td>Sep 28</td><td class="amount">$1,950.00</td></tr>
+        <tr><td>INV-1039</td><td>Nyberg Bil</td><td><span class="badge paid">Paid</span></td><td>Sep 26</td><td class="amount">$6,300.00</td></tr>
+        <tr><td>INV-1038</td><td>Ekvia Group</td><td><span class="badge due">Due</span></td><td>Oct 05</td><td class="amount">$4,540.00</td></tr>
+        <tr><td>INV-1037</td><td>Vanta Studio</td><td><span class="badge paid">Paid</span></td><td>Sep 21</td><td class="amount">$2,780.00</td></tr>
+        <tr><td>INV-1036</td><td>Plex Tech</td><td><span class="badge paid">Paid</span></td><td>Sep 18</td><td class="amount">$12,200.00</td></tr>
+        <tr><td>INV-1035</td><td>Arla Foods</td><td><span class="badge paid">Paid</span></td><td>Sep 17</td><td class="amount">$5,410.00</td></tr>
+        <tr><td>INV-1034</td><td>Lindex AB</td><td><span class="badge due">Due</span></td><td>Oct 08</td><td class="amount">$2,090.00</td></tr>
+        <tr><td>INV-1033</td><td>Maersk Line</td><td><span class="badge paid">Paid</span></td><td>Sep 15</td><td class="amount">$9,870.00</td></tr>
+        <tr><td>INV-1032</td><td>Tibber</td><td><span class="badge overdue">Overdue</span></td><td>Sep 09</td><td class="amount">$1,240.00</td></tr>
+        <tr><td>INV-1031</td><td>Movia Care</td><td><span class="badge paid">Paid</span></td><td>Sep 11</td><td class="amount">$3,300.00</td></tr>
+        <tr><td>INV-1030</td><td>Polarn AB</td><td><span class="badge paid">Paid</span></td><td>Sep 10</td><td class="amount">$760.00</td></tr>
+        <tr><td>INV-1029</td><td>Ekvia Group</td><td><span class="badge due">Due</span></td><td>Oct 11</td><td class="amount">$4,125.00</td></tr>
+        <tr><td>INV-1028</td><td>Plex Tech</td><td><span class="badge paid">Paid</span></td><td>Sep 08</td><td class="amount">$7,950.00</td></tr>
+        <tr><td>INV-1027</td><td>Nyberg Bil</td><td><span class="badge paid">Paid</span></td><td>Sep 05</td><td class="amount">$2,460.00</td></tr>
+        <tr><td>INV-1026</td><td>Cellmark AB</td><td><span class="badge overdue">Overdue</span></td><td>Sep 03</td><td class="amount">$5,005.00</td></tr>
+        <tr><td>INV-1025</td><td>Vanta Studio</td><td><span class="badge paid">Paid</span></td><td>Sep 02</td><td class="amount">$1,180.00</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+<template id="customers-view">
+    <div class="top"><div><h1>Customers</h1><div class="sub">42 customers</div></div><div class="actions"><button id="new-customer" class="btn btn-primary primary">New customer</button></div></div>
+    <table id="customer-table">
+      <thead><tr><th>Customer</th><th>Contact</th><th>Invoices</th><th class="amount">Billed</th></tr></thead>
+      <tbody>
+        <tr><td>Maersk Line</td><td>Ida Holm</td><td>14</td><td class="amount">$61,300.00</td></tr>
+        <tr><td>Cellmark AB</td><td>Jonas Berg</td><td>9</td><td class="amount">$40,150.00</td></tr>
+        <tr><td>Movia Care</td><td>Sara Lind</td><td>6</td><td class="amount">$12,480.00</td></tr>
+        <tr><td>Plex Tech</td><td>Omar Aziz</td><td>11</td><td class="amount">$58,900.00</td></tr>
+      </tbody>
+    </table>
+</template>
+<script>
+  // Enough behaviour to show what a round has to live through: a menu that opens on a click
+  // and closes on the next click anywhere, and navigation that replaces the view.
+  const menu = document.getElementById("filter-menu");
+  const filter = document.getElementById("filter");
+  document.addEventListener("click", (event) => {
+    const item = event.target.closest("#filter-menu li");
+    if (item) {
+      menu.querySelectorAll("li").forEach((li) => li.classList.toggle("on", li === item));
+      filter.textContent = "Status: " + item.textContent;
+      document.querySelectorAll("#invoice-table tbody tr").forEach((row) => (row.hidden = item.textContent !== "All" && !row.textContent.includes(item.textContent)));
+    }
+    menu.hidden = event.target !== filter || !menu.hidden;
+  });
+  const main = document.querySelector("main");
+  const invoices = [...main.children];
+  const go = (view) => {
+    main.replaceChildren(...(view === "customers" ? [document.getElementById("customers-view").content.cloneNode(true)] : invoices));
+    document.getElementById("nav-customers").classList.toggle("on", view === "customers");
+    document.getElementById("nav-invoices").classList.toggle("on", view !== "customers");
+  };
+  document.getElementById("nav-customers").addEventListener("click", (e) => (e.preventDefault(), go("customers")));
+  document.getElementById("nav-invoices").addEventListener("click", (e) => (e.preventDefault(), go("invoices")));
+</script>
+</body>
+</html>
