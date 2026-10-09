@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 // the site's colours are named after the app's.
 import "@desktop/ui/style.css";
 import "./globals.css";
+import Analytics from "./Analytics";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 const description = "Point at the thing you want changed, and Clipframes tells your agent exactly what it is. For Mac and Windows, for building with Claude Code and Codex.";
@@ -26,7 +27,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }

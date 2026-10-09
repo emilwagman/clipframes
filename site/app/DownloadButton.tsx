@@ -1,3 +1,6 @@
+"use client";
+
+import { track } from "@/lib/analytics";
 import { DOWNLOAD_MAC, DOWNLOAD_WINDOWS } from "@/lib/site";
 import s from "./home.module.css";
 
@@ -9,12 +12,12 @@ export function DownloadIcon() {
   );
 }
 
-/// The two download buttons, one per system.
-export function DownloadButtons() {
+/// The two download buttons, one per system. `place` says which pair on the page was used.
+export function DownloadButtons({ place }: { place: "hero" | "footer" }) {
   return (
     <>
-      <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_MAC}><DownloadIcon />Download for Mac</a>
-      <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_WINDOWS}><DownloadIcon />Download for Windows</a>
+      <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_MAC} onClick={() => track("download_clicked", { os: "mac", place })}><DownloadIcon />Download for Mac</a>
+      <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_WINDOWS} onClick={() => track("download_clicked", { os: "windows", place })}><DownloadIcon />Download for Windows</a>
     </>
   );
 }

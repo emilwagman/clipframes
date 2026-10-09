@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { track } from "@/lib/analytics";
 import { DOWNLOAD_PATH, REPO_URL } from "@/lib/site";
 import { formatStars } from "@/lib/github";
 import { DownloadIcon } from "./DownloadButton";
@@ -40,7 +41,7 @@ export default function Header({ stars: initial }: { stars: number | null }) {
             </span>
           )}
         </a>
-        <a className={s.pill} href={DOWNLOAD_PATH}><DownloadIcon />Download</a>
+        <a className={s.pill} href={DOWNLOAD_PATH} onClick={() => track("download_clicked", { os: "auto", place: "header" })}><DownloadIcon />Download</a>
       </div>
     </header>
   );

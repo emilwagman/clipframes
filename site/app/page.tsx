@@ -1,10 +1,11 @@
+import Footer from "./Footer";
 import Header from "./Header";
 import { DownloadButtons } from "./DownloadButton";
 import { Copied, Pasted } from "./demo/Copied";
 import HistoryDemo from "./demo/HistoryDemo";
 import Live from "./demo/Live";
 import Stage from "./demo/Stage";
-import { MAKER_URL, REPO_URL, REQUIREMENTS, VERSION } from "@/lib/site";
+import { REPO_URL, REQUIREMENTS, VERSION } from "@/lib/site";
 import { starCount } from "@/lib/github";
 import s from "./home.module.css";
 
@@ -23,10 +24,10 @@ function Pointed({ children, name }: { children: React.ReactNode; name: string }
   );
 }
 
-function Download() {
+function Download({ place }: { place: "hero" | "footer" }) {
   return (
     <div className={s.get}>
-      <div className={s.buttons}><DownloadButtons /></div>
+      <div className={s.buttons}><DownloadButtons place={place} /></div>
       <p className={s.meta}>Free · Version {VERSION} · {REQUIREMENTS}</p>
     </div>
   );
@@ -46,7 +47,7 @@ export default async function Home() {
             Clipframes is a small app for Mac and Windows, for building with Claude Code and Codex. Point at a button,
             drag an area or record a clip, say what you want, and your agent knows exactly what you mean.
           </p>
-          <Download />
+          <Download place="hero" />
           <div className={s.visual}>
             <Stage
               id="hero"
@@ -181,9 +182,14 @@ export default async function Home() {
             <h2>Your captures stay on your computer</h2>
             <p>
               Each capture is a folder in <code className={s.inline}>~/Clipframes</code> with the pictures, any clip frames,
-              and the notes.md your agent reads. Nothing is uploaded.
+              and the notes.md your agent reads.
             </p>
-            <p>Clipframes goes online only to check for updates, and it installs them for you.</p>
+            <p>
+              Clipframes goes online for two things. It checks GitHub for a new version and installs it for you. And it
+              sends anonymous counts of what is used and reports of errors, so problems can be found and fixed. This never
+              includes what is on your screen, what you picked or what you wrote. The <a href="/privacy">privacy page</a> lists
+              every event, and Settings has a switch to turn it off.
+            </p>
           </div>
         </section>
 
@@ -221,14 +227,11 @@ export default async function Home() {
 
         <div className={`${s.wrap} ${s.end}`}>
           <h2>Try it on your own app.</h2>
-          <Download />
+          <Download place="footer" />
         </div>
       </main>
 
-      <footer className={s.footer}>
-        <span>Made by <a href={MAKER_URL}>Emil Wagman</a></span>
-        <a href={REPO_URL}>Source on GitHub</a>
-      </footer>
+      <Footer />
       <Live />
     </>
   );

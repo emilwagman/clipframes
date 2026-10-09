@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@/lib/analytics";
 import { useSite } from "./engine";
 import s from "./copied.module.css";
 
@@ -21,7 +22,7 @@ export function Copied() {
   const text = round === undefined ? TWO : round.reference;
   return (
     <div className={s.copied}>
-      <pre className={s.text} data-copied="picks" aria-live="polite">{text || <span className={s.none}>Nothing is picked yet.</span>}</pre>
+      <pre className={s.text} data-copied="picks" aria-live="polite" onCopy={() => track("reference_copied")}>{text || <span className={s.none}>Nothing is picked yet.</span>}</pre>
       <p className={s.under}>
         {own !== null && own === text
           ? "This text is on your own clipboard now. Paste it anywhere to check."
@@ -37,7 +38,7 @@ export function Pasted() {
   return (
     <figure className={s.prompt}>
       <div className={s.window}>
-        <pre className={s.text} data-copied="latest"><span className={s.caret} aria-hidden="true">&gt; </span>{latest || MIXED}</pre>
+        <pre className={s.text} data-copied="latest" onCopy={() => track("reference_copied")}><span className={s.caret} aria-hidden="true">&gt; </span>{latest || MIXED}</pre>
       </div>
       <figcaption>
         {latest

@@ -71,6 +71,7 @@
   display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14.5px; color: var(--text-3); }
 .footer a { color: var(--text-2); text-decoration: none; }
 .footer a:hover { color: var(--text); }
+.links { display: flex; gap: 24px; }
 @media (max-width: 1168px) {
   .footer { margin-left: var(--gutter); margin-right: var(--gutter); }
 }

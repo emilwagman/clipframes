@@ -13,7 +13,8 @@ const csp = [
   "img-src 'self' data:",
   "media-src 'self'",
   "font-src 'self'",
-  "connect-src 'self'",
+  // The site's anonymous counts go to PostHog in the EU, and only when a key is set (lib/analytics.ts).
+  `connect-src 'self'${process.env.NEXT_PUBLIC_POSTHOG_KEY ? " https://eu.i.posthog.com" : ""}`,
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",

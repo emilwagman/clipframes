@@ -1,0 +1,29 @@
+/* The privacy page: plain reading, and the two lists of events as tables. */
+.page { max-width: calc(var(--page) + 2 * var(--gutter)); margin: 0 auto; padding: clamp(64px, 9vw, 112px) var(--gutter) 0; }
+.page h1 { margin: 0 0 20px; font: 650 clamp(34px, 5.4vw, 64px)/1.05 var(--sans); letter-spacing: -0.035em; }
+.page h2 { margin: 0 0 20px; font: 650 clamp(26px, 3.2vw, 36px)/1.12 var(--sans); letter-spacing: -0.025em; }
+.page section { padding-top: clamp(72px, 9vw, 112px); }
+.page p { max-width: var(--col); color: var(--text-2); }
+.page p + p { margin-top: 14px; }
+.page .lede { max-width: 740px; font-size: clamp(19px, 2vw, 23px); line-height: 1.5; }
+.page code { font: 0.86em var(--mono); background: var(--surface-2); padding: 2px 6px; border-radius: 6px; }
+
+.events { width: 100%; margin: 36px 0 28px; border-collapse: collapse; font-size: 16px; line-height: 1.5; }
+.events th { padding: 0 20px 10px 0; text-align: left; font-size: 14px; font-weight: 500; color: var(--text-3); border-bottom: 1px solid var(--border); }
+.events td { padding: 14px 20px 14px 0; vertical-align: top; color: var(--text-2); border-bottom: 1px solid var(--border); }
+.events td:first-child { width: 22%; white-space: nowrap; color: var(--text); }
+.events td:nth-child(2) { width: 28%; }
+.events td:last-child, .events th:last-child { padding-right: 0; }
+.page .note { font-size: 16px; }
+
+/* A phone: each event is its own block, with the column's name before each part. */
+@media (max-width: 720px) {
+  .events thead { display: none; }
+  .events, .events tbody, .events tr, .events td { display: block; width: auto; }
+  .events td:first-child, .events td:nth-child(2) { width: auto; white-space: normal; }
+  .events tr { padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .events td { padding: 0; border: 0; }
+  .events td + td { margin-top: 6px; }
+  .events td:not(:first-child)::before { content: attr(data-label) ": "; color: var(--text-3); }
+  .events tr:first-child { border-top: 1px solid var(--border); }
+}

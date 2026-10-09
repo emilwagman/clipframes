@@ -13,6 +13,7 @@ import { useStore as useApp } from "@desktop/ui/store";
 import { webPlatform } from "@desktop/ui/web";
 import type { WebPlatform } from "@desktop/ui/web";
 import type { Entry } from "@desktop/src/History";
+import { track } from "@/lib/analytics";
 import { direct } from "./touch";
 
 export type DemoId = "hero" | "picks" | "area" | "clip" | "tab";
@@ -49,6 +50,9 @@ export interface Demo {
   stop: (() => void) | null;
   /// How many rounds have been started, to tell the visitor's captures apart.
   rounds: number;
+  /// Counted once each per visit: the visitor took the demo over, and did what it is for.
+  started: boolean;
+  finished: boolean;
 }
 
 interface Site {
@@ -127,7 +131,7 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
   const d: Demo = {
     id, ...parts, platform, tool: options.tool ?? "element", opens: options.opens ?? true,
     round: { ...EMPTY, place: { name: PLACE, auto: true } }, hover: { rect: null, label: "" }, marks: [], area: { rect: null, recording: false },
-    still: null, taken: false, played: false, stop: null, rounds: 0,
+    still: null, taken: false, played: false, stop: null, rounds: 0, started: false, finished: false,
   };
   byGlass.set(glass, d);
   demos.set(id, d);
@@ -139,6 +143,11 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
     if (live === d) useApp.setState({ round });
     useSite.setState((s) => ({ rounds: { ...s.rounds, [id]: round }, latest: changed && round.reference && d.taken ? round.reference : s.latest }));
     if (changed && round.reference && d.taken) keep(d, round.reference);
+    // The visitor has done what the demo is for: picked something, or opened the bar from the tab.
+    if (d.taken && !d.finished && (id === "tab" ? round.picking : changed && round.reference !== "")) {
+      d.finished = true;
+      track("demo_finished", { demo: id });
+    }
   });
   platform.onHover((hover) => {
     d.hover = hover;
@@ -225,6 +234,8 @@ export function take(d: Demo): void {
   d.taken = true;
   d.stop?.();
   d.stop = null;
+  if (!d.started) track("demo_started", { demo: d.id });
+  d.started = true;
   useSite.setState((s) => ({ taken: { ...s.taken, [d.id]: true } }));
   if (live !== d) activate(d);
 }
