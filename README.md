@@ -1,35 +1,45 @@
 # Clipframes
 
-Clipframes is a macOS menu bar app for showing a coding agent what you mean. You point at something on screen, and Clipframes copies a reference you can paste into Claude Code or Codex.
+Clipframes is a small app for Mac and Windows for showing a coding agent what you mean. You point at something on screen, write what should change, and paste the result into Claude Code, Codex or any other agent.
 
-Press ⌃⇧Space from any app to open the Clipframes bar, then press 1, 2 or 3 or click a tool. You can change the shortcut in Settings.
+It works in every app on your computer: a web app in a browser, desktop apps built with Electron or Tauri, and native apps. You don't add anything to your project.
 
-- **Element** (1): click one thing, like a button or a card. Clipframes saves a screenshot and reads the element's name, role and, in browsers and Electron apps, its DOM id, classes and URL.
-- **Screenshot** (2): drag an area. Clipframes saves the image and names the elements inside it.
-- **Clip** (3): record an area, and press ⌃⇧Space to stop. Clipframes saves the video, a set of frames and a timeline of what you clicked.
+## How it works
 
-Each capture is a folder in `~/Clipframes` with a `notes.md` that the agent reads. Captures stay on your Mac, and the app goes online only to check GitHub for updates. You can turn the update check off in Settings.
+Press Ctrl+Shift+Space (⌃⇧Space on a Mac) from any app. A small bar appears, and whatever is under the pointer is outlined and named.
+
+- **Element:** click one thing, like a button or a card. Clipframes reads its name and role and, in browsers and Electron apps, its id and classes, and saves a picture of it.
+- **Area:** drag over part of the screen to send a picture of it.
+- **Clip:** drag over an area and use the app as usual while it records. Clipframes saves the frames in order and a list of what you clicked.
+
+After each pick a small box asks what should change. Pick as many things as you like; the clipboard is up to date after every one. Then paste once:
+
+```
+[Clipframes: 2 things in Google Chrome "Invoices". Read ~/Clipframes/2026-10-09_11-42-30/notes.md]
+1. Button "New invoice" (#new-invoice .btn.btn-primary): make this green
+2. Text "$3,120" (#overdue-total .stat.overdue): too alarming, use the normal text colour
+```
+
+Each round is a folder in `~/Clipframes` with a `notes.md` the agent reads, and the pictures. History lists past rounds so you can copy one again.
+
+Clipframes remembers the apps and sites you used it on and shows a small tab there next time. A pin in the bar turns that off for a place.
 
 ## Install
 
-Download the latest zip from [Releases](https://github.com/emilwagman/clipframes/releases/latest), unzip it and move Clipframes to Applications. It needs macOS 15 or later and runs on Apple Silicon and Intel Macs.
+Download the latest version from [Releases](https://github.com/emilwagman/clipframes/releases/latest).
 
-On first launch it asks for two permissions in System Settings: Screen Recording, to take screenshots and clips, and Accessibility, to read which element you pointed at.
+- **Mac:** unzip and move Clipframes to Applications. On first use it asks for two permissions in System Settings: Accessibility, to read which element you pointed at, and Screen Recording, to take pictures and clips.
+- **Windows:** run the installer. It needs no permissions.
 
-Clipframes updates itself through [Sparkle](https://sparkle-project.org).
+Clipframes starts with the computer, with nothing on screen, and updates itself.
 
-## Build
+## What leaves your computer
 
-```
-app/build.sh               # builds and installs to ~/Applications
-NO_INSTALL=1 app/build.sh  # builds to app/build/ only
-```
+Your captures stay on your computer. Clipframes goes online for two things:
 
-The build uses `swiftc` directly, without an Xcode project. It downloads Sparkle into `app/vendor/` the first time.
+- It checks GitHub for a new version.
+- It sends anonymous counts of what is used and reports of errors, so problems can be found and fixed. This never includes what is on your screen, what you picked or what you wrote. [desktop/TELEMETRY.md](desktop/TELEMETRY.md) lists every event, and Settings has a switch to turn it off.
 
-## Release
+## Working on it
 
-1. Bump `CFBundleShortVersionString` and `CFBundleVersion` in `app/Info.plist` and commit.
-2. Run `app/release.sh "One line per change"`.
-
-The script builds, notarizes, publishes a GitHub release and adds the version to `appcast.xml`, which installed copies check for updates. The comment at the top of the script lists what it needs on the Mac it runs on.
+The app is in [`desktop/`](desktop/README.md): a Rust core (Tauri) and a React interface. The website is in `site/`.
