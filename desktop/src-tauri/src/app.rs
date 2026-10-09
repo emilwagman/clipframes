@@ -196,7 +196,7 @@ fn refresh_exempt(app: &AppHandle) {
     };
 }
 
-fn small_window(app: &AppHandle, label: &str, size: (f64, f64)) -> tauri::Result<WebviewWindow> {
+fn small_window<'a>(app: &'a AppHandle, label: &str, size: (f64, f64)) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("Clipframes")
         .inner_size(size.0, size.1)
@@ -213,17 +213,34 @@ fn small_window(app: &AppHandle, label: &str, size: (f64, f64)) -> tauri::Result
         .on_page_load(|window, payload| {
             trace(&format!("{}: page {:?}", window.label(), payload.event()));
         })
-        .build()
 }
 
-/// Bottom centre of the main display.
-fn place_bar(app: &AppHandle, bar: &WebviewWindow) {
-    let Ok(Some(m)) = app.primary_monitor() else { return };
+/// Where the bar goes: bottom centre of the main display, in physical pixels.
+fn bar_position(app: &AppHandle) -> Option<(PhysicalPosition<i32>, f64)> {
+    let m = app.primary_monitor().ok()??;
     let (pos, size, scale) = (m.position(), m.size(), m.scale_factor());
     let (w, h) = (BAR_SIZE.0 * scale, BAR_SIZE.1 * scale);
     let x = pos.x as f64 + (size.width as f64 - w) / 2.0;
     let y = pos.y as f64 + size.height as f64 - h - 96.0 * scale;
-    let _ = bar.set_position(PhysicalPosition::new(x as i32, y as i32));
+    Some((PhysicalPosition::new(x as i32, y as i32), scale))
+}
+
+/// The bar, on screen. A kept one is moved and shown; a new one is built where it belongs and
+/// already visible, so nothing waits for a second step once the web view is up.
+fn show_bar(app: &AppHandle) -> Option<WebviewWindow> {
+    let place = bar_position(app);
+    if let Some(bar) = app.get_webview_window(BAR) {
+        if let Some((position, _)) = place {
+            let _ = bar.set_position(position);
+        }
+        let _ = bar.show();
+        return Some(bar);
+    }
+    let mut builder = small_window(app, BAR, BAR_SIZE).visible(true);
+    if let Some((position, scale)) = place {
+        builder = builder.position(position.x as f64 / scale, position.y as f64 / scale);
+    }
+    builder.build().ok()
 }
 
 /// One click-through window per display. They only paint; the picker owns the input.
@@ -289,35 +306,36 @@ fn open(app: &AppHandle) {
     *core.notes.lock().unwrap() = None;
     *core.trouble.lock().unwrap() = (!element::permitted()).then(|| "permission".to_string());
 
-    let warm = app.get_webview_window(BAR);
-    let was_warm = warm.is_some();
-    let Some(bar) = warm.or_else(|| small_window(app, BAR, BAR_SIZE).ok()) else { return };
-    trace("open: bar window built");
-    place_bar(app, &bar);
-    let _ = bar.show();
-    trace("open: bar shown");
+    let was_warm = app.get_webview_window(BAR).is_some();
+    if core.trouble.lock().unwrap().is_none() {
+        // Input first: clicks are picks from here on. The windows that show it follow, and
+        // starting a web view is the slow part of opening.
+        let handle = app.clone();
+        match Picker::start(move |event| on_event(&handle, event)) {
+            Ok(picker) => *core.picker.lock().unwrap() = Some(picker),
+            Err(message) => *core.trouble.lock().unwrap() = Some(message),
+        }
+    }
+    let picking = started.elapsed();
+    trace("open: input started");
+
+    if show_bar(app).is_none() {
+        // No bar means no way to see or end the round.
+        drop(core.picker.lock().unwrap().take());
+        return;
+    }
+    trace("open: bar on screen");
     if core.trouble.lock().unwrap().is_some() {
         let _ = app.emit("round", view(app));
         return;
     }
-
-    // Input first: picking works from here on, the windows that paint it follow.
-    let handle = app.clone();
-    match Picker::start(move |event| on_event(&handle, event)) {
-        Ok(picker) => *core.picker.lock().unwrap() = Some(picker),
-        Err(message) => {
-            *core.trouble.lock().unwrap() = Some(message);
-            let _ = app.emit("round", view(app));
-            return;
-        }
-    }
     refresh_exempt(app);
-    let picking = started.elapsed();
     let screens = open_overlays(app);
     trace("open: overlays built");
     *core.screens.lock().unwrap() = screens;
-    let _ = small_window(app, NOTE, NOTE_SIZE);
+    let _ = small_window(app, NOTE, NOTE_SIZE).build();
     trace("open: comment box built");
+    refresh_exempt(app);
     publish(app);
     eprintln!("open ({}): picking after {:.0} ms, all windows after {:.0} ms", if was_warm { "warm" } else { "cold" }, picking.as_secs_f64() * 1000.0, started.elapsed().as_secs_f64() * 1000.0);
 }
