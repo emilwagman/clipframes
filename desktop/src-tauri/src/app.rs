@@ -1117,7 +1117,7 @@ fn open_settings(app: &AppHandle) {
     // An ordinary window, built when asked for and gone when closed.
     let built = WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("index.html".into()))
         .title("Clipframes")
-        .inner_size(440.0, 420.0)
+        .inner_size(440.0, if telemetry::available() { 525.0 } else { 420.0 })
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
