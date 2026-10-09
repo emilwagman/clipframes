@@ -52,7 +52,7 @@ ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/Clipframes.zip"
 COPYFILE_DISABLE=1 tar -czf "$OUT/Clipframes.app.tar.gz" -C "$(dirname "$APP")" Clipframes.app
 MAC_SIG=$(sign "$OUT/Clipframes.app.tar.gz")
 
-echo "Windows: building on $WIN_HOST…"
+echo "Windows: building on ${WIN_HOST}…"
 ssh -o ServerAliveInterval=30 "$WIN_HOST" "cd $WIN_REPO; git fetch -q; git checkout -q $BRANCH; git pull -q; if ((git rev-parse HEAD) -ne '$(git rev-parse HEAD)') { throw 'Windows is not on the same commit.' }; cd desktop; pnpm install --frozen-lockfile | Out-Null; '{\"bundle\":{\"createUpdaterArtifacts\":false}}' | Set-Content -Encoding ASCII \$env:TEMP\cf-release.json; pnpm -s tauri build --bundles nsis --config \$env:TEMP\cf-release.json | Out-Null; if (-not (Test-Path src-tauri\target\release\bundle\nsis\Clipframes_${VERSION}_x64-setup.exe)) { throw 'No installer was built.' }"
 scp -q "$WIN_HOST:$(printf '%s' "$WIN_REPO" | tr '\\' '/')/desktop/src-tauri/target/release/bundle/nsis/Clipframes_${VERSION}_x64-setup.exe" "$OUT/Clipframes-setup.exe"
 WIN_SIG=$(sign "$OUT/Clipframes-setup.exe")
