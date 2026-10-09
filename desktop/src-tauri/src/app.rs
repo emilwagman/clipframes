@@ -866,24 +866,35 @@ fn start_recording(app: &AppHandle, rect: Rect) {
     let app = app.clone();
     thread::spawn(move || {
         let (mut frames, mut pixels, mut times) = (0u32, (0u32, 0u32), Vec::new());
+        let (mut tries, mut failed) = (0u32, 0u32);
         loop {
             let at = recording.started.elapsed();
             if recording.stop.load(Ordering::SeqCst) || at > LONGEST_CLIP {
                 break;
             }
+            tries += 1;
             match shot::capture_to_file(&rect, &dir.join(format!("{:03}.png", frames + 1)), Some(FRAME_WIDTH)) {
                 Ok(size) => {
                     frames += 1;
+                    failed = 0;
                     pixels = size;
                     times.push(at.as_secs_f64());
                 }
                 Err(_) if frames == 0 => break,
-                Err(_) => {}
+                // A capture that keeps failing (a full disk) ends the clip with what it has.
+                Err(_) => {
+                    failed += 1;
+                    if failed >= 8 {
+                        break;
+                    }
+                }
             }
             if frames % 4 == 0 {
                 let _ = app.emit("round", view(&app)); // the clock in the bar
             }
-            let next = FRAME_EVERY * frames.max(1);
+            // By tries, not frames: a failed frame waits its turn like any other, instead of
+            // being tried again a hundred times a second.
+            let next = FRAME_EVERY * tries;
             thread::sleep(next.saturating_sub(recording.started.elapsed()).max(Duration::from_millis(10)));
         }
         let seconds = recording.started.elapsed().as_secs_f64();
