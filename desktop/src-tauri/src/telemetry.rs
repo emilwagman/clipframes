@@ -57,11 +57,18 @@ pub fn available() -> bool {
     endpoint().is_some()
 }
 
-fn post(url: &str, key: &str, batch: Vec<Value>) {
+/// Sends a batch and waits for it, but never longer than `patience`. The request runs as a task
+/// on the app's runtime; this thread only waits, so it is safe from any thread, including one
+/// of the runtime's own (a panic there is reported through here too).
+fn post(url: &str, key: &str, batch: Vec<Value>, patience: Duration) {
     let body = json!({ "api_key": key, "batch": batch });
-    let _ = tauri::async_runtime::block_on(async {
-        reqwest::Client::new().post(url).timeout(Duration::from_secs(8)).json(&body).send().await
+    let url = url.to_string();
+    let (done, wait) = channel::<()>();
+    tauri::async_runtime::spawn(async move {
+        let _ = reqwest::Client::new().post(url).timeout(Duration::from_secs(8)).json(&body).send().await;
+        let _ = done.send(());
     });
+    let _ = wait.recv_timeout(patience);
 }
 
 /// Call once at start. `on` is the user's setting.
@@ -91,18 +98,19 @@ pub fn start(install: String, version: &str, on: bool) {
                     Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => break,
                 }
             }
-            post(&url, &key, batch);
+            post(&url, &key, batch, Duration::from_secs(10));
         }
     });
     // A crash is reported before the process goes.
     let before = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let message = info.payload().downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| info.payload().downcast_ref::<String>().cloned()).unwrap_or_default();
-        let at = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_default();
-        if let (Some(event), Some((url, key))) = (build("$exception", exception("panic", &message, &at)), endpoint()) {
-            post(&url, &key, vec![event]);
-        }
+        // The usual report first: whatever happens below, the reason is on stderr.
         before(info);
+        let message = info.payload().downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| info.payload().downcast_ref::<String>().cloned()).unwrap_or_default();
+        let at = info.location().map(|l| format!("{}:{}", l.file().rsplit(['/', '\\']).next().unwrap_or(""), l.line())).unwrap_or_default();
+        if let (Some(event), Some((url, key))) = (build("$exception", exception("panic", &message, &at)), endpoint()) {
+            post(&url, &key, vec![event], Duration::from_secs(3));
+        }
     }));
 }
 
