@@ -621,6 +621,11 @@ fn open_now(app: &AppHandle) {
     *core.trouble.lock().unwrap() = (!element::permitted()).then(|| "permission".to_string());
 
     let was_warm = app.get_webview_window(BAR).is_some();
+    if was_warm {
+        // A kept bar is shown at once, long before the rest is up: it must not come back
+        // showing the count of the round before.
+        let _ = app.emit("round", view(app));
+    }
     if core.trouble.lock().unwrap().is_none() {
         // Input first: clicks are picks from here on. The windows that show it follow, and
         // starting a web view is the slow part of opening.
