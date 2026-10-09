@@ -534,6 +534,12 @@ fn open(app: &AppHandle) {
     *core.screens.lock().unwrap() = screens;
     let _ = small_window(app, NOTE, NOTE_SIZE).build();
     trace("open: comment box built");
+    // The overlays were built after the bar, so they sit above it: put the bar back on top,
+    // or a pick's outline would be drawn across it.
+    if let Some(bar) = app.get_webview_window(BAR) {
+        let _ = bar.set_always_on_top(false);
+        let _ = bar.set_always_on_top(true);
+    }
     refresh_exempt(app);
     publish(app);
     eprintln!("open ({}): picking after {:.0} ms, all windows after {:.0} ms", if was_warm { "warm" } else { "cold" }, picking.as_secs_f64() * 1000.0, started.elapsed().as_secs_f64() * 1000.0);
