@@ -23,6 +23,10 @@ fn main() {
     if args.first().map(String::as_str) == Some("up") {
         let x = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
         let y = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+        if args.iter().any(|a| a == "wake") {
+            println!("wake: {}", element::wake_at(x as f64, y as f64));
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+        }
         up(x, y);
         return;
     }
@@ -70,15 +74,13 @@ fn up(x: i32, y: i32) {
     while let Some(el) = cur {
         let text = |p: UIProperty| el.get_property_value(p).map(|v| v.to_string()).unwrap_or_default();
         println!(
-            "{depth:>2} {:?} name={:?} class={:?} id={:?} fw={:?} aria-role={:?} aria-props={:?} control={}",
+            "{depth:>2} {:?} name={:?} class={:?} id={:?} fw={:?} aria-role={:?}",
             el.get_control_type().ok(),
             el.get_name().unwrap_or_default().chars().take(40).collect::<String>(),
             el.get_classname().unwrap_or_default(),
             el.get_automation_id().unwrap_or_default(),
             el.get_framework_id().unwrap_or_default(),
             text(UIProperty::AriaRole),
-            text(UIProperty::AriaProperties),
-            text(UIProperty::IsControlElement),
         );
         depth += 1;
         if depth > 30 {
