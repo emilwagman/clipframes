@@ -19,6 +19,13 @@ fn main() {
         read(x, y);
         return;
     }
+    #[cfg(windows)]
+    if args.first().map(String::as_str) == Some("up") {
+        let x = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+        let y = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+        up(x, y);
+        return;
+    }
     let count: Option<u32> = args.first().and_then(|s| s.parse().ok());
     let mut n = 0;
     loop {
@@ -47,5 +54,36 @@ fn read(x: f64, y: f64) {
         }
         Err(ReadError::Nothing) => println!("({x:.0}, {y:.0})  nothing there"),
         Err(e) => println!("({x:.0}, {y:.0})  {}", serde_json::to_string(&e).unwrap_or_default()),
+    }
+}
+
+/// `cf-probe up X Y` (Windows): the element at a point and everything above it in the raw
+/// tree, with the properties a selector could be built from.
+#[cfg(windows)]
+fn up(x: i32, y: i32) {
+    use uiautomation::types::{Point, UIProperty};
+    use uiautomation::UIAutomation;
+    let automation = UIAutomation::new().expect("UI Automation");
+    let walker = automation.get_raw_view_walker().expect("raw walker");
+    let mut cur = automation.element_from_point(Point::new(x, y)).ok();
+    let mut depth = 0;
+    while let Some(el) = cur {
+        let text = |p: UIProperty| el.get_property_value(p).map(|v| v.to_string()).unwrap_or_default();
+        println!(
+            "{depth:>2} {:?} name={:?} class={:?} id={:?} fw={:?} aria-role={:?} aria-props={:?} control={}",
+            el.get_control_type().ok(),
+            el.get_name().unwrap_or_default().chars().take(40).collect::<String>(),
+            el.get_classname().unwrap_or_default(),
+            el.get_automation_id().unwrap_or_default(),
+            el.get_framework_id().unwrap_or_default(),
+            text(UIProperty::AriaRole),
+            text(UIProperty::AriaProperties),
+            text(UIProperty::IsControlElement),
+        );
+        depth += 1;
+        if depth > 30 {
+            break;
+        }
+        cur = walker.get_parent(&el).ok();
     }
 }
