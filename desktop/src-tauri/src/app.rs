@@ -106,6 +106,8 @@ pub struct Core {
     shown: Mutex<Option<Rect>>,
     /// Kept for the whole run: on Linux the clipboard's content lives only as long as its owner.
     clipboard: Mutex<Option<arboard::Clipboard>>,
+    /// What Clipframes last put on the clipboard.
+    copied: Mutex<String>,
     /// The round's folder and when it began, once something has been picked.
     folder: Mutex<Option<(PathBuf, Stamp)>>,
     /// The round's notes.md, once written: the path the pasted reference points to.
@@ -237,7 +239,24 @@ fn copy_text(app: &AppHandle, text: &str) {
     if let Some(c) = clipboard.as_mut() {
         // Windows programs expect CRLF; a terminal there joins lines that end in a bare LF.
         let _ = c.set_text(if cfg!(windows) { text.replace('\n', "\r\n") } else { text.to_string() });
+        *core.copied.lock().unwrap() = text.to_string();
     }
+}
+
+/// Empties the clipboard if what is on it is still what Clipframes put there. Anything the
+/// user has copied since is theirs and stays.
+fn uncopy(app: &AppHandle) {
+    let core = app.state::<Core>();
+    let ours = core.copied.lock().unwrap().clone();
+    let now = core.clipboard.lock().unwrap().as_mut().and_then(|c| c.get_text().ok());
+    if now.is_some_and(|now| same_text(&now, &ours)) {
+        copy_text(app, "");
+    }
+}
+
+/// Whether two pieces of clipboard text are the same, however their lines end.
+fn same_text(a: &str, b: &str) -> bool {
+    !a.is_empty() && a.replace("\r\n", "\n") == b.replace("\r\n", "\n")
 }
 
 /// Tells every window what the round looks like now, and puts it on the clipboard.
@@ -996,7 +1015,7 @@ fn pick_remove(app: AppHandle, index: usize) {
     };
     // The clipboard and the round's folder still hold the pick that was just taken back.
     if nothing_left {
-        copy_text(&app, "");
+        uncopy(&app);
         let folder = core.folder.lock().unwrap().take();
         if let Some((path, _)) = folder {
             let _ = std::fs::remove_dir_all(path);
@@ -1484,6 +1503,13 @@ mod tests {
     fn an_element_across_two_displays_is_pictured_on_the_one_showing_more_of_it() {
         let across = Rect { x: -100.0, y: 100.0, width: 400.0, height: 50.0 };
         assert_eq!(on_display(&across, &[MAIN, LEFT]), Some(Rect { x: 0.0, y: 100.0, width: 300.0, height: 50.0 }));
+    }
+
+    #[test]
+    fn the_clipboard_is_only_ours_while_it_holds_what_we_put_there() {
+        assert!(same_text("[Clipframes: 2 things]\r\n1. Button\r\n2. Link", "[Clipframes: 2 things]\n1. Button\n2. Link"));
+        assert!(!same_text("something the user copied since", "[Button \"Save\"]"));
+        assert!(!same_text("", ""), "an empty clipboard needs no emptying");
     }
 
     #[test]
