@@ -8,10 +8,27 @@ import { Overlay } from "../ui/Overlay";
 import type { Platform, Rect, RoundView } from "../ui/platform";
 import { EMPTY_ROUND } from "../ui/platform";
 import { connect, useStore } from "../ui/store";
+import { History } from "../src/History";
+import type { HistoryApi } from "../src/History";
 
 const state = new URLSearchParams(location.search).get("state") ?? "picked";
 const BAR = { w: 640, h: 80 };
 const NOTE = { w: 380, h: 158 };
+
+// Example captures for the History window.
+const examples: HistoryApi = {
+  list: async () => ({
+    total: 4,
+    entries: [
+      { id: "a", title: 'Button "New invoice" and 2 more', when: "2026-10-09 11:42", count: 3, images: ["/lab/thumbs/1.png", "/lab/thumbs/2.png", "/lab/thumbs/3.png"] },
+      { id: "b", title: "Screen clip, 6 s", when: "2026-10-09 10:15", count: 1, images: ["/lab/thumbs/4.png"] },
+      { id: "c", title: 'Text "$3,120" and 1 more', when: "2026-10-08 16:03", count: 2, images: ["/lab/thumbs/3.png", "/lab/thumbs/2.png"] },
+      { id: "d", title: "Screenshot", when: "2026-10-08 09:27", count: 1, images: ["/lab/thumbs/2.png"] },
+    ],
+  }),
+  copy: async () => {}, reveal: async () => {}, remove: async () => {},
+  src: (path) => path,
+};
 
 const frame = document.getElementById("page") as HTMLIFrameElement;
 frame.addEventListener("load", () => {
@@ -63,5 +80,11 @@ frame.addEventListener("load", () => {
   createRoot(document.getElementById("overlay") as HTMLElement).render(<Overlay />);
   mount("bar", (innerWidth - BAR.w) / 2, innerHeight - BAR.h - 40, BAR.w, BAR.h, <Bar />);
   mount("note", overdue.x, overdue.y + overdue.height + 8, NOTE.w, NOTE.h, <Note />);
-  setTimeout(() => (document.body.dataset.ready = "1"), 100);
+  if (state === "history") {
+    // A window of its own in the app; here a panel in the middle of the page.
+    const panel = document.getElementById("history") as HTMLElement;
+    panel.hidden = false;
+    createRoot(panel).render(<History api={examples} />);
+  }
+  setTimeout(() => (document.body.dataset.ready = "1"), 150);
 });

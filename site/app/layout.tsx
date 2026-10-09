@@ -3,7 +3,7 @@ import { Caveat } from "next/font/google";
 import "./globals.css";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
-const description = "Point at the thing you want changed, and Clipframes tells your agent exactly what it is. A Mac app for building with Claude Code and Codex.";
+const description = "Point at the thing you want changed, and Clipframes tells your agent exactly what it is. For Mac and Windows, for building with Claude Code and Codex.";
 
 // The handwriting for notes and marks, served from this site.
 const hand = Caveat({ subsets: ["latin"], weight: ["700"], variable: "--hand", display: "swap" });

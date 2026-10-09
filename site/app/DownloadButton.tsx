@@ -1,4 +1,4 @@
-import { DOWNLOAD_PATH, REQUIREMENTS, VERSION } from "@/lib/site";
+import { DOWNLOAD_MAC, DOWNLOAD_WINDOWS, REQUIREMENTS, VERSION } from "@/lib/site";
 import s from "./home.module.css";
 
 export function DownloadIcon() {
@@ -9,11 +9,21 @@ export function DownloadIcon() {
   );
 }
 
-/// The big download button, with the version and what it runs on beside it.
+/// The two download buttons, one per system.
+export function DownloadButtons() {
+  return (
+    <>
+      <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_MAC}><DownloadIcon />Download for Mac</a>
+      <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_WINDOWS}><DownloadIcon />Download for Windows</a>
+    </>
+  );
+}
+
+/// The download buttons with the version and what it runs on beside them.
 export default function DownloadButton() {
   return (
     <div className={s.get}>
-      <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_PATH}><DownloadIcon />Download for Mac</a>
+      <DownloadButtons />
       <span>Version {VERSION} · {REQUIREMENTS}</span>
     </div>
   );
