@@ -394,14 +394,37 @@ struct AxNode {
     in_page: bool,
 }
 
+/// The first pieces of text under these elements, joined: what a heading says when it has no
+/// title of its own. At most twenty elements are asked, and none after `left` has run out.
+fn text_inside(mut stack: Vec<AxNode>, left: Duration) -> String {
+    let started = Instant::now();
+    let mut said: Vec<String> = Vec::new();
+    stack.reverse();
+    for _ in 0..20 {
+        let left = left.saturating_sub(started.elapsed());
+        let Some(node) = stack.pop().filter(|_| !left.is_zero() && said.len() < 3) else { break };
+        let opened = node.open(left);
+        if opened.role == "StaticText" && !opened.name.is_empty() {
+            said.push(opened.name);
+        }
+        stack.extend(opened.children.into_iter().rev());
+    }
+    said.join(" ")
+}
+
 /// What is asked about each element on the way, in this order, in one message to the app:
 /// asked one by one, a page of a thousand elements would be seven thousand messages.
 const ASKED: [&str; 7] = [kAXRoleAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXPlaceholderValueAttribute, kAXHelpAttribute, kAXValueAttribute, kAXChildrenAttribute];
 
 impl Node for AxNode {
-    fn open(&self) -> Opened<AxNode> {
+    fn open(&self, left: Duration) -> Opened<AxNode> {
         let mut opened = Opened { role: String::new(), name: String::new(), heading: None, children: Vec::new() };
+        let asked_at = Instant::now();
         unsafe {
+            // This element's answer may take what is left of the look's time and no more.
+            // Set on the element it holds for this element only (AXUIElement.h), so nothing
+            // has to be put back afterwards.
+            AXUIElementSetMessagingTimeout(self.element.0, left.as_secs_f32().clamp(0.005, TIMEOUT_SECONDS));
             let asked: Vec<CFString> = ASKED.iter().map(|a| CFString::new(a)).collect();
             let asked = CFArray::from_CFTypes(&asked);
             let mut answers: CFArrayRef = ptr::null();
@@ -421,15 +444,17 @@ impl Node for AxNode {
             let name = (1..=4).map(text).find(|s| !s.is_empty()).unwrap_or_default();
             let value = text(5);
             opened.name = if !name.is_empty() { name } else if value.chars().count() < 200 { value } else { String::new() };
+            let inside = || answers.get(6).map(|v| elements_of(&v)).unwrap_or_default().into_iter().map(|element| AxNode { element, in_page: self.in_page });
             if opened.role == "Heading" {
-                // A heading says its text as its title, its value, or only in the text inside it.
-                opened.heading = Some(if opened.name.is_empty() { inner_text(&self.element) } else { opened.name.clone() });
+                // A heading says its text as its title, its value, or only in the text inside
+                // it. Looking inside is more questions, asked within the same time.
+                opened.heading = Some(if opened.name.is_empty() { text_inside(inside().collect(), left.saturating_sub(asked_at.elapsed())) } else { opened.name.clone() });
             }
             // What is inside a piece of text is its lines, one element each in Chromium: half
             // of a page's elements, and never a heading or anything that can be picked.
             let closed = opened.role == "StaticText" || (opened.role == "WebArea" && !self.in_page);
             if !closed {
-                opened.children = answers.get(6).map(|v| elements_of(&v)).unwrap_or_default().into_iter().map(|element| AxNode { element, in_page: self.in_page }).collect();
+                opened.children = inside().collect();
             }
         }
         opened

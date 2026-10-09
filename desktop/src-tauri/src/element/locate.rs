@@ -17,7 +17,8 @@ pub struct Budget {
 }
 
 /// What a click may spend. The comment box waits for this, so it stays well under the time a
-/// pause is noticed.
+/// pause is noticed. The time is also the longest any one question to the app may take: each
+/// is asked with what is left of it (`Node::open`).
 pub const BUDGET: Budget = Budget { nodes: 3000, time: Duration::from_millis(80) };
 
 /// Headings are cut to about this many characters.
@@ -115,7 +116,8 @@ pub struct Opened<N> {
 /// A node of an app's tree of elements. Asking is a call into the other app, so everything
 /// about a node comes from one question.
 pub trait Node: Sized {
-    fn open(&self) -> Opened<Self>;
+    /// `left` is what remains of the time budget: the answer must not be waited for longer.
+    fn open(&self, left: Duration) -> Opened<Self>;
     /// Whether this is the same element as `other`.
     fn is(&self, other: &Self) -> bool;
 }
@@ -130,7 +132,8 @@ pub fn walk<N: Node>(root: N, target: &N, role: &str, name: &str, budget: &Budge
     let (mut target_depth, mut left) = (None::<usize>, false);
     let (mut before, mut own) = (false, false);
     while let Some((node, depth)) = stack.pop() {
-        if seen.len() >= budget.nodes || started.elapsed() > budget.time {
+        let time_left = budget.time.saturating_sub(started.elapsed());
+        if seen.len() >= budget.nodes || time_left.is_zero() {
             return None;
         }
         let is_target = target_depth.is_none() && node.is(target);
@@ -138,7 +141,7 @@ pub fn walk<N: Node>(root: N, target: &N, role: &str, name: &str, budget: &Budge
             left = true;
         }
         let inside = target_depth.is_some() && !left;
-        let opened = node.open();
+        let opened = node.open(time_left);
         if is_target {
             target_depth = Some(depth);
         } else if opened.heading.is_some() {
@@ -186,7 +189,7 @@ mod tests {
     }
 
     impl Node for Fake {
-        fn open(&self) -> Opened<Fake> {
+        fn open(&self, _left: Duration) -> Opened<Fake> {
             self.opened.set(self.opened.get() + 1);
             Opened { role: self.role.into(), name: self.name.into(), heading: (self.role == "Heading").then(|| self.name.to_string()), children: self.children.clone() }
         }
@@ -294,6 +297,30 @@ mod tests {
         assert_eq!(page.opened.get(), 5, "and it stopped asking there");
         assert_eq!(page.locate(8, &Budget { nodes: 1000, time: Duration::ZERO }), None, "no time at all");
         assert_eq!(page.locate(8, &Budget { nodes: 14, time: Duration::from_secs(5) }).unwrap().occurrence, Some((2, 2)), "exactly enough");
+    }
+
+    /// An app that is busy or has hung: every answer takes as long as it is given, up to the
+    /// quarter second one question may take on macOS.
+    struct Slow;
+
+    impl Node for Slow {
+        fn open(&self, left: Duration) -> Opened<Slow> {
+            std::thread::sleep(left.min(Duration::from_millis(250)));
+            Opened { role: "Group".into(), name: String::new(), heading: None, children: vec![Slow, Slow] }
+        }
+
+        fn is(&self, _: &Slow) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn one_slow_answer_is_not_waited_for_past_the_budget() {
+        let started = Instant::now();
+        assert_eq!(walk(Slow, &Slow, "Button", "Save", &BUDGET), None);
+        let took = started.elapsed();
+        assert!(took >= BUDGET.time, "it did wait for what it was allowed: {took:?}");
+        assert!(took < BUDGET.time * 2, "and not for the quarter second a question may take otherwise: {took:?}");
     }
 
     #[test]
