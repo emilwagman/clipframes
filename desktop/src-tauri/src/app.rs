@@ -637,10 +637,20 @@ fn on_display(rect: &Rect, displays: &[Rect]) -> Option<Rect> {
 fn close_round_windows(app: &AppHandle) {
     app.state::<Core>().screens.lock().unwrap().clear();
     // Every overlay there is, not only the ones this round knows about.
+    let mut going = Vec::new();
     for (label, w) in app.webview_windows() {
         if label == NOTE || label.starts_with(OVERLAY) {
             let _ = w.destroy();
+            going.push(label);
         }
+    }
+    // Destroying is only asked for here; the window is gone once the main thread has done
+    // it. An open that came straight after would find the window still listed, use it for
+    // the new round, and lose it a moment later. So the close waits until they are gone,
+    // which the next open cannot overtake: both hold the same lock.
+    let asked = Instant::now();
+    while going.iter().any(|label| app.get_webview_window(label).is_some()) && asked.elapsed() < Duration::from_millis(500) {
+        thread::sleep(Duration::from_millis(5));
     }
 }
 
