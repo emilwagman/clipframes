@@ -6,6 +6,7 @@
 //! The overlay asks for the element under the pointer as the pointer moves. A frame at 60 Hz
 //! is 16.7 ms; readings slower than that are answered late, never drawn late, because the
 //! reading runs off the UI thread. This prints the distribution so that claim can be checked.
+//! Then it times the fuller reading made once for a click.
 
 use clipframes_lib::element;
 use std::env;
@@ -50,6 +51,30 @@ fn main() {
     for (app, mut v) in by_app {
         report(&app, &mut v);
     }
+
+    // What a click adds to a reading: which one of several it is and under what heading, a
+    // look through the whole page or window. It may take up to its budget and then says
+    // nothing, so this also counts how often it had something to say.
+    let (mut click, mut extra, mut said) = (Vec::new(), Vec::new(), 0);
+    for r in 0..rows {
+        for c in (0..cols).step_by(2) {
+            let x = (c as f64 + 0.5) * width / cols as f64;
+            let y = (r as f64 + 0.5) * height / rows as f64;
+            let t = Instant::now();
+            let _ = element::element_full_at(x, y);
+            let plain = t.elapsed().as_secs_f64() * 1000.0;
+            let t = Instant::now();
+            let picked = element::element_picked_at(x, y);
+            let took = t.elapsed().as_secs_f64() * 1000.0;
+            click.push(took);
+            extra.push((took - plain).max(0.0));
+            said += picked.is_ok_and(|e| e.occurrence.is_some() || e.heading.is_some()) as usize;
+        }
+    }
+    let budget = &element::locate::BUDGET;
+    println!("the reading for a click, at {} points (budget for the look through the page: {} elements or {} ms); {said} said which one or under what heading", click.len(), budget.nodes, budget.time.as_millis());
+    report("click, whole reading", &mut click);
+    report("click, the look alone", &mut extra);
 }
 
 fn report(label: &str, v: &mut Vec<f64>) {

@@ -44,6 +44,9 @@ core-graphics = "0.25"
 
 [target.'cfg(windows)'.dependencies]
 uiautomation = "0.25"
+# Already in the build through uiautomation, at this version: named here for the one call
+# that limits how long a question to another app may take (element/windows.rs).
+windows = { version = "0.62", features = ["Win32_UI_Accessibility"] }
 
 [features]
 # The interface is built into the app. Plain `cargo build` gives the real thing; only

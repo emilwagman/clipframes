@@ -245,7 +245,7 @@ fn quick(_x: f64, _y: f64) -> Option<ElementInfo> {
 
 #[cfg(not(test))]
 fn full(x: f64, y: f64) -> Option<ElementInfo> {
-    element::element_full_at(x, y).ok()
+    element::element_picked_at(x, y).ok()
 }
 
 /// Tests never read the real screen.

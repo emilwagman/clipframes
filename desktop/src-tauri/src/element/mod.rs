@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod locate;
+
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
@@ -52,6 +54,23 @@ pub struct ElementInfo {
     /// Up to four named containers around it, outermost first.
     pub path: Vec<String>,
     pub frame: Rect,
+    /// When other elements in the same page or window have its role and name: which of them
+    /// it is, counted from 1 in document order, and how many there are.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub occurrence: Option<(u32, u32)>,
+    /// The heading it comes under.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heading: Option<Heading>,
+}
+
+/// The heading that says where on the page an element is.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Heading {
+    pub text: String,
+    /// False: the last heading before the element. True: there is none before it and this
+    /// one is inside it, as in a section that begins with its own heading.
+    pub inside: bool,
 }
 
 impl ElementInfo {
@@ -86,6 +105,39 @@ impl ElementInfo {
             parts.push(format!("id={}", self.identifier));
         }
         parts.join(" ")
+    }
+
+    /// What tells it apart from others of its role: its name, or for something without one
+    /// (a piece of text on macOS) the value it shows. Empty when it has neither, or is only
+    /// known by the text found inside it.
+    pub fn label(&self) -> &str {
+        if !self.name.is_empty() {
+            &self.name
+        } else if self.inner_text.is_empty() {
+            &self.value
+        } else {
+            ""
+        }
+    }
+
+    /// `2nd of 2 on the page`: which of several elements that read the same this one is.
+    /// "On the page" inside a browser or a web view, "in the window" in any other app.
+    pub fn which_one(&self) -> Option<String> {
+        let (nth, of) = self.occurrence.filter(|(nth, of)| *of > 1 && *nth >= 1 && nth <= of)?;
+        Some(format!("{} of {of} {}", locate::ordinal(nth), if self.url.is_empty() { "in the window" } else { "on the page" }))
+    }
+
+    /// `under heading "Try it on your own app."`, or `with heading "Questions"` for
+    /// something that holds its heading itself.
+    pub fn under_what(&self) -> Option<String> {
+        let heading = self.heading.as_ref().filter(|h| !h.text.is_empty())?;
+        Some(format!("{} heading \"{}\"", if heading.inside { "with" } else { "under" }, heading.text))
+    }
+
+    /// Both of those, in the order they are said. The one place that words them, for the
+    /// pasted line and for notes.md.
+    pub fn whereabouts(&self) -> Vec<String> {
+        self.which_one().into_iter().chain(self.under_what()).collect()
     }
 }
 
@@ -150,6 +202,13 @@ pub fn page_at(x: f64, y: f64, may_wake: bool) -> String {
     platform::page_at(x, y, may_wake)
 }
 
+/// The full reading of an element the user just clicked: everything `element_full_at` says,
+/// and which one it is among those that read the same and what heading it is under. That
+/// means going through the page or window, within `locate::BUDGET`. Never for a hover.
+pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    platform::element_picked_at(x, y)
+}
+
 /// Housekeeping to call now and then: lets apps that were asked for their page structure go
 /// back to sleep once they have not been looked at for `older_than`.
 pub fn sleep_idle(older_than: std::time::Duration) {
@@ -171,6 +230,36 @@ mod tests {
         };
         assert_eq!(e.headline(), "Button \"New invoice\"");
         assert_eq!(e.selector(), "#new-invoice .btn.btn-primary");
+    }
+
+    #[test]
+    fn which_one_and_under_what_are_worded_in_one_place() {
+        let mut e = ElementInfo { role: "Link".into(), name: "Download".into(), url: "https://clipframes.com/".into(), ..Default::default() };
+        assert_eq!(e.whereabouts(), Vec::<String>::new());
+        e.occurrence = Some((2, 2));
+        e.heading = Some(Heading { text: "Try it on your own app.".into(), inside: false });
+        assert_eq!(e.whereabouts(), ["2nd of 2 on the page", "under heading \"Try it on your own app.\""]);
+        // A native app has windows, not pages; a section can hold its own heading.
+        e.url.clear();
+        e.occurrence = Some((11, 23));
+        e.heading = Some(Heading { text: "Questions".into(), inside: true });
+        assert_eq!(e.whereabouts(), ["11th of 23 in the window", "with heading \"Questions\""]);
+        // The only one of its kind is not numbered, whatever was stored.
+        e.occurrence = Some((1, 1));
+        e.heading = None;
+        assert_eq!(e.whereabouts(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn captures_from_before_these_facts_still_load_and_new_ones_only_add_them_when_known() {
+        let old = r#"{"app":"Google Chrome","role":"Button","name":"Save","path":[],"frame":{"x":1,"y":2,"width":3,"height":4}}"#;
+        let e: ElementInfo = serde_json::from_str(old).unwrap();
+        assert_eq!((e.occurrence, e.heading.clone()), (None, None));
+        assert!(!serde_json::to_string(&e).unwrap().contains("occurrence"));
+        let new = ElementInfo { occurrence: Some((2, 4)), heading: Some(Heading { text: "Invoices".into(), inside: false }), ..e };
+        let json = serde_json::to_string(&new).unwrap();
+        assert!(json.contains(r#""occurrence":[2,4],"heading":{"text":"Invoices","inside":false}"#), "{json}");
+        assert_eq!(serde_json::from_str::<ElementInfo>(&json).unwrap(), new);
     }
 
     #[test]
