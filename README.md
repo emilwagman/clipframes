@@ -16,9 +16,11 @@ After each pick a small box asks what should change. Pick as many things as you 
 
 ```
 [Clipframes: 2 things in Google Chrome "Invoices". Read ~/Clipframes/2026-10-09_11-42-30/notes.md]
-1. Button "New invoice" (#new-invoice .btn.btn-primary): make this green
-2. Text "$3,120" (#overdue-total .stat.overdue): too alarming, use the normal text colour
+1. Button "New invoice" (#new-invoice .btn.btn-primary), under heading "Invoices": make this green
+2. DataItem "Paid", 2nd of 4 on the page, under heading "Invoices": make these grey
 ```
+
+When the same thing appears more than once, the line says which one you picked and the heading it sits under, so the agent does not change all of them.
 
 Each round is a folder in `~/Clipframes` with a `notes.md` the agent reads, and the pictures. History lists past rounds so you can copy one again.
 
