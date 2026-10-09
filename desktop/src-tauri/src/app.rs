@@ -210,6 +210,9 @@ fn small_window(app: &AppHandle, label: &str, size: (f64, f64)) -> tauri::Result
         .accept_first_mouse(true)
         .focused(false)
         .visible(false)
+        .on_page_load(|window, payload| {
+            trace(&format!("{}: page {:?}", window.label(), payload.event()));
+        })
         .build()
 }
 
@@ -289,8 +292,10 @@ fn open(app: &AppHandle) {
     let warm = app.get_webview_window(BAR);
     let was_warm = warm.is_some();
     let Some(bar) = warm.or_else(|| small_window(app, BAR, BAR_SIZE).ok()) else { return };
+    trace("open: bar window built");
     place_bar(app, &bar);
     let _ = bar.show();
+    trace("open: bar shown");
     if core.trouble.lock().unwrap().is_some() {
         let _ = app.emit("round", view(app));
         return;
@@ -309,8 +314,10 @@ fn open(app: &AppHandle) {
     refresh_exempt(app);
     let picking = started.elapsed();
     let screens = open_overlays(app);
+    trace("open: overlays built");
     *core.screens.lock().unwrap() = screens;
     let _ = small_window(app, NOTE, NOTE_SIZE);
+    trace("open: comment box built");
     publish(app);
     eprintln!("open ({}): picking after {:.0} ms, all windows after {:.0} ms", if was_warm { "warm" } else { "cold" }, picking.as_secs_f64() * 1000.0, started.elapsed().as_secs_f64() * 1000.0);
 }
@@ -439,6 +446,7 @@ fn round_state(app: AppHandle, window: WebviewWindow) -> RoundView {
     if window.label() == BAR {
         if let Some(opened) = app.state::<Core>().opened.lock().unwrap().take() {
             eprintln!("open: bar drawn after {:.0} ms", opened.elapsed().as_secs_f64() * 1000.0);
+            trace("open: bar script asked for state");
         }
     }
     view(&app)
