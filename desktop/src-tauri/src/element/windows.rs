@@ -1,10 +1,12 @@
 //! Windows: UI Automation. No permission needed. Chromium and Electron expose a page's
 //! elements here too: AutomationId carries the DOM id and ClassName the class list.
 
+use super::locate::{self, Located, Seen};
 use super::{ElementInfo, ReadError, Rect};
 use uiautomation::patterns::UIValuePattern;
-use uiautomation::types::Point;
-use uiautomation::{UIAutomation, UIElement};
+use uiautomation::types::{HeadingLevel, Point, TreeScope, UIProperty};
+use uiautomation::variants::Variant;
+use uiautomation::{UIAutomation, UIElement, UITreeWalker};
 
 pub fn permitted() -> bool {
     true
@@ -44,11 +46,39 @@ pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
 pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     AUTOMATION.with(|automation| {
         let automation = automation.as_ref().ok_or(ReadError::Other("UI Automation is not available.".into()))?;
+        full(automation, x, y).map(|read| read.info)
+    })
+}
+
+/// The reading for a click: the element, and which one it is and under what heading.
+pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    AUTOMATION.with(|automation| {
+        let automation = automation.as_ref().ok_or(ReadError::Other("UI Automation is not available.".into()))?;
+        let mut read = full(automation, x, y)?;
+        if let Some(found) = read.around.as_ref().and_then(|around| locate_in(automation, around, &read.element, &read.info)) {
+            read.info.occurrence = found.occurrence;
+            read.info.heading = found.heading;
+        }
+        Ok(read.info)
+    })
+}
+
+struct Read {
+    info: ElementInfo,
+    element: UIElement,
+    /// The page the element is on (its document), or failing that its window: what "the
+    /// others like it" are looked for in.
+    around: Option<UIElement>,
+}
+
+fn full(automation: &UIAutomation, x: f64, y: f64) -> Result<Read, ReadError> {
+    {
         let el = automation.element_from_point(Point::new(x as i32, y as i32)).map_err(|_| ReadError::Nothing)?;
         let mut info = describe(&el, x as i32, y as i32);
+        let mut around: Option<UIElement> = None;
         // The raw tree: the simplified one leaves out plain containers, and in a page those
         // are the elements that carry the ids and classes.
-        let Ok(walker) = automation.get_raw_view_walker() else { return Ok(info) };
+        let Ok(walker) = automation.get_raw_view_walker() else { return Ok(Read { info, element: el, around }) };
 
         let borrow = info.role == "Text" && info.dom_id.is_empty() && info.dom_classes.is_empty();
         let mut parent = walker.get_parent(&el).ok();
@@ -56,9 +86,15 @@ pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
         while let Some(p) = parent {
             let role = role_of(&p);
             if role == "Window" || steps > 40 {
+                if role == "Window" && around.is_none() {
+                    around = Some(p);
+                }
                 break;
             }
             let web = is_web(&p);
+            if role == "Document" && web && around.is_none() {
+                around = Some(p.clone());
+            }
             let (id, class) = if web && role != "Document" { (p.get_automation_id().unwrap_or_default(), p.get_classname().unwrap_or_default()) } else { Default::default() };
             if borrow && steps < 3 && info.dom_id.is_empty() && info.dom_classes.is_empty() {
                 // A piece of text has no id or class of its own; the element holding it does.
@@ -80,8 +116,101 @@ pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
             steps += 1;
             parent = walker.get_parent(&p).ok();
         }
-        Ok(info)
-    })
+        Ok(Read { info, element: el, around })
+    }
+}
+
+/// Which of the elements that read the same this one is, and the heading it is under.
+///
+/// Not a walk from here: every step of one is a call into the other app, and a page is
+/// thousands of steps. Instead the app is asked once for the two kinds of element that
+/// matter, the headings and the ones with this element's control type and name, and hands
+/// them back in document order with what is needed already read (`FindAll` with a cache
+/// request). The app does the looking, in its own process. The wait for that one answer is
+/// limited to the budget's time, and an answer longer than the budget's count is not used.
+///
+/// A heading is an element whose ARIA role is "heading" (what browsers and web views say for
+/// h1 to h6 and role=heading) or that has a heading level (what native apps set).
+fn locate_in(automation: &UIAutomation, around: &UIElement, el: &UIElement, info: &ElementInfo) -> Option<Located> {
+    limit_waiting(automation, locate::BUDGET.time);
+    let kind = el.get_control_type().ok()?;
+    let name = info.label();
+    let is = |property: UIProperty, value: Variant| automation.create_property_condition(property, value, None);
+
+    let mut headings = is(UIProperty::AriaRole, Variant::from("heading")).ok()?;
+    // Not known to Windows before 2018: then the ARIA role alone decides.
+    let leveled = is(UIProperty::HeadingLevel, Variant::from(HeadingLevel::HeadingLevelNone as i32)).and_then(|none| automation.create_not_condition(none));
+    if let Ok(leveled) = leveled {
+        headings = automation.create_or_condition(headings, leveled).ok()?;
+    }
+    let mut alike = automation.create_and_condition(is(UIProperty::ControlType, Variant::from(kind as i32)).ok()?, is(UIProperty::Name, Variant::from(name)).ok()?).ok()?;
+    if name.is_empty() {
+        // Nothing to count, but the element itself must be in the answer to know which
+        // headings come before it. Its id and class keep the unnamed ones few.
+        for (property, value) in [(UIProperty::AutomationId, el.get_automation_id().unwrap_or_default()), (UIProperty::ClassName, el.get_classname().unwrap_or_default())] {
+            alike = automation.create_and_condition(alike, is(property, Variant::from(value)).ok()?).ok()?;
+        }
+    }
+    let wanted = automation.create_or_condition(headings, alike).ok()?;
+
+    let cache = automation.create_cache_request().ok()?;
+    for property in [UIProperty::Name, UIProperty::ControlType, UIProperty::AriaRole, UIProperty::BoundingRectangle] {
+        cache.add_property(property).ok()?;
+    }
+    let _ = cache.add_property(UIProperty::HeadingLevel);
+    // Every element, not only the ones the simplified view keeps.
+    cache.set_tree_filter(automation.create_true_condition().ok()?).ok()?;
+    let found = around.find_all_build_cache(TreeScope::Descendants, &wanted, &cache).ok()?;
+    if found.len() > locate::BUDGET.nodes {
+        return None;
+    }
+
+    let alike = |e: &UIElement| e.get_cached_control_type().is_ok_and(|k| k == kind) && e.get_cached_name().unwrap_or_default() == name;
+    let heading = |e: &UIElement| {
+        let by_role = e.get_cached_property_value(UIProperty::AriaRole).ok().and_then(|v| v.get_string().ok()).is_some_and(|role| role.eq_ignore_ascii_case("heading"));
+        let by_level = e.get_cached_heading_level().is_ok_and(|level| level != HeadingLevel::HeadingLevelNone);
+        (by_role || by_level).then(|| e.get_cached_name().unwrap_or_default())
+    };
+    // Which of them is the element that was clicked: one in the same place, confirmed by
+    // asking. Only those in the same place are asked about.
+    let frame = el.get_bounding_rectangle().ok()?;
+    let target = found.iter().position(|e| alike(e) && e.get_cached_bounding_rectangle().is_ok_and(|r| r == frame) && automation.compare_elements(e, el).unwrap_or(false))?;
+    // A heading after the element only matters when none comes before it, and then only the
+    // first one, if it is inside the element.
+    let none_before = !found[..target].iter().any(|e| heading(e).is_some());
+    let first_after = found.iter().enumerate().skip(target + 1).find(|(_, e)| heading(e).is_some()).map(|(i, _)| i).filter(|_| none_before);
+    let walker = automation.get_raw_view_walker().ok();
+    let seen = found.iter().enumerate().map(|(i, e)| Seen {
+        same: !name.is_empty() && alike(e),
+        target: i == target,
+        heading: heading(e),
+        inside: Some(i) == first_after && walker.as_ref().is_some_and(|w| within(automation, w, e, el)),
+    });
+    locate::place(seen.collect::<Vec<_>>())
+}
+
+/// Whether `inner` sits inside `outer`, going up at most as far as a page is deep.
+fn within(automation: &UIAutomation, walker: &UITreeWalker, inner: &UIElement, outer: &UIElement) -> bool {
+    let mut parent = walker.get_parent(inner).ok();
+    for _ in 0..40 {
+        let Some(p) = parent else { return false };
+        if automation.compare_elements(&p, outer).unwrap_or(false) {
+            return true;
+        }
+        parent = walker.get_parent(&p).ok();
+    }
+    false
+}
+
+/// Limits how long this thread's questions to another app may take. Each click is read on a
+/// thread of its own, so the limit is gone with it and hover readings are not affected.
+fn limit_waiting(automation: &UIAutomation, longest: std::time::Duration) {
+    use windows::core::Interface;
+    use windows::Win32::UI::Accessibility::{IUIAutomation, IUIAutomation2};
+    let raw: &IUIAutomation = automation.as_ref();
+    if let Ok(newer) = raw.cast::<IUIAutomation2>() {
+        let _ = unsafe { newer.SetTransactionTimeout(longest.as_millis() as u32) };
+    }
 }
 
 fn is_web(el: &UIElement) -> bool {
@@ -296,8 +425,4 @@ mod win {
             (!name.is_empty()).then_some(name)
         }
     }
-}
-
-pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
-    element_full_at(x, y)
 }
