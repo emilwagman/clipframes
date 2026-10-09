@@ -76,7 +76,6 @@ function type(text: string, start: number, per: number): number {
 }
 
 const REST: Point = { x: 566, y: 396 };
-const END = Number(query.get("end") ?? 16);
 
 // The window, still; then the shortcut, and the bar rises.
 const OPEN = 1.0;
@@ -89,31 +88,32 @@ at(3.3, click);
 const typed = type("make this green", 3.65, 0.085);
 at(typed + 0.28, () => press("Enter"));
 // Down to the bar for the area tool, then a drag over the rows.
-const NEXT = typed + 0.5;
-moves.push({ t0: NEXT, t1: NEXT + 0.75, to: onStage('.bar [aria-label="Screenshot an area"]', 0.55, 0.55), bend: -0.1 });
-cameras.push({ t0: NEXT, t1: NEXT + 0.95, to: { x: 228, y: 160, w: 700 } });
-at(NEXT + 0.88, click);
-moves.push({ t0: NEXT + 1.0, t1: NEXT + 1.55, to: inPage("tbody", 0, 0), bend: 0.12 });
-const DRAG = NEXT + 1.68;
+const NEXT = typed + 0.4;
+moves.push({ t0: NEXT, t1: NEXT + 1.05, to: onStage('.bar [aria-label="Screenshot an area"]', 0.55, 0.55), bend: -0.1 });
+cameras.push({ t0: NEXT, t1: NEXT + 1.15, to: { x: 228, y: 160, w: 700 } });
+at(NEXT + 1.15, click);
+moves.push({ t0: NEXT + 1.25, t1: NEXT + 2.1, to: inPage("tbody", 0, 0), bend: 0.12 });
+const DRAG = NEXT + 2.2;
 at(DRAG, down);
-moves.push({ t0: DRAG + 0.06, t1: DRAG + 0.86, to: inPage("tbody", 1, 1), bend: 0.05 });
-at(DRAG + 0.95, up);
-const typed2 = type("rows are too tall", DRAG + 1.3, 0.064);
-at(typed2 + 0.26, () => press("Enter"));
+moves.push({ t0: DRAG + 0.05, t1: DRAG + 1.4, to: inPage("tbody", 1, 1), bend: 0.05 });
+at(DRAG + 1.48, up);
+const typed2 = type("rows are too tall", DRAG + 1.75, 0.064);
+at(typed2 + 0.22, () => press("Enter"));
 // Close: everything picked is on the clipboard.
-const CLOSE = typed2 + 0.45;
-moves.push({ t0: CLOSE, t1: CLOSE + 0.6, to: onStage('.bar [aria-label="Close"]', 0.5, 0.55), bend: 0.14 });
-at(CLOSE + 0.78, click);
+const CLOSE = typed2 + 0.4;
+moves.push({ t0: CLOSE, t1: CLOSE + 0.8, to: onStage('.bar [aria-label="Close"]', 0.5, 0.55), bend: 0.14 });
+at(CLOSE + 0.95, click);
 // Over to the terminal, and paste.
-const OVER = CLOSE + 0.95;
+const OVER = CLOSE + 1.1;
 cameras.push({ t0: OVER, t1: OVER + 1.15, to: { x: 752, y: 0, w: 1024 } });
 moves.push({ t0: OVER + 0.05, t1: OVER + 1.0, to: onStage("#term .prompt", 0.42, 0.62), bend: -0.1 });
-at(OVER + 1.12, click);
-at(OVER + 1.12, () => (cursor.hidden = false));
-const PASTE = OVER + 1.45;
+at(OVER + 1.1, click);
+at(OVER + 1.1, () => (cursor.hidden = false));
+const PASTE = OVER + 1.4;
 at(PASTE, () => (pasted.textContent = clipboard));
-cameras.push({ t0: PASTE + 0.15, t1: PASTE + 2.3, to: { x: 1034, y: 74, w: 760 } });
+cameras.push({ t0: PASTE + 0.15, t1: PASTE + 2.2, to: { x: 1034, y: 74, w: 760 } });
 moves.push({ t0: PASTE + 0.2, t1: PASTE + 0.9, to: () => ({ x: 1640, y: 404 }), bend: 0.1 });
+const END = Number(query.get("end") ?? PASTE + 3.2);
 
 // ---------- the hands ----------
 
@@ -125,6 +125,7 @@ let hovered: Element | null = null;
 // The fastest the pointer crosses the picture, in pixels a second: a check on the script.
 let fastest = 0;
 let seen: Point | null = null;
+const speeds: number[] = [];
 
 /** Where a point of the world is in the browser window. */
 function client(p: Point): Point {
@@ -269,7 +270,9 @@ async function step(n: number): Promise<void> {
   for (let i = 0; i < 4; i++) await turn();
   settle();
   const shown = client(where);
-  if (seen) fastest = Math.max(fastest, Math.hypot(shown.x - seen.x, shown.y - seen.y) * FPS);
+  const speed = seen ? Math.hypot(shown.x - seen.x, shown.y - seen.y) * FPS : 0;
+  if (n % 6 === 0) speeds.push(Math.round(speed));
+  fastest = Math.max(fastest, speed);
   seen = shown;
 }
 
@@ -301,7 +304,7 @@ frame.addEventListener("load", () => {
   platform.onClose((text) => (closedWith = text));
   window.addEventListener("keydown", (event) => event.ctrlKey && event.shiftKey && event.code === "Space" && platform.open());
 
-  const film = { fps: FPS, frames: Math.round(END * FPS), step, result: () => ({ clipboard, closedWith, shown: pasted.textContent, fastest: Math.round(fastest) }) };
+  const film = { fps: FPS, frames: Math.round(END * FPS), step, result: () => ({ clipboard, closedWith, shown: pasted.textContent, fastest: Math.round(fastest), speeds }) };
   Object.assign(window, { film });
   paint(0);
 
