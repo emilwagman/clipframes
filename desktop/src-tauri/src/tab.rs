@@ -135,6 +135,9 @@ mod native {
                 0
             }
             WM_APP_SHOW => {
+                // 4 is "show, in its normal state, without taking the keyboard": it also brings
+                // the tab back if something minimized it (Win+D, a window manager, a script).
+                ShowWindow(hwnd, 4);
                 SetWindowPos(hwnd, HWND_TOPMOST, wparam as i32, lparam as i32, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
                 0
             }
