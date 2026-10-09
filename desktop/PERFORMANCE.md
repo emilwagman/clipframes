@@ -80,3 +80,26 @@ then 100 s of nothing.
 
 Still to run: the 50,000-element page (`demo/stress/big.html`), several screens, 8 h idle,
 and everything on macOS as a whole app.
+
+## 2026-10-09: cold open after reordering, and shipped sizes
+
+Three cold opens on fleet-win, each from a fresh start, traced with `CLIPFRAMES_TRACE=1`.
+
+| | Before | After |
+|---|---|---|
+| Clicks are captured | 500–1535 ms | 35 ms |
+| Bar drawn | 600–970 ms | 570–600 ms |
+| All windows up | 780–1980 ms | 890–970 ms |
+
+What changed: input starts before any window is built, and the bar is created visible and in
+place instead of being shown in a second step. The 470–540 ms that remain before the bar is on
+screen are WebView2 starting; nothing of ours runs in that time.
+
+Sizes with settings, autostart and the updater included:
+
+| | Download | Installed |
+|---|---|---|
+| Windows installer | 1.9 MB | 5.1 MB |
+| macOS, Apple silicon and Intel in one | 4.8 MB | 10.1 MB |
+
+Idle after an update restart on Windows: 16.5 MB, no window, no web view.
