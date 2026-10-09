@@ -11,8 +11,10 @@
 use crate::element::{self, ElementInfo, Rect};
 use crate::picker::{Event, Picker};
 use crate::round::Round;
+use crate::store::{self, Stamp};
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -73,6 +75,10 @@ pub struct Core {
     shown: Mutex<Option<Rect>>,
     /// Kept for the whole run: on Linux the clipboard's content lives only as long as its owner.
     clipboard: Mutex<Option<arboard::Clipboard>>,
+    /// The round's folder and when it began, once something has been picked.
+    folder: Mutex<Option<(PathBuf, Stamp)>>,
+    /// The round's notes.md, once written: the path the pasted reference points to.
+    notes: Mutex<Option<PathBuf>>,
     /// Why the round could not start, for a bar that loads after the fact.
     trouble: Mutex<Option<String>>,
     /// Counts opens and closes, so a keep-warm timer knows if it is out of date.
@@ -123,7 +129,7 @@ fn view(app: &AppHandle) -> RoundView {
         picking,
         picks: round.picks.iter().map(|p| PickView { headline: p.element.headline(), note: p.note.clone() }).collect(),
         noting,
-        reference: round.reference(None),
+        reference: round.reference(core.notes.lock().unwrap().as_deref().and_then(|p| p.to_str())),
         trouble,
     };
     state
@@ -132,6 +138,7 @@ fn view(app: &AppHandle) -> RoundView {
 /// Tells every window what the round looks like now, and puts it on the clipboard.
 fn publish(app: &AppHandle) {
     let core = app.state::<Core>();
+    save(&core);
     let state = view(app);
     if !state.reference.is_empty() {
         let mut clipboard = core.clipboard.lock().unwrap();
@@ -148,6 +155,23 @@ fn publish(app: &AppHandle) {
     for screen in core.screens.lock().unwrap().iter() {
         let marks: Vec<MarkView> = frames.iter().enumerate().map(|(i, f)| MarkView { number: i + 1, rect: screen.local(f) }).collect();
         let _ = app.emit_to(screen.label.as_str(), "marks", marks);
+    }
+}
+
+/// Writes the round to its folder, making the folder at the first pick.
+fn save(core: &Core) {
+    let round = core.round.lock().unwrap();
+    if round.picks.is_empty() {
+        return;
+    }
+    let mut folder = core.folder.lock().unwrap();
+    let (path, taken) = folder.get_or_insert_with(|| {
+        let taken = Stamp::now();
+        (store::new_folder(&store::root(), taken), taken)
+    });
+    match store::save(&round, path, *taken) {
+        Ok(notes) => *core.notes.lock().unwrap() = Some(notes),
+        Err(e) => eprintln!("could not save the round to {}: {e}", path.display()),
     }
 }
 
@@ -258,6 +282,8 @@ fn open(app: &AppHandle) {
     *core.round.lock().unwrap() = Round::default();
     *core.noting.lock().unwrap() = None;
     *core.shown.lock().unwrap() = None;
+    *core.folder.lock().unwrap() = None;
+    *core.notes.lock().unwrap() = None;
     *core.trouble.lock().unwrap() = (!element::permitted()).then(|| "permission".to_string());
 
     let warm = app.get_webview_window(BAR);

@@ -1,0 +1,257 @@
+//! Where a round is kept: one folder per round under ~/Clipframes, holding notes.md (what the
+//! agent reads) and capture.json (the same thing as data, for the library).
+//!
+//! The folder is written on every pick, so the path in the pasted reference is always real.
+
+use crate::round::{place_name, shared_place, Round};
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+
+/// Local time, without a date library.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Stamp {
+    pub year: i32,
+    pub month: u32,
+    pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
+}
+
+impl Stamp {
+    /// "2026-10-09_11-42-30": sorts by time, safe in a path on every system.
+    pub fn folder_name(&self) -> String {
+        format!("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}", self.year, self.month, self.day, self.hour, self.minute, self.second)
+    }
+
+    /// "2026-10-09 11:42"
+    pub fn readable(&self) -> String {
+        format!("{:04}-{:02}-{:02} {:02}:{:02}", self.year, self.month, self.day, self.hour, self.minute)
+    }
+
+    #[cfg(unix)]
+    pub fn now() -> Stamp {
+        #[repr(C)]
+        struct Tm {
+            sec: i32,
+            min: i32,
+            hour: i32,
+            mday: i32,
+            mon: i32,
+            year: i32,
+            wday: i32,
+            yday: i32,
+            isdst: i32,
+            gmtoff: i64,
+            zone: *const i8,
+        }
+        extern "C" {
+            fn time(out: *mut i64) -> i64;
+            fn localtime_r(time: *const i64, out: *mut Tm) -> *mut Tm;
+        }
+        unsafe {
+            let now = time(std::ptr::null_mut());
+            let mut tm: Tm = std::mem::zeroed();
+            localtime_r(&now, &mut tm);
+            Stamp { year: tm.year + 1900, month: tm.mon as u32 + 1, day: tm.mday as u32, hour: tm.hour as u32, minute: tm.min as u32, second: tm.sec as u32 }
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn now() -> Stamp {
+        #[repr(C)]
+        #[derive(Default)]
+        struct SystemTime {
+            year: u16,
+            month: u16,
+            day_of_week: u16,
+            day: u16,
+            hour: u16,
+            minute: u16,
+            second: u16,
+            milliseconds: u16,
+        }
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetLocalTime(out: *mut SystemTime);
+        }
+        let mut t = SystemTime::default();
+        unsafe { GetLocalTime(&mut t) };
+        Stamp { year: t.year as i32, month: t.month as u32, day: t.day as u32, hour: t.hour as u32, minute: t.minute as u32, second: t.second as u32 }
+    }
+}
+
+/// ~/Clipframes
+pub fn root() -> PathBuf {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    home.join("Clipframes")
+}
+
+/// A folder for a round started now. Two rounds in one second get different folders.
+pub fn new_folder(root: &Path, stamp: Stamp) -> PathBuf {
+    let name = stamp.folder_name();
+    let mut folder = root.join(&name);
+    let mut n = 2;
+    while folder.exists() {
+        folder = root.join(format!("{name}-{n}"));
+        n += 1;
+    }
+    folder
+}
+
+/// Writes the round into its folder and returns the path of notes.md.
+pub fn save(round: &Round, folder: &Path, taken: Stamp) -> io::Result<PathBuf> {
+    fs::create_dir_all(folder)?;
+    let notes = folder.join("notes.md");
+    write_whole(&notes, notes_text(round, taken).as_bytes())?;
+    let json = serde_json::to_vec_pretty(round).map_err(io::Error::other)?;
+    write_whole(&folder.join("capture.json"), &json)?;
+    Ok(notes)
+}
+
+/// Writes beside the file and renames over it, so a reader never sees half a file.
+fn write_whole(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let part = path.with_extension("part");
+    fs::write(&part, bytes)?;
+    fs::rename(&part, path)
+}
+
+/// notes.md: everything known about each pick, in the order the user picked them.
+pub fn notes_text(round: &Round, taken: Stamp) -> String {
+    let mut o: Vec<String> = Vec::new();
+    let shared = shared_place(&round.picks);
+    match round.picks.as_slice() {
+        [one] => o.push(format!("# Element: {}", one.element.headline())),
+        many => o.push(format!("# Clipframes: {} things{}", many.len(), shared.as_deref().map(|p| format!(" in {p}")).unwrap_or_default())),
+    }
+    o.push(String::new());
+    o.push(format!("- Taken: {}", taken.readable()));
+    let numbered = round.picks.len() != 1;
+
+    for (i, pick) in round.picks.iter().enumerate() {
+        let e = &pick.element;
+        if numbered {
+            o.push(String::new());
+            o.push(format!("## {}. {}", i + 1, e.headline()));
+        }
+        if !pick.note.is_empty() {
+            o.push(String::new());
+            o.push(format!("> {}", pick.note.replace('\n', "\n> ")));
+            o.push(String::new());
+        } else if numbered {
+            o.push(String::new());
+        }
+        let place = place_name(e);
+        if !place.is_empty() {
+            o.push(format!("- App: {place}"));
+        }
+        if !e.url.is_empty() {
+            o.push(format!("- Page: {}", e.url));
+        }
+        if !pick.image.is_empty() {
+            o.push(format!("- Image: {}", pick.image));
+        }
+        let selector = e.selector();
+        if !selector.is_empty() {
+            o.push(format!("- Selector: {selector}"));
+        }
+        if !e.path.is_empty() {
+            o.push(format!("- Inside: {}", e.path.join(" › ")));
+        }
+        if !e.name.is_empty() && !e.inner_text.is_empty() {
+            o.push(format!("- Text inside: {}", e.inner_text));
+        }
+        if !e.value.is_empty() && e.value != e.name {
+            o.push(format!("- Value: {}", e.value));
+        }
+        if e.frame.width > 0.0 {
+            o.push(format!("- Size on screen: {}×{}", e.frame.width as i64, e.frame.height as i64));
+        }
+    }
+    o.push(String::new());
+    o.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::element::{ElementInfo, Rect};
+
+    const TAKEN: Stamp = Stamp { year: 2026, month: 10, day: 9, hour: 11, minute: 42, second: 30 };
+
+    fn button() -> ElementInfo {
+        ElementInfo {
+            app: "Google Chrome".into(),
+            window: "Invoices".into(),
+            url: "http://localhost:3000/invoices".into(),
+            role: "Button".into(),
+            name: "New invoice".into(),
+            dom_id: "new-invoice".into(),
+            dom_classes: "btn btn-primary".into(),
+            path: vec!["Main".into(), "Toolbar".into()],
+            frame: Rect { x: 100.0, y: 40.0, width: 110.0, height: 39.0 },
+            ..Default::default()
+        }
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("clipframes-test-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        dir
+    }
+
+    #[test]
+    fn folder_names_sort_by_time_and_never_collide() {
+        let root = scratch("folders");
+        let first = new_folder(&root, TAKEN);
+        assert!(first.ends_with("2026-10-09_11-42-30"));
+        fs::create_dir_all(&first).unwrap();
+        assert!(new_folder(&root, TAKEN).ends_with("2026-10-09_11-42-30-2"));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn notes_for_one_pick_read_like_a_single_capture() {
+        let mut r = Round::default();
+        let i = r.add(button());
+        r.set_note(i, "make this secondary");
+        assert_eq!(
+            notes_text(&r, TAKEN),
+            "# Element: Button \"New invoice\"\n\n- Taken: 2026-10-09 11:42\n\n> make this secondary\n\n- App: Google Chrome \"Invoices\"\n- Page: http://localhost:3000/invoices\n- Selector: #new-invoice .btn.btn-primary\n- Inside: Main › Toolbar\n- Size on screen: 110×39\n"
+        );
+    }
+
+    #[test]
+    fn notes_for_several_picks_number_them_in_order() {
+        let mut r = Round::default();
+        r.add(button());
+        let second = r.add(ElementInfo { app: "Google Chrome".into(), window: "Invoices".into(), role: "Group".into(), name: "Overdue".into(), ..Default::default() });
+        r.set_note(second, "red is too strong");
+        let text = notes_text(&r, TAKEN);
+        assert!(text.starts_with("# Clipframes: 2 things in Google Chrome \"Invoices\"\n"), "{text}");
+        assert!(text.contains("\n## 1. Button \"New invoice\"\n\n- App:"), "{text}");
+        assert!(text.contains("\n## 2. Group \"Overdue\"\n\n> red is too strong\n\n- App:"), "{text}");
+    }
+
+    #[test]
+    fn saving_writes_both_files_and_can_be_repeated() {
+        let folder = scratch("save");
+        let mut r = Round::default();
+        r.add(button());
+        let notes = save(&r, &folder, TAKEN).unwrap();
+        r.add(button());
+        assert_eq!(save(&r, &folder, TAKEN).unwrap(), notes);
+        assert!(fs::read_to_string(&notes).unwrap().starts_with("# Clipframes: 2 things"));
+        let back: Round = serde_json::from_slice(&fs::read(folder.join("capture.json")).unwrap()).unwrap();
+        assert_eq!(back, r);
+        assert!(!folder.join("notes.part").exists());
+        fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[test]
+    fn now_is_a_plausible_local_time() {
+        let now = Stamp::now();
+        assert!(now.year >= 2026 && (1..=12).contains(&now.month) && (1..=31).contains(&now.day) && now.hour < 24);
+    }
+}

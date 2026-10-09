@@ -82,7 +82,7 @@ impl Round {
 }
 
 /// `Button "New invoice" (#new-invoice .btn.btn-primary)`
-fn describe(e: &ElementInfo) -> String {
+pub(crate) fn describe(e: &ElementInfo) -> String {
     let selector = e.selector();
     if selector.is_empty() { e.headline() } else { format!("{} ({selector})", e.headline()) }
 }
@@ -93,7 +93,7 @@ fn place(e: &ElementInfo, lead: &str) -> String {
     if p.is_empty() { String::new() } else { format!("{lead}{p}") }
 }
 
-fn place_name(e: &ElementInfo) -> String {
+pub(crate) fn place_name(e: &ElementInfo) -> String {
     match (e.app.is_empty(), e.window.is_empty() || e.window == e.app) {
         (true, true) => String::new(),
         (true, false) => format!("\"{}\"", e.window),
@@ -103,7 +103,7 @@ fn place_name(e: &ElementInfo) -> String {
 }
 
 /// The place all picks share, if they share one: then it is said once, in the first line.
-fn shared_place(picks: &[Pick]) -> Option<String> {
+pub(crate) fn shared_place(picks: &[Pick]) -> Option<String> {
     let first = place_name(&picks.first()?.element);
     (!first.is_empty() && picks.iter().all(|p| place_name(&p.element) == first)).then_some(first)
 }
