@@ -1,5 +1,6 @@
 pub mod element;
 pub mod picker;
+pub mod round;
 
 /// The element under the pointer right now, for the UI.
 #[tauri::command]
