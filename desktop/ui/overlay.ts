@@ -24,6 +24,8 @@ export function mountOverlay(root: HTMLElement, platform: Platform): void {
     label.textContent = hover.label;
     // The label sits above the element, or inside it when there is no room above.
     label.classList.toggle("inside", hover.rect.y < 28);
+    // A container the size of the page gets an outline only: a tint that large hides the page.
+    highlight.classList.toggle("big", hover.rect.width * hover.rect.height > window.innerWidth * window.innerHeight * 0.2);
   });
 
   platform.onMarks((list) => {

@@ -59,6 +59,7 @@ button.primary:hover { filter: brightness(1.06); }
 /* The overlay. Only transform, width and height change while the pointer moves. */
 .highlight, .mark { position: absolute; left: 0; top: 0; border-radius: 4px; pointer-events: none; will-change: transform; }
 .highlight { border: 2px solid var(--accent); background: var(--accent-wash); }
+.highlight.big { background: transparent; }
 .label { position: absolute; left: -2px; bottom: 100%; margin-bottom: 4px; max-width: 420px; padding: 2px 7px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .label.inside { bottom: auto; top: 4px; left: 4px; margin: 0; }
 .label:empty { display: none; }
