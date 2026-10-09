@@ -107,6 +107,11 @@ pub fn permitted() -> bool {
     platform::permitted()
 }
 
+/// Has the system ask the user for that permission, where there is one to ask for.
+pub fn ask_permission() {
+    platform::ask_permission()
+}
+
 /// The pointer's position in global screen points, top-left origin.
 pub fn pointer() -> Option<(f64, f64)> {
     platform::pointer()
@@ -135,6 +140,14 @@ pub fn foreground() -> Option<Foreground> {
 /// Slower where that takes extra questions, so it is asked once, when the user clicks.
 pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     platform::element_full_at(x, y)
+}
+
+/// The address of the page shown at a point, for knowing which site is in front. Chromium and
+/// Electron apps on macOS only have one to give while their page structure is switched on,
+/// which costs them CPU and memory for as long as it stays on: `may_wake` says whether this
+/// reading is worth switching it on for.
+pub fn page_at(x: f64, y: f64, may_wake: bool) -> String {
+    platform::page_at(x, y, may_wake)
 }
 
 /// Housekeeping to call now and then: lets apps that were asked for their page structure go

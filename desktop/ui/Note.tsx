@@ -30,6 +30,9 @@ export function Note() {
   const write = (value: string) => {
     setText(value);
     open.current = { index, text: value };
+    // Sent as it is typed: the round can be closed in ways this box never hears about (the
+    // shortcut, the bar, quitting), and what was written must not go with it.
+    void platform.setNote(index, value);
   };
   const save = async () => {
     if (text.trim() !== "") await platform.setNote(index, text);

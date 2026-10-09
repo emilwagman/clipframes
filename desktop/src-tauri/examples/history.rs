@@ -27,8 +27,8 @@ fn main() {
     let mut times: Vec<f64> = (0..5)
         .map(|_| {
             let started = Instant::now();
-            let (page, total) = store::list(&root, 0, 40);
-            assert_eq!((page.len(), total), (40.min(count as usize), count as usize));
+            let page = store::list(&root, 0, 40);
+            assert_eq!((page.entries.len(), page.total), (40.min(count as usize), count as usize));
             started.elapsed().as_secs_f64() * 1000.0
         })
         .collect();
