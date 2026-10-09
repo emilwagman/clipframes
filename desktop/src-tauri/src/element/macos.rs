@@ -380,7 +380,12 @@ impl Element {
     }
 
     unsafe fn parent(&self) -> Option<Element> {
-        let v = self.copy(kAXParentAttribute)?;
+        self.element(kAXParentAttribute)
+    }
+
+    /// An attribute whose value is another element.
+    unsafe fn element(&self, attribute: &str) -> Option<Element> {
+        let v = self.copy(attribute)?;
         if v.type_of() != AXUIElementGetTypeID() {
             return None;
         }
@@ -439,6 +444,21 @@ pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
 }
 
 pub fn foreground() -> Option<super::Foreground> {
-    let front = windows().into_iter().next()?;
+    let mut front = windows().into_iter().next()?;
+    // The window list only gives titles to an app with the Screen Recording permission.
+    // Without it every title is empty, and another tab or page in the same app would look
+    // like no change at all. The app's own answer needs only the Accessibility permission.
+    if front.title.is_empty() && permitted() {
+        front.title = focused_title(front.pid);
+    }
     Some(super::Foreground { app: front.owner, title: front.title, pid: front.pid, frame: front.frame })
+}
+
+/// The title of the window an app has the keyboard in, as the app itself reports it.
+fn focused_title(pid: i32) -> String {
+    limit_waiting();
+    unsafe {
+        let app = Element(AXUIElementCreateApplication(pid));
+        app.element(kAXFocusedWindowAttribute).map(|window| window.string(kAXTitleAttribute)).unwrap_or_default()
+    }
 }
