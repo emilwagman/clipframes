@@ -462,3 +462,7 @@ fn focused_title(pid: i32) -> String {
         app.element(kAXFocusedWindowAttribute).map(|window| window.string(kAXTitleAttribute)).unwrap_or_default()
     }
 }
+
+pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    element_full_at(x, y)
+}

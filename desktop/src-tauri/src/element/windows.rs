@@ -297,3 +297,7 @@ mod win {
         }
     }
 }
+
+pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    element_full_at(x, y)
+}
