@@ -109,6 +109,7 @@ mod native {
     const WS_EX_TOPMOST: u32 = 0x0000_0008;
     const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
     const WS_EX_NOACTIVATE: u32 = 0x0800_0000;
+    const WM_CLOSE: u32 = 0x0010;
     const WM_LBUTTONUP: u32 = 0x0202;
     const WM_APP_SHOW: u32 = 0x8001;
     const WM_APP_HIDE: u32 = 0x8002;
@@ -138,6 +139,12 @@ mod native {
                 0
             }
             WM_APP_HIDE => {
+                ShowWindow(hwnd, 0);
+                0
+            }
+            // Asked to close (Alt+F4 while it has the keyboard, or another program closing
+            // windows): the tab only goes out of sight. Destroyed, it could never come back.
+            WM_CLOSE => {
                 ShowWindow(hwnd, 0);
                 0
             }
