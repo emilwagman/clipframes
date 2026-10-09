@@ -1,4 +1,5 @@
 pub mod element;
+pub mod picker;
 
 /// The element under the pointer right now, for the UI.
 #[tauri::command]

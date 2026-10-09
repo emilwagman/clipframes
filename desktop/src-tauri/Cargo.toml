@@ -42,6 +42,11 @@ name = "cf-probe"
 path = "src/bin/probe.rs"
 
 # Times element readings across the screen: the number behind "the highlight never lags".
+# Runs a picking round in the terminal and prints hovers and picks.
+[[bin]]
+name = "cf-pick"
+path = "src/bin/pick.rs"
+
 [[bin]]
 name = "cf-bench"
 path = "src/bin/bench.rs"
