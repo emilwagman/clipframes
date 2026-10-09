@@ -1,7 +1,9 @@
 //! The app: a tray icon, one shortcut, the bar, and a round of picks.
 //!
-//! Nothing is open while Clipframes is idle: the bar is a hidden window, and the overlays, the
-//! comment box and the input source exist only between opening the bar and closing it.
+//! Nothing is open while Clipframes is idle. A web view costs a few hundred megabytes on
+//! Windows even when hidden, so every window is built when the bar opens. The overlays, the
+//! comment box and the input source go away when it closes; the bar stays hidden for a short
+//! while, so opening it again straight away is instant, and then it goes too.
 //!
 //! Positions come in "picker units": what the system's input and element APIs report. That is
 //! points on macOS and physical pixels on Windows, so every conversion to a window lives here.
@@ -10,8 +12,10 @@ use crate::element::{self, ElementInfo, Rect};
 use crate::picker::{Event, Picker};
 use crate::round::Round;
 use serde::Serialize;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::thread;
+use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -20,6 +24,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 const BAR: &str = "bar";
 const NOTE: &str = "note";
 const SHORTCUT: &str = "ctrl+shift+space";
+/// How long the hidden bar is kept after closing, ready to open again at once.
+const KEEP_WARM: Duration = Duration::from_secs(90);
 
 /// Sizes in CSS pixels.
 const BAR_SIZE: (f64, f64) = (372.0, 76.0);
@@ -57,6 +63,12 @@ pub struct Core {
     shown: Mutex<Option<Rect>>,
     /// Kept for the whole run: on Linux the clipboard's content lives only as long as its owner.
     clipboard: Mutex<Option<arboard::Clipboard>>,
+    /// Why the round could not start, for a bar that loads after the fact.
+    trouble: Mutex<Option<String>>,
+    /// Counts opens and closes, so a keep-warm timer knows if it is out of date.
+    turn: AtomicU64,
+    /// When the bar was asked to open, to time how long until it can draw.
+    opened: Mutex<Option<Instant>>,
 }
 
 /// What the bar and the comment box draw.
@@ -91,11 +103,12 @@ struct MarkView {
     rect: Rect,
 }
 
-fn view(app: &AppHandle, trouble: Option<String>) -> RoundView {
+fn view(app: &AppHandle) -> RoundView {
     let core = app.state::<Core>();
     let round = core.round.lock().unwrap();
     let picking = core.picker.lock().unwrap().is_some();
     let noting = *core.noting.lock().unwrap();
+    let trouble = core.trouble.lock().unwrap().clone();
     let state = RoundView {
         picking,
         picks: round.picks.iter().map(|p| PickView { headline: p.element.headline(), note: p.note.clone() }).collect(),
@@ -109,7 +122,7 @@ fn view(app: &AppHandle, trouble: Option<String>) -> RoundView {
 /// Tells every window what the round looks like now, and puts it on the clipboard.
 fn publish(app: &AppHandle) {
     let core = app.state::<Core>();
-    let state = view(app, None);
+    let state = view(app);
     if !state.reference.is_empty() {
         let mut clipboard = core.clipboard.lock().unwrap();
         if clipboard.is_none() {
@@ -228,33 +241,41 @@ fn open(app: &AppHandle) {
     if core.picker.lock().unwrap().is_some() {
         return;
     }
-    let Some(bar) = app.get_webview_window(BAR) else { return };
-    place_bar(app, &bar);
-    let _ = bar.show();
-
+    let started = Instant::now();
+    core.turn.fetch_add(1, Ordering::SeqCst);
+    *core.opened.lock().unwrap() = Some(started);
     *core.round.lock().unwrap() = Round::default();
     *core.noting.lock().unwrap() = None;
     *core.shown.lock().unwrap() = None;
+    *core.trouble.lock().unwrap() = (!element::permitted()).then(|| "permission".to_string());
 
-    if !element::permitted() {
-        let _ = app.emit("round", view(app, Some("permission".into())));
+    let warm = app.get_webview_window(BAR);
+    let was_warm = warm.is_some();
+    let Some(bar) = warm.or_else(|| small_window(app, BAR, BAR_SIZE).ok()) else { return };
+    place_bar(app, &bar);
+    let _ = bar.show();
+    if core.trouble.lock().unwrap().is_some() {
+        let _ = app.emit("round", view(app));
         return;
     }
-    *core.screens.lock().unwrap() = open_overlays(app);
-    let _ = small_window(app, NOTE, NOTE_SIZE);
 
+    // Input first: picking works from here on, the windows that paint it follow.
     let handle = app.clone();
     match Picker::start(move |event| on_event(&handle, event)) {
-        Ok(picker) => {
-            *core.picker.lock().unwrap() = Some(picker);
-            refresh_exempt(app);
-            publish(app);
-        }
+        Ok(picker) => *core.picker.lock().unwrap() = Some(picker),
         Err(message) => {
-            close_round_windows(app);
-            let _ = app.emit("round", view(app, Some(message)));
+            *core.trouble.lock().unwrap() = Some(message);
+            let _ = app.emit("round", view(app));
+            return;
         }
     }
+    refresh_exempt(app);
+    let picking = started.elapsed();
+    let screens = open_overlays(app);
+    *core.screens.lock().unwrap() = screens;
+    let _ = small_window(app, NOTE, NOTE_SIZE);
+    publish(app);
+    eprintln!("open ({}): picking after {:.0} ms, all windows after {:.0} ms", if was_warm { "warm" } else { "cold" }, picking.as_secs_f64() * 1000.0, started.elapsed().as_secs_f64() * 1000.0);
 }
 
 /// Ends the round and hides everything. What was picked stays on the clipboard.
@@ -268,7 +289,19 @@ fn close(app: &AppHandle) {
     if let Some(bar) = app.get_webview_window(BAR) {
         let _ = bar.hide();
     }
-    let _ = app.emit("round", view(app, None));
+    let _ = app.emit("round", view(app));
+
+    // Let the bar go too, unless it is opened again first.
+    let turn = core.turn.fetch_add(1, Ordering::SeqCst) + 1;
+    let app = app.clone();
+    thread::spawn(move || {
+        thread::sleep(KEEP_WARM);
+        if app.state::<Core>().turn.load(Ordering::SeqCst) == turn {
+            if let Some(bar) = app.get_webview_window(BAR) {
+                let _ = bar.destroy();
+            }
+        }
+    });
 }
 
 fn toggle(app: &AppHandle) {
@@ -349,8 +382,13 @@ fn hide_note(app: &AppHandle) -> bool {
 }
 
 #[tauri::command]
-fn round_state(app: AppHandle) -> RoundView {
-    view(&app, None)
+fn round_state(app: AppHandle, window: WebviewWindow) -> RoundView {
+    if window.label() == BAR {
+        if let Some(opened) = app.state::<Core>().opened.lock().unwrap().take() {
+            eprintln!("open: bar drawn after {:.0} ms", opened.elapsed().as_secs_f64() * 1000.0);
+        }
+    }
+    view(&app)
 }
 
 #[tauri::command]
@@ -384,6 +422,8 @@ fn permission_open(app: AppHandle) {
 
 pub fn run() {
     tauri::Builder::default()
+        // Starting Clipframes while it is running opens the bar of the one that is.
+        .plugin(tauri_plugin_single_instance::init(|app, _, _| later(app, open)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Core::default())
@@ -391,8 +431,6 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
-            small_window(app.handle(), BAR, BAR_SIZE)?;
 
             // Another app may own the shortcut already. Clipframes still runs: the tray opens it.
             let taken = app
@@ -419,7 +457,7 @@ pub fn run() {
             }
             tray.build(app)?;
 
-            // `clipframes --open` starts with the bar open: for tests and for a second launch.
+            // `clipframes --open` starts with the bar open.
             if std::env::args().any(|a| a == "--open") {
                 later(app.handle(), open);
             }
