@@ -15,7 +15,7 @@
   --ring-halo: rgba(255, 255, 255, 0.85); /* a hairline around page marks, so they show on any colour */
   --record: #ff453a;
   --radius: 18px;
-  --shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.28);
+  --shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.26); /* fits inside the 8px of room around a card */
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }

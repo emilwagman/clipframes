@@ -50,7 +50,7 @@ $ff = Start-Process ffmpeg -ArgumentList "-y","-filter_complex","ddagrab=output_
 Wait 2500
 
 # Places on the 3840 x 2160 screen: the bar's controls, and the terminal's prompt.
-$area = @(1608, 1956); $clip = @(1699, 1956); $history = @(2220, 1956); $done = @(2316, 1956); $prompt = @(3000, 1963)
+$area = @(1743, 1968); $clip = @(1800, 1968); $history = @(2068, 1968); $done = @(2150, 1968); $prompt = @(3000, 1963)
 function Go($p, [int]$ms) { [H]::Glide($p[0], $p[1], $ms) }
 
 if ($Scene -eq "pick") {
@@ -101,7 +101,7 @@ if ($Scene -eq "return") {
   Wait 800
   Go $prompt 900; Wait 300; [H]::Click(); Wait 2600        # to the terminal: the tab leaves
   [H]::Glide(1200, 1100, 900); Wait 300; [H]::Click(); Wait 2600   # back to the site: it returns
-  [H]::Glide(1920, 1956, 800); Wait 400; [H]::Click(); Wait 1800   # the tab opens the bar
+  [H]::Glide(1920, 1968, 800); Wait 400; [H]::Click(); Wait 1800   # the tab opens the bar
   Go $history 700; Wait 400; [H]::Click(); Wait 2600       # History
   [H]::Glide(2212, 790, 800); Wait 500; [H]::Click(); Wait 1500    # Copy the newest
   [H]::Glide(2300, 900, 600)
