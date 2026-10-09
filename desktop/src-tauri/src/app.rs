@@ -31,6 +31,16 @@ const KEEP_WARM: Duration = Duration::from_secs(90);
 const BAR_SIZE: (f64, f64) = (372.0, 76.0);
 const NOTE_SIZE: (f64, f64) = (320.0, 104.0);
 
+/// A line on stderr with the time since start, when CLIPFRAMES_TRACE is set. For chasing
+/// the order of things across threads on a machine with no debugger.
+fn trace(what: &str) {
+    static START: std::sync::OnceLock<(Instant, bool)> = std::sync::OnceLock::new();
+    let (start, on) = START.get_or_init(|| (Instant::now(), std::env::var_os("CLIPFRAMES_TRACE").is_some()));
+    if *on {
+        eprintln!("{:>9.1} ms  [{:?}] {what}", start.elapsed().as_secs_f64() * 1000.0, thread::current().id());
+    }
+}
+
 /// One display and the overlay window that covers it.
 #[derive(Debug, Clone)]
 struct Screen {
@@ -241,6 +251,7 @@ fn open(app: &AppHandle) {
     if core.picker.lock().unwrap().is_some() {
         return;
     }
+    trace("open: begin");
     let started = Instant::now();
     core.turn.fetch_add(1, Ordering::SeqCst);
     *core.opened.lock().unwrap() = Some(started);
@@ -280,12 +291,16 @@ fn open(app: &AppHandle) {
 
 /// Ends the round and hides everything. What was picked stays on the clipboard.
 fn close(app: &AppHandle) {
+    trace("close: begin");
     let core = app.state::<Core>();
     // Taken out first and dropped unlocked: stopping the picker waits for its threads.
     let picker = core.picker.lock().unwrap().take();
+    trace("close: picker taken");
     drop(picker);
+    trace("close: picker stopped");
     *core.noting.lock().unwrap() = None;
     close_round_windows(app);
+    trace("close: windows closed");
     if let Some(bar) = app.get_webview_window(BAR) {
         let _ = bar.hide();
     }
@@ -334,6 +349,7 @@ fn on_event(app: &AppHandle, event: Event) {
             }
         }
         Event::Pick { element, .. } => {
+            trace("pick");
             let frame = element.frame;
             let index = core.round.lock().unwrap().add(element);
             *core.noting.lock().unwrap() = Some(index);
@@ -341,7 +357,10 @@ fn on_event(app: &AppHandle, event: Event) {
             publish(app);
         }
         // Esc closes the comment box if one is open, and the round otherwise.
-        Event::Cancel => later(app, |app| if !hide_note(app) { close(app) }),
+        Event::Cancel => {
+            trace("esc");
+            later(app, |app| if !hide_note(app) { close(app) })
+        }
     }
 }
 
@@ -371,12 +390,14 @@ fn show_note(app: &AppHandle, frame: &Rect) {
 fn hide_note(app: &AppHandle) -> bool {
     let core = app.state::<Core>();
     let was_open = core.noting.lock().unwrap().take().is_some();
+    trace(if was_open { "note: closing" } else { "note: none open" });
     if was_open {
         if let Some(note) = app.get_webview_window(NOTE) {
             let _ = note.hide();
         }
         refresh_exempt(app);
         publish(app);
+        trace("note: closed");
     }
     was_open
 }
