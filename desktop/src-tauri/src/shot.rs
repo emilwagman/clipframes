@@ -182,7 +182,7 @@ mod platform {
     use crate::element::Rect;
     use core_graphics::access::ScreenCaptureAccess;
     use std::path::Path;
-    use std::process::Command;
+    use std::process::{Command, Stdio};
 
     /// Screen Recording, under Privacy & Security. Asked before a round starts: the first
     /// screenshot would otherwise bring up the system's question in the middle of a round,
@@ -199,13 +199,41 @@ mod platform {
 
     /// The system's own tool writes the file. It asks for Screen Recording permission in
     /// Clipframes' name the first time, and leaves protected windows out.
-    pub fn capture_to_file(rect: &Rect, path: &Path, _max_width: Option<u32>) -> Result<(u32, u32), String> {
+    pub fn capture_to_file(rect: &Rect, path: &Path, max_width: Option<u32>) -> Result<(u32, u32), String> {
         let region = format!("{},{},{},{}", rect.x.round(), rect.y.round(), rect.width.round(), rect.height.round());
         let status = Command::new("/usr/sbin/screencapture").args(["-x", "-t", "png", "-R", &region]).arg(path).status().map_err(|e| e.to_string())?;
         if !status.success() {
             return Err("The screen could not be captured. Allow Clipframes under Screen Recording in System Settings.".into());
         }
-        super::png_size(path).ok_or_else(|| "The screen could not be captured. Allow Clipframes under Screen Recording in System Settings.".to_string())
+        let size = super::png_size(path).ok_or_else(|| "The screen could not be captured. Allow Clipframes under Screen Recording in System Settings.".to_string())?;
+        Ok(match max_width {
+            Some(max) if size.0 > max => shrink(path, max).unwrap_or(size),
+            _ => size,
+        })
+    }
+
+    /// Makes a saved picture at most `max_width` wide, in place, and returns its new size.
+    /// screencapture writes every pixel of the display, twice the width on a Retina screen,
+    /// so without this the size limits meant nothing here and a clip was hundreds of
+    /// megabytes. sips is part of every macOS. If it fails the picture stays as it was.
+    fn shrink(path: &Path, max_width: u32) -> Option<(u32, u32)> {
+        let done = Command::new("/usr/bin/sips").arg("--resampleWidth").arg(max_width.to_string()).arg(path).stdout(Stdio::null()).stderr(Stdio::null()).status().ok()?;
+        done.success().then(|| super::png_size(path)).flatten()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::shot::{png_size, Image};
+
+        #[test]
+        fn a_picture_wider_than_allowed_is_made_narrower_in_place() {
+            let path = std::env::temp_dir().join(format!("clipframes-shrink-{}.png", std::process::id()));
+            Image { width: 3200, height: 400, rgba: vec![180; 3200 * 400 * 4] }.save_png(&path).unwrap();
+            assert_eq!(shrink(&path, 1600), Some((1600, 200)));
+            assert_eq!(png_size(&path), Some((1600, 200)), "and it is still a PNG");
+            std::fs::remove_file(&path).unwrap();
+        }
     }
 }
 
