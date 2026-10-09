@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Stress · 50,000 elements</title>
+<style>
+  body { margin: 0; font: 11px/1 system-ui, sans-serif; background: #fff; }
+  #grid { display: grid; grid-template-columns: repeat(250, 1fr); }
+  .cell { height: 22px; border: 1px solid #e3e7ec; overflow: hidden; }
+  .cell.odd { background: #f6f8fa; }
+</style>
+<!-- A page far larger than a real one: 50,000 buttons, each with an id, classes and a name. -->
+<div id="grid"></div>
+<script>
+  const grid = document.getElementById("grid");
+  const parts = [];
+  for (let i = 0; i < 50000; i++) parts.push(`<button id="c${i}" class="cell${i % 2 ? " odd" : ""}">${i}</button>`);
+  grid.innerHTML = parts.join("");
+</script>
