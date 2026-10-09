@@ -35,6 +35,12 @@ core-graphics = "0.25"
 [target.'cfg(windows)'.dependencies]
 uiautomation = "0.25"
 
+[features]
+# The interface is built into the app. Plain `cargo build` gives the real thing; only
+# `tauri dev` (which passes --no-default-features) loads it from the dev server instead.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
 [[bin]]
 name = "clipframes"
 path = "src/main.rs"
