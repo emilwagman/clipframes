@@ -103,3 +103,35 @@ Sizes with settings, autostart and the updater included:
 | macOS, Apple silicon and Intel in one | 4.8 MB | 10.1 MB |
 
 Idle after an update restart on Windows: 16.5 MB, no window, no web view.
+
+## 2026-10-09: the full app (screenshots, clips, history, places, React interface)
+
+Same machine and method as the stress run above, after every tool was added. Each element
+pick now also saves a picture of the element.
+
+| State | Core process | Threads | Handles | Web views |
+|---|---|---|---|---|
+| Idle, just started | 25.3 MB (7.5 private) | 8 | 263 | none |
+| Round open, nothing picked | 39.2 MB (12.8 private) | 32 | 447 | 8 processes, 431 MB |
+| After 200 clicks | 103.5 MB (48.1 private) | 32 | 450 | 8 processes, 596 MB |
+| Round closed, bar warm | 41.1 MB (14.5 private) | 29 | 403 | 6 processes, 365 MB |
+| After 30 open/close cycles | 42.7 MB (18.1 private) | 58 | 435 | 6 processes, 362 MB |
+| Idle again, bar let go | 41.8 MB (16.2 private) | 26 | 361 | none |
+
+- 200 clicks in 17.8 s gave 200 picks and 200 pictures (40 MB on disk); none reached the page.
+- Idle with the once-a-second look at the front window and the tab on screen, over 60 s:
+  37.3 MB (11.0 private), no web view, 0.000 s of CPU. The tab is a native window.
+- Pictures show only the app underneath: Clipframes' own windows are excluded from capture.
+- A 5.5 s clip of a 1900 × 300 px area: 22 frames at 1600 px wide, 1.3 MB.
+
+History with 5,000 captures (`cargo run --release --example cf-history`), first page of 40:
+
+| | First run | Median of 5 |
+|---|---|---|
+| macOS (hub) | 4 ms | 3 ms |
+| Windows (fleet-win) | 13 ms | 8 ms |
+
+The first version checked every folder for its capture file and took 402 ms on Windows; it now
+lists the folder by name and reads only the page shown. Budget: 300 ms.
+
+Shipped interface: 77 KB of script and 2 KB of styles, gzipped (React 19 and Zustand included).
