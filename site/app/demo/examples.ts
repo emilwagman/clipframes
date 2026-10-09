@@ -45,7 +45,6 @@ export const EXAMPLES: Partial<Record<DemoId, (a: Actor) => Promise<void>>> = {
 
   // A clip of the Export menu opening in the wrong place.
   clip: async (a) => {
-    if (a.has("#export-menu")) a.el("#export").click();
     await a.wait(600);
     const top = a.el(".top");
     const first = a.point(top, 0, 0);

@@ -49,6 +49,11 @@ export default function Stage({ id, tool, opens = true, label, hint, touchHint, 
     register(id, { host: host.current, page: page.current, glass: glass.current }, { tool, opens });
   }, [id, tool, opens]);
 
+  // Every time the example starts, the page is as it was: the Export menu is closed.
+  useEffect(() => {
+    if (playing) setMenu(false);
+  }, [playing]);
+
   const closed = round !== undefined && !round.picking;
   const tabOn = closed && round.place?.auto !== false;
   const again = () => {

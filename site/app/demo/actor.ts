@@ -62,10 +62,6 @@ export class Actor {
     return found;
   }
 
-  has(selector: string): boolean {
-    return this.demo.page.querySelector(selector) !== null;
-  }
-
   /// A part of the app's own interface, once it is drawn.
   async ui(selector: string): Promise<HTMLElement> {
     for (let tries = 0; tries < 120; tries++) {

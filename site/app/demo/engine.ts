@@ -181,6 +181,12 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
   }, true);
   d.host.addEventListener("pointerleave", () => (from = null));
   d.host.addEventListener("pointerdown", (event) => event.isTrusted && event.pointerType !== "touch" && take(d), true);
+  // Pressing on the page ends the comment that is open. The box is taken down before it can
+  // save what was typed (it lives on in the desktop app, where it is a window), so it is saved here.
+  d.host.addEventListener("pointerdown", (event) => {
+    const ui = glass.querySelector(":scope > .clipframes-web:not([data-still])");
+    if (ui && event.target instanceof Element && event.target.closest(".window") === null) saveOpenNote(d, ui);
+  }, true);
   d.host.addEventListener("keydown", (event) => event.isTrusted && take(d), true);
   // The comment box takes the keyboard when it opens, and the browser scrolls to it. That is
   // right when the visitor picked something. When the example did, the keyboard stays where
@@ -192,7 +198,7 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
     queueMicrotask(() => window.scrollY !== scrollY && window.scrollTo(scrollX, scrollY));
   });
 
-  reset(d);
+  void reset(d);
   choose();
   return d;
 }
@@ -200,9 +206,10 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
 const EMPTY: RoundView = { picking: false, tool: "element", picks: [], noting: null, recording: null, reference: "", trouble: null, shortcut: "Esc", place: null };
 
 /// Back to how the demo starts: the bar up with its tool on, or only the tab.
-export function reset(d: Demo): void {
+export async function reset(d: Demo): Promise<void> {
   d.stop?.();
-  if (d.round.picking) void d.platform.done();
+  d.stop = null;
+  if (d.round.picking) await d.platform.done();
   if (d.opens) open(d);
 }
 
@@ -217,16 +224,17 @@ export function take(d: Demo): void {
   if (d.taken) return;
   d.taken = true;
   d.stop?.();
+  d.stop = null;
   useSite.setState((s) => ({ taken: { ...s.taken, [d.id]: true } }));
   if (live !== d) activate(d);
 }
 
 /// Hands the round back to the example and plays it from the start.
-export function replay(d: Demo): void {
+export async function replay(d: Demo): Promise<void> {
   d.taken = false;
   d.played = false;
   useSite.setState((s) => ({ taken: { ...s.taken, [d.id]: false } }));
-  reset(d);
+  await reset(d);
   if (live !== d) activate(d);
   else play(d);
 }
@@ -239,11 +247,14 @@ function play(d: Demo): void {
   const player = players.get(d.id);
   if (!player || d.taken || d.played || d.stop) return;
   const control = new AbortController();
-  d.stop = () => control.abort();
+  const stop = () => control.abort();
+  d.stop = stop;
   useSite.setState((s) => ({ playing: { ...s.playing, [d.id]: true } }));
   player(d, control.signal)
     .then(() => (d.played = true), () => {})
     .finally(() => {
+      // Unless it was stopped and has already been started again.
+      if (d.stop !== stop && d.stop !== null) return;
       d.stop = null;
       useSite.setState((s) => ({ playing: { ...s.playing, [d.id]: false } }));
     });
@@ -282,8 +293,7 @@ export function activate(next: Demo): void {
   if (before) {
     // An example that is cut short starts over the next time; one the visitor took over stays.
     if (before.stop && !before.taken) {
-      before.stop();
-      reset(before);
+      void reset(before);
     }
     freeze(before);
   }
@@ -326,6 +336,8 @@ export function choose(): void {
       const distance = Math.abs(r.top + r.height / 2 - innerHeight / 2);
       if (distance < nearest) [best, nearest] = [d, distance];
     }
+    // At the top of the page the first demo is only partly on screen, and is still the one to start with.
+    if (!best && !live) best = [...demos.values()].filter((d) => shown(d) > 0.15).sort((a, b) => shown(b) - shown(a))[0] ?? null;
     if (best) activate(best);
   });
 }
