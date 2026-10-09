@@ -45,6 +45,8 @@ uiautomation = "0.25"
 # `tauri dev` (which passes --no-default-features) loads it from the dev server instead.
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+# A walk through every tool with real pointer events (src/selftest.rs). Never in a release.
+selftest = []
 
 [[bin]]
 name = "clipframes"

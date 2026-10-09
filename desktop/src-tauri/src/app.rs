@@ -29,6 +29,10 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+#[cfg(all(feature = "selftest", target_os = "macos"))]
+#[path = "selftest.rs"]
+mod selftest;
+
 const BAR: &str = "bar";
 const NOTE: &str = "note";
 const SETTINGS: &str = "settings";
@@ -1220,6 +1224,11 @@ pub fn run() {
 
             // Started by hand (search, the Start menu, a double click): show the bar. Started
             // at login or by an update: stay out of the way.
+            #[cfg(all(feature = "selftest", target_os = "macos"))]
+            if std::env::args().any(|a| a == "--selftest") {
+                selftest::run(handle.clone());
+                return Ok(());
+            }
             let quiet = std::env::args().any(|a| a == "--hidden") | updates::just_updated(&handle);
             if !quiet {
                 later(&handle, if bound { open } else { open_settings });
