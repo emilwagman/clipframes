@@ -122,6 +122,8 @@ pub struct Core {
     open_item: Mutex<Option<MenuItem<tauri::Wry>>>,
     /// The last thing the updater had to say.
     update: Mutex<String>,
+    /// When the round on screen was opened, for the report of how long it stayed.
+    began: Mutex<Option<Instant>>,
     /// Why the round could not start, for a bar that loads after the fact.
     trouble: Mutex<Option<String>>,
     /// Counts opens and closes, so a keep-warm timer knows if it is out of date.
@@ -503,6 +505,7 @@ fn open(app: &AppHandle) {
     let via = telemetry::take_via();
     core.turn.fetch_add(1, Ordering::SeqCst);
     *core.opened.lock().unwrap() = Some(started);
+    *core.began.lock().unwrap() = Some(started);
     *core.round.lock().unwrap() = Round::default();
     *core.noting.lock().unwrap() = None;
     *core.shown.lock().unwrap() = None;
@@ -584,7 +587,7 @@ fn close(app: &AppHandle) {
     if was_open {
         let round = core.round.lock().unwrap();
         let count = |kind: Kind| round.picks.iter().filter(|p| p.kind == kind).count();
-        let seconds = core.opened.lock().unwrap().map(|t| t.elapsed().as_secs()).unwrap_or(0);
+        let seconds = core.began.lock().unwrap().take().map(|t| t.elapsed().as_secs()).unwrap_or(0);
         telemetry::event("round_closed", json!({ "picks": round.picks.len(), "elements": count(Kind::Element), "areas": count(Kind::Area), "clips": count(Kind::Clip), "notes": round.picks.iter().filter(|p| !p.note.is_empty()).count(), "seconds": seconds }));
     }
     close_round_windows(app);
