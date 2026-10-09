@@ -133,10 +133,28 @@ fn leaving(batch: Vec<Value>, on: bool) -> Vec<Value> {
 /// path can hold the account's name. The rest of the message goes with it, because a path
 /// with spaces in it has no clear end.
 fn scrub(message: &str) -> String {
-    match message.split(' ').position(|word| word.contains('/') || word.contains('\\')) {
+    match message.split(' ').position(looks_like_a_path) {
         Some(at) => message.split(' ').take(at).chain(Some("<path>")).collect::<Vec<_>>().join(" "),
         None => message.to_string(),
     }
+}
+
+/// Whether a word holds the start of a path or an address: a drive letter (`C:\`), a network
+/// share (`\\server`), the home folder (`~/`), or a slash that begins a folder (`/Users/`,
+/// and so also `https://site/`). A slash between two words ("read/write", "and/or") is not one.
+fn looks_like_a_path(word: &str) -> bool {
+    let b = word.as_bytes();
+    let in_name = |c: &u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.');
+    (0..b.len()).any(|i| match b[i] {
+        b':' => i >= 1 && b[i - 1].is_ascii_alphabetic() && (i < 2 || !b[i - 2].is_ascii_alphanumeric()) && b.get(i + 1) == Some(&b'\\'),
+        b'\\' => b.get(i + 1) == Some(&b'\\'),
+        b'~' => b.get(i + 1) == Some(&b'/'),
+        b'/' => {
+            let name = b[i + 1..].iter().take_while(|c| in_name(c)).count();
+            (i == 0 || !in_name(&b[i - 1])) && name > 0 && b.get(i + 1 + name) == Some(&b'/')
+        }
+        _ => false,
+    })
 }
 
 /// The user's setting changed.
@@ -221,6 +239,23 @@ mod tests {
         let report = exception("panic", "failed to read /Users/sam lee/Clipframes/1.png", "store.rs:5");
         assert_eq!(report["$exception_list"][0]["value"], "failed to read <path>");
         assert_eq!(report["$exception_fingerprint"], "panic:store.rs:5:failed to read <path>");
+    }
+
+    #[test]
+    fn a_slash_that_is_no_path_leaves_the_message_whole() {
+        for whole in ["read/write failed: the disk is full (os error 112)", "TypeError: undefined is not an object (evaluating 'a.b/c')", "invalid input and/or state: picker stopped while a clip was recording", "I/O error at 3:15, ratio 1/2"] {
+            assert_eq!(scrub(whole), whole);
+        }
+    }
+
+    #[test]
+    fn every_way_a_path_or_an_address_begins_is_cut() {
+        assert_eq!(scrub("open '/var/folders/ab/T/x' failed"), "open <path>");
+        assert_eq!(scrub("see ~/Clipframes/notes.md"), "see <path>");
+        assert_eq!(scrub(r"share \\\\nas\\sam\\x gone"), "share <path>");
+        assert_eq!(scrub(r#"cannot read "D:\\Work\\a.png""#), "cannot read <path>");
+        assert_eq!(scrub("fetch https://example.com/sam/private failed"), "fetch <path>");
+        assert_eq!(scrub("at file:///Users/sam/app.js:3"), "at <path>");
     }
 
     #[test]
