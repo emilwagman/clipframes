@@ -135,3 +135,45 @@ The first version checked every folder for its capture file and took 402 ms on W
 lists the folder by name and reads only the page shown. Budget: 300 ms.
 
 Shipped interface: 77 KB of script and 2 KB of styles, gzipped (React 19 and Zustand included).
+
+## 2026-10-09, night: after the interface was simplified and reporting was added
+
+Windows 11 on fleet-win, same method as the stress run above (`tools/win-stress.ps1`), this
+time with Chrome on the left 60% of the screen and a terminal on the right.
+
+| State | Core process | Threads | Handles | Web views |
+|---|---|---|---|---|
+| Idle, just started | 25.3 MB (9.5 private) | 7 | 261 | none |
+| Round open, nothing picked | 39.0 MB (12.7 private) | 31 | 445 | 8 processes, 432 MB |
+| After 200 clicks | 102.7 MB (46.5 private) | 31 | 448 | 8 processes, 559 MB |
+| Round closed, bar warm | 71.0 MB (15.3 private) | 29 | 403 | 6 processes, 365 MB |
+| After 30 open/close cycles | 43.1 MB (17.4 private) | 58 | 435 | 6 processes, 359 MB |
+| 100 s later | 42.5 MB (17.8 private) | 47 | 422 | 6 processes, 362 MB |
+| 4 minutes later | 42 MB | 26 | | none, 0.000 s CPU in 20 s |
+
+- 200 clicks in 18.1 s gave 200 picks, all saved. notes.md 49 KB.
+- "Idle, just started" is 10 MB higher than before. The start report goes out in the first
+  seconds, which loads the HTTP and encryption code and starts the runtime's threads. An
+  installed copy loads the same code 30 s after start for its update check, so the earlier
+  15 MB figure was only true for a copy that never checked for updates.
+- At the 100 s mark six web view processes were still there and the core had used 0.9 s of
+  CPU in 30 s; four minutes later there were none and CPU use was zero. The earlier run had
+  none at 100 s. Not explained; the keep-warm time is 90 s, so the margin is small. Worth a
+  closer look.
+- The run remembered Windows Terminal as a place (clicks landed on it), so the tab then
+  showed over the terminal. That is the feature working, but a stress run should clean
+  `places.json` afterwards.
+
+Updates, both systems, against a local feed (a 0.3.0 build whose endpoint is
+`http://127.0.0.1:5991/latest.json`, and a signed 0.3.1):
+
+- Windows: started hidden, asked the feed after 30 s, downloaded the installer, installed and
+  restarted hidden as 0.3.1, then asked the feed again and stayed. About 35 s in all.
+- macOS 27 (Apple silicon, fleet-air): the same, with the app bundle replaced in place.
+
+macOS, without a screen (fleet-air, over ssh; Accessibility not granted, so nothing was picked):
+
+- Starts hidden: 77 to 78 MB resident, 0.0% CPU. Bar drawn 166 to 275 ms after it is asked for.
+- With the permission missing the round does not start and says so.
+- The whole flow with real pointer events is ready to run there: build with
+  `--features selftest`, start with `--selftest`.

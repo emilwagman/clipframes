@@ -2,7 +2,7 @@
 //!
 //! The hit-test never asks the system "what is at this point", because the answer would be
 //! Clipframes' own overlay. It finds the front window of another app under the point and asks
-//! that app, with a short timeout so a hung app can't stall the pointer.
+//! that app, with a short timeout on every question so a hung app can't stall the pointer.
 
 use super::{ElementInfo, ReadError, Rect};
 use accessibility_sys::*;
@@ -32,8 +32,31 @@ const INTERACTIVE: &[&str] = &[
     "Tab", "MenuItem", "Cell", "Row", "Switch", "DisclosureTriangle", "Image", "Heading", "SearchField",
 ];
 
+/// Sets the timeout for every accessibility call this process makes, once. Set on the
+/// system-wide element it holds for all of them; set on one element it covers that element
+/// only (AXUIElement.h), which left every question after the hit-test (parents, children,
+/// each attribute) waiting the default several seconds on an app that had hung.
+fn limit_waiting() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| unsafe {
+        let system = Element(AXUIElementCreateSystemWide());
+        AXUIElementSetMessagingTimeout(system.0, TIMEOUT_SECONDS);
+    });
+}
+
 pub fn permitted() -> bool {
     unsafe { AXIsProcessTrusted() }
+}
+
+/// Has macOS ask the user for the Accessibility permission. Asking this way is what puts
+/// Clipframes in the list under Privacy & Security, where the user can switch it on; an app
+/// that only checks may not be listed at all. Does nothing once the permission is given.
+pub fn ask_permission() {
+    unsafe {
+        let prompt = CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt);
+        let options = CFDictionary::from_CFType_pairs(&[(prompt.as_CFType(), CFBoolean::true_value().as_CFType())]);
+        AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef());
+    }
 }
 
 pub fn pointer() -> Option<(f64, f64)> {
@@ -86,14 +109,28 @@ fn window_at(x: f64, y: f64) -> Option<ScreenWindow> {
 }
 
 pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    read(x, y, true)
+}
+
+/// The address of the page at a point, or nothing when there is no page there. With
+/// `may_wake` off, a Chromium or Electron app whose page structure is not switched on is
+/// left as it is, and has no address to give.
+pub fn page_at(x: f64, y: f64, may_wake: bool) -> String {
+    read(x, y, may_wake).map(|e| e.url).unwrap_or_default()
+}
+
+fn read(x: f64, y: f64, may_wake: bool) -> Result<ElementInfo, ReadError> {
     let win = window_at(x, y).ok_or(ReadError::Nothing)?;
-    wake(win.pid);
+    if may_wake {
+        wake(win.pid);
+    }
 
     // When the app gives nothing, the window itself is still an answer.
     let base = ElementInfo { app: win.owner.clone(), pid: win.pid, window: win.title.clone(), role: "Window".into(), frame: win.frame, ..Default::default() };
     if !permitted() {
         return Err(ReadError::NotPermitted);
     }
+    limit_waiting();
     unsafe {
         let app = Element(AXUIElementCreateApplication(win.pid));
         AXUIElementSetMessagingTimeout(app.0, TIMEOUT_SECONDS);
@@ -263,6 +300,7 @@ pub fn sleep_idle(older_than: Duration) {
 }
 
 fn set_tree(pid: i32, on: bool) {
+    limit_waiting();
     unsafe {
         let app = Element(AXUIElementCreateApplication(pid));
         let value = if on { CFBoolean::true_value() } else { CFBoolean::false_value() };
@@ -342,7 +380,12 @@ impl Element {
     }
 
     unsafe fn parent(&self) -> Option<Element> {
-        let v = self.copy(kAXParentAttribute)?;
+        self.element(kAXParentAttribute)
+    }
+
+    /// An attribute whose value is another element.
+    unsafe fn element(&self, attribute: &str) -> Option<Element> {
+        let v = self.copy(attribute)?;
         if v.type_of() != AXUIElementGetTypeID() {
             return None;
         }
@@ -401,6 +444,21 @@ pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
 }
 
 pub fn foreground() -> Option<super::Foreground> {
-    let front = windows().into_iter().next()?;
+    let mut front = windows().into_iter().next()?;
+    // The window list only gives titles to an app with the Screen Recording permission.
+    // Without it every title is empty, and another tab or page in the same app would look
+    // like no change at all. The app's own answer needs only the Accessibility permission.
+    if front.title.is_empty() && permitted() {
+        front.title = focused_title(front.pid);
+    }
     Some(super::Foreground { app: front.owner, title: front.title, pid: front.pid, frame: front.frame })
+}
+
+/// The title of the window an app has the keyboard in, as the app itself reports it.
+fn focused_title(pid: i32) -> String {
+    limit_waiting();
+    unsafe {
+        let app = Element(AXUIElementCreateApplication(pid));
+        app.element(kAXFocusedWindowAttribute).map(|window| window.string(kAXTitleAttribute)).unwrap_or_default()
+    }
 }

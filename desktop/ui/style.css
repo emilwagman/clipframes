@@ -15,7 +15,8 @@
   --ring-halo: rgba(255, 255, 255, 0.85); /* a hairline around page marks, so they show on any colour */
   --record: #ff453a;
   --radius: 18px;
-  --shadow: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.26); /* fits inside the 8px of room around a card */
+  --edge: inset 0 0 0 1px rgba(255, 255, 255, 0.14); /* a hairline inside every black surface: its edge on a dark screen, unseen on a light one */
+  --shadow: var(--edge), 0 0 0 1px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.26); /* fits inside the 8px of room around a card */
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
@@ -67,7 +68,7 @@ button.quiet:hover { color: var(--text); }
 .highlight, .mark, .drag { position: absolute; left: 0; top: 0; pointer-events: none; }
 .highlight { border: 2px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 8%, transparent); box-shadow: 0 0 0 1px var(--ring-halo); will-change: transform; }
 .highlight.big { background: transparent; }
-.label, .drag .size { position: absolute; padding: 4px 8px; border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap; }
+.label, .drag .size { position: absolute; padding: 4px 8px; border-radius: 6px; background: var(--surface); box-shadow: var(--edge); color: var(--text); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap; }
 .label { left: -2px; bottom: 100%; margin-bottom: 6px; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
 .label.inside { bottom: auto; top: 6px; left: 6px; margin: 0; }
 .label:empty { display: none; }
@@ -138,4 +139,6 @@ html.window, html.window body { background: var(--surface); overflow: auto; }
 /* The tab: only the mark, on a window just large enough for it. */
 .tabmark { position: absolute; inset: 6px; padding: 0; border-radius: 12px; }
 .tabmark img { display: block; width: 100%; height: 100%; }
+/* The same hairline, laid over the picture and following its corners. */
+.tabmark::after { content: ""; position: absolute; inset: 0; border-radius: 22.5%; box-shadow: var(--edge); pointer-events: none; }
 .tabmark:hover { filter: brightness(1.25); }

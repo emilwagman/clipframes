@@ -10,6 +10,8 @@ interface SettingsView {
   shortcutLabel: string;
   shortcutWorks: boolean;
   launchAtLogin: boolean;
+  shareUsage: boolean;
+  usageAvailable: boolean;
   version: string;
   update: string;
   mac: boolean;
@@ -86,6 +88,15 @@ export function Settings() {
         </label>
         <p className="help">Starts with nothing on screen, ready for the shortcut.</p>
       </section>
+      {view.usageAvailable && (
+        <section>
+          <label className="row" htmlFor="usage">
+            <span>Share anonymous usage</span>
+            <input id="usage" type="checkbox" checked={view.shareUsage} onChange={(e) => void invoke<SettingsView>("usage_set", { on: e.target.checked }).then(setView)} />
+          </label>
+          <p className="help">Counts of what you use and reports of errors, to find and fix problems. Never what is on your screen or what you write.</p>
+        </section>
+      )}
       <section>
         <h2>Updates</h2>
         <div className="row">

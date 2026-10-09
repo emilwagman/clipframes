@@ -547,6 +547,8 @@ dependencies = [
  "core-foundation 0.10.1",
  "core-graphics",
  "png 0.17.16",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "tauri",
