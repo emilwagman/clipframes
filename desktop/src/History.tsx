@@ -60,7 +60,9 @@ export function History({ api = core }: { api?: HistoryApi }) {
     if (loading.current) return;
     loading.current = true;
     const page = await api.list(from, PAGE);
-    setEntries((before) => (from === 0 ? page.entries : [...before, ...page.entries]));
+    // A round saved while History is open moves every folder down one place, so the next
+    // page can begin with a row already shown. It is left out.
+    setEntries((before) => (from === 0 ? page.entries : [...before, ...page.entries.filter((e) => !before.some((shown) => shown.id === e.id))]));
     missing.current = (from === 0 ? 0 : missing.current) + (page.next - from - page.entries.length);
     folders.current = page.total;
     next.current = page.next;
