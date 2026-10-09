@@ -24,6 +24,8 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-updater = "2"
+# Writes screenshots. Small, and already in the build through the icon code.
+png = "0.17"
 # Text only: the image half of the clipboard crate is not worth its size.
 arboard = { version = "3", default-features = false }
 serde = { version = "1", features = ["derive"] }

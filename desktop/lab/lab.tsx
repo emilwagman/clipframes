@@ -1,0 +1,67 @@
+// The real bar, comment box and overlay over the demo page, in one browser window, so the look
+// can be judged without running the app. ?state=empty|picked|area|recording picks the moment.
+import { createRoot } from "react-dom/client";
+import "../ui/style.css";
+import { Bar } from "../ui/Bar";
+import { Note } from "../ui/Note";
+import { Overlay } from "../ui/Overlay";
+import type { Platform, Rect, RoundView } from "../ui/platform";
+import { EMPTY_ROUND } from "../ui/platform";
+import { connect, useStore } from "../ui/store";
+
+const state = new URLSearchParams(location.search).get("state") ?? "picked";
+const BAR = { w: 640, h: 80 };
+const NOTE = { w: 380, h: 158 };
+
+const frame = document.getElementById("page") as HTMLIFrameElement;
+frame.addEventListener("load", () => {
+  const doc = frame.contentDocument as Document;
+  const rect = (selector: string): Rect => {
+    const r = (doc.querySelector(selector) as Element).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  };
+  const button = rect("#new-invoice");
+  const overdue = rect("#overdue-total strong");
+  const table = rect("table");
+  const area: Rect = { x: table.x - 8, y: table.y - 8, width: table.width * 0.62, height: 190 };
+
+  const picked = state === "picked";
+  const round: RoundView = {
+    ...EMPTY_ROUND,
+    picking: true,
+    tool: state === "area" ? "area" : state === "recording" ? "clip" : "element",
+    picks: picked
+      ? [
+          { kind: "element", headline: 'Button "New invoice"', selector: "#new-invoice .btn.btn-primary", note: "make this green" },
+          { kind: "element", headline: 'Text "$3,120"', selector: "#overdue-total .stat.overdue", note: "too alarming, use the normal text colour" },
+        ]
+      : [],
+    noting: picked ? 1 : null,
+    recording: state === "recording" ? 7 : null,
+    shortcut: "Ctrl+Shift+Space",
+    place: { name: "Google Chrome · localhost:3000", auto: true },
+  };
+  const none = async () => {};
+  const platform: Platform = {
+    tools: ["element", "area", "clip"], history: true,
+    state: async () => round, onRound: none, onHover: none, onMarks: none, onArea: none,
+    setTool: none, stopRecording: none, setNote: none, closeNote: none, removePick: none, setAuto: none, openHistory: none, done: none, escape: none, openPermission: none,
+  };
+  connect(platform);
+  useStore.setState({
+    round,
+    hover: state === "empty" ? { rect: button, label: 'Button "New invoice"' } : picked ? { rect: rect("#outstanding-total"), label: 'Group "Outstanding"' } : { rect: null, label: "" },
+    marks: picked ? [{ number: 1, rect: button, kind: "element" }, { number: 2, rect: overdue, kind: "element" }] : [],
+    area: state === "area" || state === "recording" ? { rect: area, recording: state === "recording" } : { rect: null, recording: false },
+  });
+
+  const mount = (id: string, x: number, y: number, w: number, h: number, node: React.ReactNode) => {
+    const host = document.getElementById(id) as HTMLElement;
+    Object.assign(host.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+    createRoot(host).render(node);
+  };
+  createRoot(document.getElementById("overlay") as HTMLElement).render(<Overlay />);
+  mount("bar", (innerWidth - BAR.w) / 2, innerHeight - BAR.h - 40, BAR.w, BAR.h, <Bar />);
+  mount("note", overdue.x, overdue.y + overdue.height + 8, NOTE.w, NOTE.h, <Note />);
+  setTimeout(() => (document.body.dataset.ready = "1"), 100);
+});

@@ -13,6 +13,7 @@
   --ring: #0b0b0c;          /* outlines drawn on the page */
   --ring-halo: #ffffff;     /* a hairline around them, so they show on dark pages too */
   --ring-fill: transparent;
+  --record: #ff453a;
   --radius: 16px;
   --radius-s: 9px;
   --shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 6px 14px rgba(0, 0, 0, 0.32);
@@ -34,25 +35,24 @@ kbd { font: 600 11px/1 var(--sans); color: var(--text); padding: 4px 6px; border
 /* The window is a little larger than the card, so the shadow has room. */
 .bar, .note { position: absolute; inset: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
 
-.bar { display: flex; align-items: center; gap: 14px; padding: 0 10px 0 10px; }
-.mode { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px 0 10px; border-radius: var(--radius-s); background: var(--raised); color: var(--text); font-size: 13px; font-weight: 600; }
-.mode .tool { display: contents; }
+svg.icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+button.ghost { width: 36px; height: 36px; flex: none; border-radius: var(--radius-s); color: var(--text-2); display: grid; place-items: center; }
+button.ghost:hover { background: var(--raised); color: var(--text); }
+button.ghost.on { color: var(--text); background: var(--raised); }
+
+.bar { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 8px; }
 .tools { display: flex; gap: 2px; padding: 3px; border-radius: calc(var(--radius-s) + 3px); background: var(--raised); }
-.tools .tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 60px; height: 46px; border-radius: var(--radius-s); color: var(--text-2); font-size: 11px; font-weight: 600; }
-.tools .tool.on { background: var(--accent); color: var(--on-accent); }
-.tool svg, button.icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-button.icon { width: 36px; height: 36px; border-radius: var(--radius-s); color: var(--text-2); display: grid; place-items: center; }
-button.icon:hover { background: var(--raised); color: var(--text); }
-.mode svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.status { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 60px; height: 46px; border-radius: var(--radius-s); color: var(--text-2); font-size: 11px; font-weight: 600; }
+.tool:hover { color: var(--text); }
+.tool.on { background: var(--accent); color: var(--on-accent); }
+.status { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; padding-left: 4px; }
 .status strong { font-weight: 650; font-size: 14px; }
 .status span { color: var(--text-2); font-size: 12px; }
 .status strong, .status span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bar .keys { display: none; }
-.bar.empty .keys { display: flex; }
-.picks { display: none; }
-.bar.trouble .mode, .bar.trouble .tools, .bar.trouble .keys, .bar.trouble button.icon { display: none; }
-.bar.trouble { padding-left: 16px; }
+.bar.trouble, .bar.recording { padding-left: 18px; }
+.bar .dot { width: 12px; height: 12px; flex: none; border-radius: 50%; background: var(--record); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } }
 
 .note { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
 .note .head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
@@ -75,6 +75,11 @@ button.icon:hover { background: var(--raised); color: var(--text); }
 .label.inside { bottom: auto; top: 6px; left: 6px; margin: 0; }
 .label:empty { display: none; }
 .mark { border: 2px solid var(--ring); box-shadow: 0 0 0 1.5px var(--ring-halo); }
+.mark.area, .mark.clip { border-style: dashed; }
+/* The area being dragged: a crisp frame, with its size while it is still being drawn. */
+.area { position: absolute; left: 0; top: 0; pointer-events: none; border: 2px solid var(--ring); box-shadow: 0 0 0 1.5px var(--ring-halo), inset 0 0 0 1.5px var(--ring-halo), 0 0 0 100vmax rgba(0, 0, 0, 0.28); }
+.area.recording { border-color: var(--record); box-shadow: 0 0 0 1.5px var(--ring-halo); }
+.area .size { position: absolute; left: -2px; top: 100%; margin-top: 6px; padding: 3px 8px; border-radius: 6px; background: var(--surface); color: var(--text); border: 1px solid var(--border); font: 600 11px/1.3 var(--mono); white-space: nowrap; }
 .mark b { position: absolute; left: -12px; top: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--surface); color: var(--text); box-shadow: 0 0 0 1.5px var(--ring-halo); font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; }
 
 /* Settings: an ordinary window, so it has a background and can be read like a page. */
@@ -89,7 +94,25 @@ html.window, html.window body { background: var(--surface); overflow: auto; }
 .settings .help.warn { color: #ff8a80; }
 .settings .key { min-width: 150px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--raised); font-weight: 600; }
 .settings .key.recording { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); font-weight: 500; }
-.settings .plain { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
-.settings .plain:hover, .settings .key:hover { border-color: var(--text-2); }
+.settings .key:hover { border-color: var(--text-2); }
 .settings input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
 
+
+/* History: a list to scan, newest first. */
+.history { height: 100vh; overflow-y: auto; padding: 0 20px 24px; }
+.history header { position: sticky; top: 0; z-index: 1; display: flex; align-items: baseline; gap: 10px; padding: 18px 0 12px; background: var(--surface); }
+.history h1 { margin: 0; font-size: 17px; font-weight: 650; }
+.history header span, .history .nothing { color: var(--text-2); font-size: 12px; }
+.history .nothing { font-size: 13px; max-width: 46ch; }
+.history ul { list-style: none; margin: 0; padding: 0; }
+.history li { display: flex; align-items: center; gap: 14px; padding: 10px 0; border-top: 1px solid var(--border); }
+.history .thumbs { display: flex; gap: 4px; flex: none; width: 150px; }
+.history .thumb { width: 48px; height: 48px; border-radius: 7px; object-fit: cover; background: var(--raised); border: 1px solid var(--border); }
+.history .thumb.none { display: grid; place-items: center; color: var(--text-2); font-weight: 650; }
+.history .about { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.history .about strong { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history .about span { color: var(--text-2); font-size: 12px; }
+.history .actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.plain { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+.plain:hover { border-color: var(--text-2); }
+.plain.danger { background: var(--record); border-color: var(--record); color: #fff; font-weight: 600; }

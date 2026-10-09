@@ -2,32 +2,33 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { HoverView, MarkView, Platform, RoundView } from "../ui/platform";
+import type { AreaView, HoverView, MarkView, Platform, RoundView } from "../ui/platform";
 
 const here = getCurrentWebviewWindow();
 
-function on<T>(event: string, listener: (payload: T) => void): void {
+/** Listens to an event from the core, sent to this window or to all of them. */
+export function listen<T>(event: string, listener: (payload: T) => void): void {
   void here.listen<T>(event, (e) => listener(e.payload));
 }
 
 export const label = here.label;
 
-/** For the parts only the desktop app has, like settings. */
-export function listen<T>(event: string, listener: (payload: T) => void): void {
-  on(event, listener);
-}
-
 export const platform: Platform = {
-  tools: ["element"],
-  history: false,
+  tools: ["element", "area", "clip"],
+  history: true,
   state: () => invoke<RoundView>("round_state"),
-  onRound: (listener) => on<RoundView>("round", listener),
-  onHover: (listener) => on<HoverView>("hover", listener),
-  onMarks: (listener) => on<MarkView[]>("marks", listener),
+  onRound: (listener) => listen<RoundView>("round", listener),
+  onHover: (listener) => listen<HoverView>("hover", listener),
+  onMarks: (listener) => listen<MarkView[]>("marks", listener),
+  onArea: (listener) => listen<AreaView>("area", listener),
+  setTool: (tool) => invoke("tool_set", { tool }),
+  stopRecording: () => invoke("recording_stop"),
   setNote: (index, note) => invoke("note_set", { index, note }),
   closeNote: () => invoke("note_close"),
   removePick: (index) => invoke("pick_remove", { index }),
+  setAuto: (on) => invoke("place_auto_set", { on }),
+  openHistory: () => invoke("history_open"),
   done: () => invoke("round_done"),
   escape: () => invoke("escape_key"),
-  openPermission: () => invoke("permission_open"),
+  openPermission: (kind) => invoke("permission_open", { kind }),
 };
