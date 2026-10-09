@@ -144,6 +144,9 @@ pub struct Core {
     note_unsaved: AtomicBool,
     /// A thread is waiting to write that comment out.
     note_timer: AtomicBool,
+    /// The number that came with the newest comment text, so an older one arriving late is
+    /// not put over it.
+    note_seq: AtomicU64,
 }
 
 /// A clip in the making.
@@ -1103,9 +1106,16 @@ fn round_state(app: AppHandle, window: WebviewWindow) -> RoundView {
 /// The comment box sends its text as it is typed, so closing the round in any way keeps it.
 /// The round has the text at once; the clipboard and the files follow a moment later, once
 /// for a run of keystrokes.
+///
+/// Every keystroke is a message of its own, and nothing promises they arrive in the order
+/// they were sent. Each carries a number that only grows (`seq`); one with a number not above
+/// the newest seen is an older text arriving late and is dropped.
 #[tauri::command]
-fn note_set(app: AppHandle, index: usize, note: String) {
+fn note_set(app: AppHandle, index: usize, note: String, seq: Option<u64>) {
     let core = app.state::<Core>();
+    if seq.is_some_and(|seq| !newer(&core.note_seq, seq)) {
+        return;
+    }
     core.round.lock().unwrap().set_note(index, &note);
     core.note_unsaved.store(true, Ordering::SeqCst);
     if !core.note_timer.swap(true, Ordering::SeqCst) {
@@ -1116,6 +1126,11 @@ fn note_set(app: AppHandle, index: usize, note: String) {
             settle_note(&app);
         });
     }
+}
+
+/// Takes `seq` as the newest number seen if it is, and says whether it was.
+fn newer(newest: &AtomicU64, seq: u64) -> bool {
+    newest.fetch_max(seq, Ordering::SeqCst) < seq
 }
 
 /// Writes out a comment that was typed but not yet saved or copied.
@@ -1714,6 +1729,16 @@ mod tests {
         assert!(same_text("[Clipframes: 2 things]\r\n1. Button\r\n2. Link", "[Clipframes: 2 things]\n1. Button\n2. Link"));
         assert!(!same_text("something the user copied since", "[Button \"Save\"]"));
         assert!(!same_text("", ""), "an empty clipboard needs no emptying");
+    }
+
+    #[test]
+    fn comment_text_that_arrives_out_of_order_does_not_replace_newer_text() {
+        let newest = AtomicU64::new(0);
+        assert!(newer(&newest, 1_760_000_000_001));
+        assert!(newer(&newest, 1_760_000_000_003));
+        assert!(!newer(&newest, 1_760_000_000_002), "the keystroke before, arriving after");
+        assert!(!newer(&newest, 1_760_000_000_003), "the same one twice");
+        assert!(newer(&newest, 1_760_000_000_004));
     }
 
     #[test]

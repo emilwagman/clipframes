@@ -71,7 +71,7 @@ pub fn run(app: AppHandle) {
             close(&app);
             return;
         }
-        note_set(app.clone(), 0, "selftest: an element".into());
+        note_set(app.clone(), 0, "selftest: an element".into(), None);
         hide_note(&app);
         wait(400);
 
