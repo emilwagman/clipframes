@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>Invoices · Northwind</title>
-<!-- The page the launch film points at: lab/northwind.html reduced to grey blocks, with three
-     real things left in. The ids and classes are the ones the copied text names. -->
+<!-- The page the launch film points at: lab/northwind.html reduced to grey blocks, with the
+     heading and three real things left in. The ids and classes are the ones the copied text names. -->
 <style>
   :root { --ink: #17181c; --ink-3: #9a9ea8; --line: #e8e9ee; --bg: #f7f8fa; --block: #e9ebef; --brand: #3b3fd8; }
   * { box-sizing: border-box; }
@@ -17,7 +17,7 @@
   .b { display: block; height: 10px; border-radius: 5px; background: var(--block); }
   aside .b:first-child { width: 72px; height: 14px; margin-bottom: 10px; background: #dfe1e7; }
   .top { display: flex; align-items: center; justify-content: space-between; }
-  .top .b { width: 120px; height: 18px; border-radius: 6px; background: #dfe1e7; }
+  h1 { margin: 0; font-size: 19px; line-height: 24px; font-weight: 650; letter-spacing: -0.01em; }
   button { font: inherit; font-weight: 550; height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
   button.btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
@@ -36,7 +36,7 @@
   /* Only things can be pointed at, not the layout that holds them: the pointer crosses a lot of
      empty page on its way, and an outline around half the window each time hides the subject. */
   .app, aside, main, .top, .stats, table, thead, tbody, tr { pointer-events: none; }
-  .b, button, .stat, td, th { pointer-events: auto; }
+  .b, h1, button, .stat, td, th { pointer-events: auto; }
   .badge { font-size: 11.5px; font-weight: 550; padding: 2px 8px; border-radius: 999px; }
   .badge.paid { background: #e3f6ea; color: #17803d; }
   .badge.due { background: #fff4d6; color: #9a6b00; }
@@ -50,7 +50,7 @@
   </aside>
   <main>
     <div class="top">
-      <i class="b"></i>
+      <h1>Invoices</h1>
       <button id="new-invoice" class="btn btn-primary">New invoice</button>
     </div>
     <div class="stats">
