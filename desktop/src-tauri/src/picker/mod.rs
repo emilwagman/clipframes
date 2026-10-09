@@ -259,7 +259,6 @@ fn contains(r: &Rect, x: f64, y: f64) -> bool {
 }
 
 fn read_loop(shared: Arc<Shared>, emit: Arc<dyn Fn(Event) + Send + Sync>) {
-    let mut last_housekeeping = Instant::now();
     while shared.running.load(Ordering::SeqCst) {
         let next = {
             let mut pending = shared.pending.lock().unwrap();
@@ -283,11 +282,6 @@ fn read_loop(shared: Arc<Shared>, emit: Arc<dyn Fn(Event) + Send + Sync>) {
         let read_ms = started.elapsed().as_secs_f64() * 1000.0;
         *shared.last.lock().unwrap() = element.clone().map(|e| (x, y, e));
         emit(Event::Hover { x, y, element, read_ms });
-
-        if last_housekeeping.elapsed() > Duration::from_secs(60) {
-            element::sleep_idle(Duration::from_secs(300));
-            last_housekeeping = Instant::now();
-        }
     }
 }
 

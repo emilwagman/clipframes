@@ -359,9 +359,17 @@ fn watch(app: AppHandle) {
     let mut seen: Option<(i32, String)> = None;
     let mut read_at = Instant::now();
     let mut showing = false;
+    let mut tidied = Instant::now();
     loop {
         thread::sleep(Duration::from_secs(1));
         let core = app.state::<Core>();
+        // Once a minute: apps that were asked for their page structure and have not been
+        // looked at for five minutes get to switch it off again. Done here and not during a
+        // round, because a round is over long before this would ever come up.
+        if tidied.elapsed() >= Duration::from_secs(60) {
+            element::sleep_idle(Duration::from_secs(300));
+            tidied = Instant::now();
+        }
         if core.picker.lock().unwrap().is_some() {
             if showing {
                 hide_tab(&app);
@@ -380,7 +388,11 @@ fn watch(app: AppHandle) {
             if seen.is_some() && read_at.elapsed() < Duration::from_millis(1500) {
                 continue; // titles that change all the time do not get a reading each
             }
-            let url = if element::permitted() { element::element_full_at(front.frame.x + front.frame.width / 2.0, front.frame.y + front.frame.height / 2.0).map(|e| e.url).unwrap_or_default() } else { String::new() };
+            // The address is only worth switching an app's page structure on for where the
+            // tab could appear on a site in that app. Otherwise every Chromium and Electron
+            // app would have it forced on just for coming to the front while Clipframes runs.
+            let wake = core.places.lock().unwrap().has_site(&front.app, places::now());
+            let url = if element::permitted() { element::page_at(front.frame.x + front.frame.width / 2.0, front.frame.y + front.frame.height / 2.0, wake) } else { String::new() };
             *core.front.lock().unwrap() = Some(Place::new(&front.app, &url));
             seen = Some(key);
             read_at = Instant::now();
@@ -1576,7 +1588,11 @@ pub fn run() {
             }
             // Quit, an update's restart, the system shutting down: a comment still being
             // typed is written out first.
-            tauri::RunEvent::Exit => settle_note(app),
+            tauri::RunEvent::Exit => {
+                settle_note(app);
+                // Apps asked for their page structure are not left with it on.
+                element::sleep_idle(Duration::ZERO);
+            }
             _ => {
                 let _ = app;
             }

@@ -129,6 +129,10 @@ fn role_of(el: &UIElement) -> String {
 
 pub fn sleep_idle(_older_than: std::time::Duration) {}
 
+pub fn page_at(x: f64, y: f64, _may_wake: bool) -> String {
+    element_full_at(x, y).map(|e| e.url).unwrap_or_default()
+}
+
 pub fn foreground() -> Option<super::Foreground> {
     win::foreground()
 }

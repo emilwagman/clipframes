@@ -109,8 +109,21 @@ fn window_at(x: f64, y: f64) -> Option<ScreenWindow> {
 }
 
 pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+    read(x, y, true)
+}
+
+/// The address of the page at a point, or nothing when there is no page there. With
+/// `may_wake` off, a Chromium or Electron app whose page structure is not switched on is
+/// left as it is, and has no address to give.
+pub fn page_at(x: f64, y: f64, may_wake: bool) -> String {
+    read(x, y, may_wake).map(|e| e.url).unwrap_or_default()
+}
+
+fn read(x: f64, y: f64, may_wake: bool) -> Result<ElementInfo, ReadError> {
     let win = window_at(x, y).ok_or(ReadError::Nothing)?;
-    wake(win.pid);
+    if may_wake {
+        wake(win.pid);
+    }
 
     // When the app gives nothing, the window itself is still an answer.
     let base = ElementInfo { app: win.owner.clone(), pid: win.pid, window: win.title.clone(), role: "Window".into(), frame: win.frame, ..Default::default() };
