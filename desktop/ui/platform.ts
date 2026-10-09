@@ -49,5 +49,7 @@ export interface Platform {
   closeNote(): Promise<void>;
   removePick(index: number): Promise<void>;
   done(): Promise<void>;
+  /** Esc, pressed while one of Clipframes' own windows has the keyboard. */
+  escape(): Promise<void>;
   openPermission(): Promise<void>;
 }

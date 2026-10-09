@@ -11,5 +11,11 @@ if (label === "bar") mountBar(root, platform);
 else if (label === "note") mountNote(root, platform);
 else mountOverlay(root, platform);
 
+// While another app has the keyboard, the core hears Esc itself. While one of these windows
+// has it (typing a comment), the system gives the key to the window instead, so pass it on.
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") void platform.escape();
+});
+
 // These are tool windows, not pages: no context menu.
 window.addEventListener("contextmenu", (event) => event.preventDefault());

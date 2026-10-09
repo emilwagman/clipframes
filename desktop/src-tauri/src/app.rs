@@ -356,10 +356,9 @@ fn on_event(app: &AppHandle, event: Event) {
             show_note(app, &frame);
             publish(app);
         }
-        // Esc closes the comment box if one is open, and the round otherwise.
         Event::Cancel => {
             trace("esc");
-            later(app, |app| if !hide_note(app) { close(app) })
+            later(app, escape)
         }
     }
 }
@@ -384,6 +383,13 @@ fn show_note(app: &AppHandle, frame: &Rect) {
     let _ = note.show();
     let _ = note.set_focus();
     refresh_exempt(app);
+}
+
+/// Esc closes the comment box if one is open, and the round otherwise.
+fn escape(app: &AppHandle) {
+    if !hide_note(app) {
+        close(app);
+    }
 }
 
 /// True if a comment box was open.
@@ -430,6 +436,12 @@ fn pick_remove(app: AppHandle, index: usize) {
 }
 
 #[tauri::command]
+fn escape_key(app: AppHandle) {
+    trace("esc from a window");
+    later(&app, escape);
+}
+
+#[tauri::command]
 fn round_done(app: AppHandle) {
     later(&app, close);
 }
@@ -448,7 +460,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Core::default())
-        .invoke_handler(tauri::generate_handler![round_state, note_set, note_close, pick_remove, round_done, permission_open])
+        .invoke_handler(tauri::generate_handler![round_state, note_set, note_close, pick_remove, round_done, escape_key, permission_open])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);

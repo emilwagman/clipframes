@@ -23,5 +23,6 @@ export const platform: Platform = {
   closeNote: () => invoke("note_close"),
   removePick: (index) => invoke("pick_remove", { index }),
   done: () => invoke("round_done"),
+  escape: () => invoke("escape_key"),
   openPermission: () => invoke("permission_open"),
 };
