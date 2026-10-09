@@ -146,11 +146,10 @@ mod native {
                 0
             }
             // Asked to close (Alt+F4 while it has the keyboard, or another program closing
-            // windows): the tab only goes out of sight. Destroyed, it could never come back.
-            WM_CLOSE => {
-                ShowWindow(hwnd, 0);
-                0
-            }
+            // windows): nothing happens. Destroyed, the tab could never come back, and hidden
+            // behind the app's back it would not be shown again until the place changed. The
+            // pin in the bar is how the tab is turned off.
+            WM_CLOSE => 0,
             _ => DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
