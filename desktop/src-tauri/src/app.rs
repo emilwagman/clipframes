@@ -296,14 +296,17 @@ fn remember(app: &AppHandle, element: &ElementInfo) {
     *core.over.lock().unwrap() = Some(place);
 }
 
-/// Where the tab sits: in the middle of where the bar opens. Physical pixels.
-fn tab_position(app: &AppHandle, side: f64) -> Option<PhysicalPosition<i32>> {
-    let (bar, scale) = bar_position(app)?;
-    Some(PhysicalPosition::new(bar.x + ((BAR_SIZE.0 * scale - side) / 2.0) as i32, bar.y + ((BAR_SIZE.1 * scale - side) / 2.0) as i32))
+/// Where the tab sits: in the middle of where the bar would open on the display that shows
+/// `near`. `side` is the tab's side in physical pixels of that display.
+fn tab_spot(app: &AppHandle, near: (f64, f64), side: impl Fn(f64) -> f64) -> Option<Spot> {
+    let bar = bar_spot(app, Some(near))?;
+    let side = side(bar.scale);
+    Some(Spot { at: PhysicalPosition::new(bar.at.x + ((BAR_SIZE.0 * bar.scale - side) / 2.0) as i32, bar.at.y + ((BAR_SIZE.1 * bar.scale - side) / 2.0) as i32), scale: bar.scale })
 }
 
+/// Shows the tab on the display that shows `near`: the middle of the window it belongs to.
 #[cfg(windows)]
-fn show_tab(app: &AppHandle) {
+fn show_tab(app: &AppHandle, near: (f64, f64)) {
     let core = app.state::<Core>();
     let mut tab = core.tab.lock().unwrap();
     if tab.is_none() {
@@ -314,8 +317,10 @@ fn show_tab(app: &AppHandle) {
         });
     }
     if let Some(tab) = tab.as_ref() {
-        if let Some(at) = tab_position(app, tab.side() as f64) {
-            tab.show(at.x, at.y);
+        // The native tab keeps the size it was made at, whatever the display.
+        let side = tab.side() as f64;
+        if let Some(spot) = tab_spot(app, near, |_| side) {
+            tab.show(spot.at.x, spot.at.y);
         }
     }
 }
@@ -329,18 +334,12 @@ fn hide_tab(app: &AppHandle) {
 
 /// Elsewhere the tab is a very small window of the app's own.
 #[cfg(not(windows))]
-fn show_tab(app: &AppHandle) {
+fn show_tab(app: &AppHandle, near: (f64, f64)) {
     let window = app.get_webview_window(TAB).or_else(|| small_window(app, TAB, (tab::SIZE + 12.0, tab::SIZE + 12.0)).build().ok());
     let Some(window) = window else { return };
-    let side = tab::SIZE + 12.0;
-    if cfg!(target_os = "macos") {
-        // In points, for the reason given in `open_overlays`: the new window may not be on
-        // the main display yet, and its own scale would be the wrong one to convert with.
-        if let Some((bar, scale)) = bar_position(app) {
-            let _ = window.set_position(LogicalPosition::new(bar.x as f64 / scale + (BAR_SIZE.0 - side) / 2.0, bar.y as f64 / scale + (BAR_SIZE.1 - side) / 2.0));
-        }
-    } else if let Some(at) = tab_position(app, side * window.scale_factor().unwrap_or(1.0)) {
-        let _ = window.set_position(at);
+    // A web view keeps its size in CSS pixels, so in pixels it is as large as its display says.
+    if let Some(spot) = tab_spot(app, near, |scale| (tab::SIZE + 12.0) * scale) {
+        spot.put(&window);
     }
     let _ = window.show();
 }
@@ -359,6 +358,8 @@ fn watch(app: AppHandle) {
     let mut seen: Option<(i32, String)> = None;
     let mut read_at = Instant::now();
     let mut showing = false;
+    // The middle of the window the tab was last placed for.
+    let mut placed = (f64::NAN, f64::NAN);
     let mut tidied = Instant::now();
     loop {
         thread::sleep(Duration::from_secs(1));
@@ -398,8 +399,15 @@ fn watch(app: AppHandle) {
             read_at = Instant::now();
         }
         let wanted = core.front.lock().unwrap().as_ref().is_some_and(|p| core.places.lock().unwrap().wants(p, places::now()));
-        if wanted != showing {
-            if wanted { show_tab(&app) } else { hide_tab(&app) }
+        // The tab goes to the display its window is on, and follows when the window moves.
+        let middle = (front.frame.x + front.frame.width / 2.0, front.frame.y + front.frame.height / 2.0);
+        if wanted != showing || (wanted && middle != placed) {
+            if wanted {
+                show_tab(&app, middle);
+                placed = middle;
+            } else {
+                hide_tab(&app);
+            }
             showing = wanted;
         }
     }
@@ -477,32 +485,76 @@ fn small_window<'a>(app: &'a AppHandle, label: &str, size: (f64, f64)) -> Webvie
         })
 }
 
-/// Where the bar goes: bottom centre of the main display, in physical pixels.
-fn bar_position(app: &AppHandle) -> Option<(PhysicalPosition<i32>, f64)> {
-    let m = app.primary_monitor().ok()??;
+/// A place for one of Clipframes' windows: its top-left corner in the physical pixels of the
+/// display it is on, and that display's scale.
+struct Spot {
+    at: PhysicalPosition<i32>,
+    scale: f64,
+}
+
+impl Spot {
+    fn put(&self, window: &WebviewWindow) {
+        let _ = if cfg!(target_os = "macos") {
+            // In points, for the reason given in `open_overlays`: macOS converts pixels with
+            // the scale of the display the window is on now, not the one it is going to.
+            window.set_position(LogicalPosition::new(self.at.x as f64 / self.scale, self.at.y as f64 / self.scale))
+        } else {
+            window.set_position(self.at)
+        };
+    }
+}
+
+/// Which display a point is on: the first whose rectangle holds it. A display's left and top
+/// edges belong to it, its right and bottom edges to the neighbour.
+fn monitor_at(monitors: &[Rect], x: f64, y: f64) -> Option<usize> {
+    monitors.iter().position(|m| x >= m.x && x < m.x + m.width && y >= m.y && y < m.y + m.height)
+}
+
+/// The display that shows `near` (a point in picker units), or the main one when there is no
+/// point or it is on none.
+fn monitor_near(app: &AppHandle, near: Option<(f64, f64)>) -> Option<tauri::Monitor> {
+    let found = near.and_then(|(x, y)| {
+        let mut monitors = app.available_monitors().ok()?;
+        let frames: Vec<Rect> = monitors.iter().map(|m| display(m).0).collect();
+        Some(monitors.swap_remove(monitor_at(&frames, x, y)?))
+    });
+    found.or_else(|| app.primary_monitor().ok()?)
+}
+
+/// Where the bar goes: bottom centre of the display that shows `near`.
+fn bar_spot(app: &AppHandle, near: Option<(f64, f64)>) -> Option<Spot> {
+    let m = monitor_near(app, near)?;
     let (pos, size, scale) = (m.position(), m.size(), m.scale_factor());
     let (w, h) = (BAR_SIZE.0 * scale, BAR_SIZE.1 * scale);
     let x = pos.x as f64 + (size.width as f64 - w) / 2.0;
     let y = pos.y as f64 + size.height as f64 - h - 96.0 * scale;
-    Some((PhysicalPosition::new(x as i32, y as i32), scale))
+    Some(Spot { at: PhysicalPosition::new(x as i32, y as i32), scale })
 }
 
-/// The bar, on screen. A kept one is moved and shown; a new one is built where it belongs and
-/// already visible, so nothing waits for a second step once the web view is up.
+/// The bar, on screen, on the display the pointer is on: that is where the user is working.
+/// A kept one is moved and shown; a new one is built where it belongs and already visible,
+/// so nothing waits for a second step once the web view is up.
 fn show_bar(app: &AppHandle) -> Option<WebviewWindow> {
-    let place = bar_position(app);
+    let spot = bar_spot(app, element::pointer());
     if let Some(bar) = app.get_webview_window(BAR) {
-        if let Some((position, _)) = place {
-            let _ = bar.set_position(position);
+        if let Some(spot) = &spot {
+            spot.put(&bar);
         }
         let _ = bar.show();
         return Some(bar);
     }
     let mut builder = small_window(app, BAR, BAR_SIZE).visible(true);
-    if let Some((position, scale)) = place {
-        builder = builder.position(position.x as f64 / scale, position.y as f64 / scale);
+    if let Some(spot) = &spot {
+        builder = builder.position(spot.at.x as f64 / spot.scale, spot.at.y as f64 / spot.scale);
     }
-    builder.build().ok()
+    let bar = builder.build().ok()?;
+    // The builder is given the place in the display's own units and finds the display from
+    // that. With displays of different scales the same numbers can fit two of them, so the
+    // place is said once more in a way that cannot be misread.
+    if let Some(spot) = &spot {
+        spot.put(&bar);
+    }
+    Some(bar)
 }
 
 /// One click-through window per display. They only paint; the picker owns the input.
@@ -1605,6 +1657,36 @@ mod tests {
 
     const MAIN: Rect = Rect { x: 0.0, y: 0.0, width: 1920.0, height: 1080.0 };
     const LEFT: Rect = Rect { x: -1920.0, y: 0.0, width: 1920.0, height: 1080.0 };
+    const ABOVE: Rect = Rect { x: 200.0, y: -1440.0, width: 2560.0, height: 1440.0 };
+
+    #[test]
+    fn a_point_is_on_the_display_that_holds_it_also_left_of_or_above_the_main_one() {
+        let all = [MAIN, LEFT, ABOVE];
+        assert_eq!(monitor_at(&all, 960.0, 540.0), Some(0));
+        assert_eq!(monitor_at(&all, -1500.0, 300.0), Some(1));
+        assert_eq!(monitor_at(&all, 1400.0, -700.0), Some(2));
+        assert_eq!(monitor_at(&all, -0.5, 1079.5), Some(1));
+    }
+
+    #[test]
+    fn a_point_on_an_edge_two_displays_share_is_on_the_one_that_begins_there() {
+        let all = [MAIN, LEFT, ABOVE];
+        assert_eq!(monitor_at(&all, 0.0, 500.0), Some(0), "the main display's left edge is its own");
+        assert_eq!(monitor_at(&all, -1920.0, 0.0), Some(1), "a display's top-left corner is its own");
+        assert_eq!(monitor_at(&all, 500.0, 0.0), Some(0), "the top edge of the main one, not the bottom of the one above");
+        assert_eq!(monitor_at(&all, 500.0, -0.01), Some(2));
+        assert_eq!(monitor_at(&all, 1920.0, 500.0), None, "a right edge belongs to no one when nothing is beyond it");
+        assert_eq!(monitor_at(&all, 500.0, 1080.0), None);
+    }
+
+    #[test]
+    fn a_point_on_no_display_is_on_none() {
+        let all = [MAIN, LEFT, ABOVE];
+        assert_eq!(monitor_at(&all, 5000.0, 100.0), None);
+        assert_eq!(monitor_at(&all, -100.0, -100.0), None, "in the corner between two displays");
+        assert_eq!(monitor_at(&[], 0.0, 0.0), None);
+        assert_eq!(monitor_at(&all, f64::NAN, 0.0), None);
+    }
 
     #[test]
     fn an_element_on_a_display_left_of_the_main_one_is_pictured_where_it_is() {
