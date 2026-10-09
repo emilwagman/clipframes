@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Clipframes' own windows: the bar, the comment box and the overlays.",
+  "description": "Clipframes' own windows: the bar, the comment box, settings and the overlays.",
   "windows": [
     "bar",
     "note",
+    "settings",
     "overlay-*"
   ],
   "permissions": [

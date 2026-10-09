@@ -11,21 +11,23 @@
 use crate::element::{self, ElementInfo, Rect};
 use crate::picker::{Event, Picker};
 use crate::round::Round;
+use crate::settings::{self, Settings};
 use crate::store::{self, Stamp};
+use crate::updates;
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const BAR: &str = "bar";
 const NOTE: &str = "note";
-const SHORTCUT: &str = "ctrl+shift+space";
+const SETTINGS: &str = "settings";
 /// How long the hidden bar is kept after closing, ready to open again at once.
 const KEEP_WARM: Duration = Duration::from_secs(90);
 
@@ -79,6 +81,13 @@ pub struct Core {
     folder: Mutex<Option<(PathBuf, Stamp)>>,
     /// The round's notes.md, once written: the path the pasted reference points to.
     notes: Mutex<Option<PathBuf>>,
+    settings: Mutex<Settings>,
+    /// False when another app owns the shortcut, so Clipframes could not take it.
+    shortcut_works: Mutex<bool>,
+    /// The tray's "Open" line, which shows the shortcut.
+    open_item: Mutex<Option<MenuItem<tauri::Wry>>>,
+    /// The last thing the updater had to say.
+    update: Mutex<String>,
     /// Why the round could not start, for a bar that loads after the fact.
     trouble: Mutex<Option<String>>,
     /// Counts opens and closes, so a keep-warm timer knows if it is out of date.
@@ -99,6 +108,8 @@ struct RoundView {
     reference: String,
     /// Set when the round could not start, e.g. the system has not allowed Clipframes yet.
     trouble: Option<String>,
+    /// The shortcut as people write it, e.g. "Ctrl+Shift+Space".
+    shortcut: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -131,6 +142,7 @@ fn view(app: &AppHandle) -> RoundView {
         noting,
         reference: round.reference(core.notes.lock().unwrap().as_deref().and_then(|p| p.to_str())),
         trouble,
+        shortcut: settings::label(&core.settings.lock().unwrap().shortcut, cfg!(target_os = "macos")),
     };
     state
 }
@@ -505,57 +517,244 @@ fn permission_open(app: AppHandle) {
     let _ = app.opener().open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", None::<&str>);
 }
 
+/// What the settings window draws.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsView {
+    shortcut: String,
+    shortcut_label: String,
+    shortcut_works: bool,
+    launch_at_login: bool,
+    version: String,
+    update: String,
+    mac: bool,
+}
+
+fn settings_view(app: &AppHandle) -> SettingsView {
+    let core = app.state::<Core>();
+    let settings = core.settings.lock().unwrap().clone();
+    let shortcut_works = *core.shortcut_works.lock().unwrap();
+    let update = core.update.lock().unwrap().clone();
+    SettingsView {
+        shortcut_label: settings::label(&settings.shortcut, cfg!(target_os = "macos")),
+        shortcut: settings.shortcut,
+        shortcut_works,
+        launch_at_login: settings.launch_at_login,
+        version: app.package_info().version.to_string(),
+        update,
+        mac: cfg!(target_os = "macos"),
+    }
+}
+
+fn save_settings(app: &AppHandle) {
+    let settings = app.state::<Core>().settings.lock().unwrap().clone();
+    if let Ok(dir) = app.path().app_config_dir() {
+        if let Err(e) = settings::save(&dir, &settings) {
+            eprintln!("could not save settings: {e}");
+        }
+    }
+}
+
+/// Takes the shortcut. Fails when it is malformed or another app owns it.
+fn bind_shortcut(app: &AppHandle, shortcut: &str) -> Result<(), String> {
+    app.global_shortcut()
+        .on_shortcut(shortcut, |app, _, event| {
+            if event.state() == ShortcutState::Pressed {
+                later(app, toggle);
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
+fn refresh_menu(app: &AppHandle) {
+    let core = app.state::<Core>();
+    let label = settings::label(&core.settings.lock().unwrap().shortcut, cfg!(target_os = "macos"));
+    let text = if *core.shortcut_works.lock().unwrap() { format!("Open Clipframes  ({label})") } else { format!("Open Clipframes  ({label} is used by another app)") };
+    if let Some(item) = core.open_item.lock().unwrap().as_ref() {
+        let _ = item.set_text(text);
+    };
+}
+
+/// Not a build run from the source tree: only an installed app adds itself to login.
+fn installed() -> bool {
+    std::env::current_exe().map(|p| !p.components().any(|c| c.as_os_str() == "target")).unwrap_or(false)
+}
+
+fn set_launch_at_login(app: &AppHandle, on: bool) {
+    use tauri_plugin_autostart::ManagerExt;
+    if !installed() {
+        return;
+    }
+    let launcher = app.autolaunch();
+    if let Err(e) = if on { launcher.enable() } else { launcher.disable() } {
+        eprintln!("launch at login: {e}");
+    }
+}
+
+/// Nothing of Clipframes is on screen: a safe moment to restart for an update.
+pub fn idle(app: &AppHandle) -> bool {
+    let visible = |label: &str| app.get_webview_window(label).is_some_and(|w| w.is_visible().unwrap_or(false));
+    app.state::<Core>().picker.lock().unwrap().is_none() && !visible(BAR) && !visible(SETTINGS)
+}
+
+pub fn set_update_status(app: &AppHandle, status: String) {
+    *app.state::<Core>().update.lock().unwrap() = status;
+    let _ = app.emit("settings", settings_view(app));
+}
+
+fn open_settings(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(SETTINGS) {
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    // An ordinary window, built when asked for and gone when closed.
+    let built = WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("index.html".into()))
+        .title("Clipframes")
+        .inner_size(440.0, 380.0)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .center()
+        .build();
+    if let Ok(window) = built {
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
+fn settings_get(app: AppHandle) -> SettingsView {
+    settings_view(&app)
+}
+
+#[tauri::command]
+fn shortcut_set(app: AppHandle, shortcut: String) -> Result<SettingsView, String> {
+    if !settings::valid(&shortcut) {
+        return Err("Use at least one of Ctrl, Alt or the system key, plus one other key.".into());
+    }
+    let core = app.state::<Core>();
+    let old = core.settings.lock().unwrap().shortcut.clone();
+    let had_old = *core.shortcut_works.lock().unwrap();
+    if had_old {
+        let _ = app.global_shortcut().unregister(old.as_str());
+    }
+    if bind_shortcut(&app, &shortcut).is_err() {
+        // Keep what worked before.
+        if had_old {
+            let _ = bind_shortcut(&app, &old);
+        }
+        return Err(format!("{} is already used by another app. Try a different one.", settings::label(&shortcut, cfg!(target_os = "macos"))));
+    }
+    core.settings.lock().unwrap().shortcut = shortcut;
+    *core.shortcut_works.lock().unwrap() = true;
+    save_settings(&app);
+    refresh_menu(&app);
+    let _ = app.emit("round", view(&app));
+    Ok(settings_view(&app))
+}
+
+#[tauri::command]
+fn launch_set(app: AppHandle, on: bool) -> SettingsView {
+    app.state::<Core>().settings.lock().unwrap().launch_at_login = on;
+    save_settings(&app);
+    set_launch_at_login(&app, on);
+    settings_view(&app)
+}
+
+#[tauri::command]
+fn update_check(app: AppHandle) {
+    thread::spawn(move || {
+        set_update_status(&app, "Checking…".into());
+        let _ = updates::check(&app);
+    });
+}
+
 pub fn run() {
     tauri::Builder::default()
         // Starting Clipframes while it is running opens the bar of the one that is.
         .plugin(tauri_plugin_single_instance::init(|app, _, _| later(app, open)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // The login start says so, and that is the one start that shows nothing.
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Core::default())
-        .invoke_handler(tauri::generate_handler![round_state, note_set, note_close, pick_remove, round_done, escape_key, permission_open])
+        .invoke_handler(tauri::generate_handler![
+            round_state,
+            note_set,
+            note_close,
+            pick_remove,
+            round_done,
+            escape_key,
+            permission_open,
+            settings_get,
+            shortcut_set,
+            launch_set,
+            update_check
+        ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            let handle = app.handle().clone();
+            let core = app.state::<Core>();
 
-            // Another app may own the shortcut already. Clipframes still runs: the tray opens it.
-            let taken = app
-                .global_shortcut()
-                .on_shortcut(SHORTCUT, |app, _, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        later(app, toggle);
-                    }
-                })
-                .inspect_err(|e| eprintln!("shortcut {SHORTCUT} not registered: {e}"))
-                .is_err();
+            let (saved, existed) = app.path().app_config_dir().map(|dir| settings::load(&dir)).unwrap_or_default();
+            *core.settings.lock().unwrap() = saved.clone();
+            if !existed {
+                save_settings(&handle);
+                set_launch_at_login(&handle, saved.launch_at_login);
+            }
 
-            let open_label = if taken { "Open Clipframes (shortcut in use by another app)" } else { "Open Clipframes" };
-            let open_item = MenuItem::with_id(app, "open", open_label, true, None::<&str>)?;
+            // Another app may own the shortcut already. Clipframes still runs: the tray opens
+            // it, and Settings offers another shortcut.
+            let bound = bind_shortcut(&handle, &saved.shortcut).inspect_err(|e| eprintln!("shortcut {} not registered: {e}", saved.shortcut)).is_ok();
+            *core.shortcut_works.lock().unwrap() = bound;
+
+            let open_item = MenuItem::with_id(app, "open", "Open Clipframes", true, None::<&str>)?;
+            let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit Clipframes", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
-            let mut tray = TrayIconBuilder::new().tooltip("Clipframes").menu(&menu).on_menu_event(|app, event| match event.id.as_ref() {
+            let menu = Menu::with_items(app, &[&open_item, &settings_item, &PredefinedMenuItem::separator(app)?, &quit_item])?;
+            *core.open_item.lock().unwrap() = Some(open_item);
+            refresh_menu(&handle);
+
+            let tray = TrayIconBuilder::new().tooltip("Clipframes").menu(&menu).on_menu_event(|app, event| match event.id.as_ref() {
                 "open" => later(app, open),
+                "settings" => later(app, open_settings),
                 "quit" => app.exit(0),
                 _ => {}
             });
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
-            }
+            // macOS menu bar icons are one colour and take the bar's own; elsewhere the app icon.
+            #[cfg(target_os = "macos")]
+            let tray = tray.icon(tauri::include_image!("icons/tray-mac.png")).icon_as_template(true);
+            #[cfg(not(target_os = "macos"))]
+            let tray = match app.default_window_icon() {
+                Some(icon) => tray.icon(icon.clone()),
+                None => tray,
+            };
             tray.build(app)?;
 
-            // `clipframes --open` starts with the bar open.
-            if std::env::args().any(|a| a == "--open") {
-                later(app.handle(), open);
+            if installed() || std::env::var_os("CLIPFRAMES_UPDATES").is_some() {
+                updates::start(&handle);
+            }
+
+            // Started by hand (search, the Start menu, a double click): show the bar. Started
+            // at login or by an update: stay out of the way.
+            let quiet = std::env::args().any(|a| a == "--hidden") | updates::just_updated(&handle);
+            if !quiet {
+                later(&handle, if bound { open } else { open_settings });
             }
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("Clipframes could not start")
-        // Closing the last window is not quitting: Clipframes lives in the tray.
-        .run(|_, event| {
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-                if code.is_none() {
-                    api.prevent_exit();
-                }
+        .run(|app, event| match event {
+            // Closing the last window is not quitting: Clipframes lives in the tray.
+            tauri::RunEvent::ExitRequested { api, code, .. } if code.is_none() => api.prevent_exit(),
+            // macOS: the app was opened again while running (Spotlight, Launchpad, Finder).
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => later(app, open),
+            _ => {
+                let _ = app;
             }
         });
 }

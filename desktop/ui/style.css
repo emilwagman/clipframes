@@ -64,3 +64,20 @@ button.primary:hover { filter: brightness(1.06); }
 .label:empty { display: none; }
 .mark { border: 1.5px solid var(--accent); }
 .mark b { position: absolute; left: -9px; top: -9px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: 11px; line-height: 18px; text-align: center; }
+
+/* Settings: an ordinary window, so it has a background and can be read like a page. */
+html.window, html.window body { background: var(--surface); overflow: auto; }
+.settings { padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+.settings h1 { margin: 0; font-size: 17px; font-weight: 650; }
+.settings h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); }
+.settings section { padding-top: 16px; border-top: 1px solid var(--border); }
+.settings .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
+.settings .help { margin: 6px 0 0; color: var(--text-2); font-size: 12px; }
+.settings .row .help { margin: 0; }
+.settings .help.warn { color: #b42318; }
+.settings .key { min-width: 150px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); font-weight: 600; }
+.settings .key.recording { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); font-weight: 500; }
+.settings .plain { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+.settings .plain:hover, .settings .key:hover { border-color: var(--text-2); }
+.settings input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+@media (prefers-color-scheme: dark) { .settings .help.warn { color: #ff8a80; } }

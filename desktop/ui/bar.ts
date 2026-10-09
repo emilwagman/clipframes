@@ -16,7 +16,7 @@ export function mountBar(root: HTMLElement, platform: Platform): void {
   const draw = (round: RoundView) => {
     bar.classList.toggle("trouble", round.trouble !== null);
     if (round.trouble === "permission") {
-      status.replaceChildren(el("strong", { text: "Allow Clipframes to read other apps" }), el("span", { text: "Turn it on under Accessibility, then press " + platform.shortcut }));
+      status.replaceChildren(el("strong", { text: "Allow Clipframes to read other apps" }), el("span", { text: "Turn it on under Accessibility, then press " + round.shortcut }));
       done.textContent = "Open Settings";
       done.onclick = () => void platform.openPermission();
       return;
@@ -33,7 +33,7 @@ export function mountBar(root: HTMLElement, platform: Platform): void {
       count === 0
         ? el("strong", { text: "Click anything on screen" })
         : el("strong", { text: count === 1 ? "1 thing copied" : `${count} things copied` }),
-      el("span", { text: count === 0 ? "Esc to close" : "Keep clicking, or paste it to your agent" }),
+      el("span", { text: count === 0 ? `Esc or ${round.shortcut} to close` : "Keep clicking, or paste it to your agent" }),
     );
   };
 

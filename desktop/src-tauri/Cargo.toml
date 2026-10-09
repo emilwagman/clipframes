@@ -22,6 +22,8 @@ tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2"
 # Text only: the image half of the clipboard crate is not worth its size.
 arboard = { version = "3", default-features = false }
 serde = { version = "1", features = ["derive"] }
@@ -46,20 +48,22 @@ custom-protocol = ["tauri/custom-protocol"]
 name = "clipframes"
 path = "src/main.rs"
 
+# Tools are examples, so they are built on request and never shipped inside the app:
+#   cargo build --release --example cf-bench
 # Prints the element under the pointer once a second: the quickest check on a new machine.
-[[bin]]
+[[example]]
 name = "cf-probe"
-path = "src/bin/probe.rs"
+path = "examples/probe.rs"
 
 # Runs a picking round in the terminal and prints hovers and picks.
-[[bin]]
+[[example]]
 name = "cf-pick"
-path = "src/bin/pick.rs"
+path = "examples/pick.rs"
 
 # Times element readings across the screen: the number behind "the highlight never lags".
-[[bin]]
+[[example]]
 name = "cf-bench"
-path = "src/bin/bench.rs"
+path = "examples/bench.rs"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

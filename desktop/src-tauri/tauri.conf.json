@@ -19,13 +19,42 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "app",
+      "nsis"
+    ],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "shortDescription": "Point at what you want changed.",
+    "longDescription": "Point at the thing you want changed, and Clipframes tells your agent what it is.",
+    "copyright": "\u00a9 2026 Emil Wagman",
+    "category": "DeveloperTool",
+    "publisher": "Emil Wagman",
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "Developer ID Application: Emil Wagman (4UM3XVUN9Y)"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkyRUMxNTExNTVCOUNCRTEKUldUaHk3bFZFUlhza3RIYmY1cGhMTzdGcSt6TGIxVzdXeFA3WWRrVHdScXcySDlYNG5rZkVicnoK",
+      "endpoints": [
+        "https://github.com/emilwagman/clipframes/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "quiet"
+      }
+    }
   }
 }

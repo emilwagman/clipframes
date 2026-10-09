@@ -24,6 +24,8 @@ export interface RoundView {
   reference: string;
   /** "permission", or a message, when the round could not start. */
   trouble: string | null;
+  /** The shortcut as people write it, e.g. "Ctrl+Shift+Space". */
+  shortcut: string;
 }
 
 /** The highlight under the pointer, in the overlay's own pixels. */
@@ -39,8 +41,6 @@ export interface MarkView {
 }
 
 export interface Platform {
-  /** How the shortcut is written on this system, e.g. "⌃⇧Space". */
-  shortcut: string;
   state(): Promise<RoundView>;
   onRound(listener: (round: RoundView) => void): void;
   onHover(listener: (hover: HoverView) => void): void;

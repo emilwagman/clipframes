@@ -5,7 +5,6 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { HoverView, MarkView, Platform, RoundView } from "../ui/platform";
 
 const here = getCurrentWebviewWindow();
-const mac = navigator.userAgent.includes("Mac");
 
 function on<T>(event: string, listener: (payload: T) => void): void {
   void here.listen<T>(event, (e) => listener(e.payload));
@@ -13,8 +12,12 @@ function on<T>(event: string, listener: (payload: T) => void): void {
 
 export const label = here.label;
 
+/** For the parts only the desktop app has, like settings. */
+export function listen<T>(event: string, listener: (payload: T) => void): void {
+  on(event, listener);
+}
+
 export const platform: Platform = {
-  shortcut: mac ? "⌃⇧Space" : "Ctrl+Shift+Space",
   state: () => invoke<RoundView>("round_state"),
   onRound: (listener) => on<RoundView>("round", listener),
   onHover: (listener) => on<HoverView>("hover", listener),
