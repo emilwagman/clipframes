@@ -1245,6 +1245,42 @@ fn set_launch_at_login(app: &AppHandle, on: bool) {
     }
 }
 
+/// Whether Clipframes has an entry among the programs Windows starts at login. `None` where
+/// the system keeps no on/off choice of its own beside the entry.
+#[cfg(windows)]
+fn login_entry_present(name: &str) -> Option<bool> {
+    use std::ffi::c_void;
+    #[link(name = "advapi32")]
+    extern "system" {
+        fn RegGetValueW(key: *mut c_void, sub_key: *const u16, value: *const u16, flags: u32, kind: *mut u32, data: *mut c_void, size: *mut u32) -> i32;
+    }
+    const HKEY_CURRENT_USER: isize = 0x8000_0001u32 as i32 as isize;
+    const HKEY_LOCAL_MACHINE: isize = 0x8000_0002u32 as i32 as isize;
+    const RRF_RT_ANY: u32 = 0x0000_ffff;
+    let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
+    let (run, name) = (wide(r"Software\Microsoft\Windows\CurrentVersion\Run"), wide(name));
+    // Zero is success: the value is there. Its content is not needed.
+    let found = |root: isize| unsafe { RegGetValueW(root as *mut c_void, run.as_ptr(), name.as_ptr(), RRF_RT_ANY, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()) } == 0;
+    Some(found(HKEY_CURRENT_USER) || found(HKEY_LOCAL_MACHINE))
+}
+
+#[cfg(not(windows))]
+fn login_entry_present(_name: &str) -> Option<bool> {
+    None
+}
+
+/// What to do about the login entry when the app starts: add it, remove it, or (`None`) leave
+/// it alone. On Windows, Task Manager and Settings keep the user's own on/off beside the
+/// entry, and writing the entry again switches it back on. So an entry that is there is never
+/// written again: it is only added when missing (the first run, or an install after an
+/// uninstall) and removed when the setting says off.
+fn login_entry_at_start(wanted: bool, present: Option<bool>) -> Option<bool> {
+    match present {
+        Some(present) => (wanted != present).then_some(wanted),
+        None => Some(wanted),
+    }
+}
+
 /// Nothing of Clipframes is on screen: a safe moment to restart for an update.
 pub fn idle(app: &AppHandle) -> bool {
     let visible = |label: &str| app.get_webview_window(label).is_some_and(|w| w.is_visible().unwrap_or(false));
@@ -1413,7 +1449,9 @@ pub fn run() {
             telemetry::start(saved.install_id.clone(), &app.package_info().version.to_string(), saved.share_usage);
             // Every start, so the login entry matches the setting even when the settings were
             // there before this copy was installed.
-            set_launch_at_login(&handle, saved.launch_at_login);
+            if let Some(on) = login_entry_at_start(saved.launch_at_login, login_entry_present(&app.package_info().name)) {
+                set_launch_at_login(&handle, on);
+            }
 
             // Another app may own the shortcut already. Clipframes still runs: the tray opens
             // it, and Settings offers another shortcut.
@@ -1529,6 +1567,20 @@ mod tests {
         assert!(same_text("[Clipframes: 2 things]\r\n1. Button\r\n2. Link", "[Clipframes: 2 things]\n1. Button\n2. Link"));
         assert!(!same_text("something the user copied since", "[Button \"Save\"]"));
         assert!(!same_text("", ""), "an empty clipboard needs no emptying");
+    }
+
+    #[test]
+    fn a_login_entry_switched_off_in_task_manager_is_not_written_again() {
+        // Windows: the entry is there, and whether it is on is the user's business.
+        assert_eq!(login_entry_at_start(true, Some(true)), None);
+        // First run, or installed again after an uninstall: add it.
+        assert_eq!(login_entry_at_start(true, Some(false)), Some(true));
+        // The setting says off: take it away, and do nothing when it is already gone.
+        assert_eq!(login_entry_at_start(false, Some(true)), Some(false));
+        assert_eq!(login_entry_at_start(false, Some(false)), None);
+        // Elsewhere the entry simply follows the setting.
+        assert_eq!(login_entry_at_start(true, None), Some(true));
+        assert_eq!(login_entry_at_start(false, None), Some(false));
     }
 
     #[test]
