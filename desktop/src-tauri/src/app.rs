@@ -1396,6 +1396,9 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let handle = app.handle().clone();
             let core = app.state::<Core>();
+            if let Ok(home) = app.path().home_dir() {
+                store::set_home(home);
+            }
 
             let (saved, existed) = app.path().app_config_dir().map(|dir| settings::load(&dir)).unwrap_or_default();
             let mut saved = saved;

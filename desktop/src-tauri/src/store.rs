@@ -82,9 +82,24 @@ impl Stamp {
     }
 }
 
+static HOME: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Says where the user's home folder is. The app passes the folder its windows may load
+/// pictures from (`$HOME/Clipframes/**` in tauri.conf.json), so captures are always written
+/// where History can show them.
+pub fn set_home(home: PathBuf) {
+    let _ = HOME.set(home);
+}
+
 /// ~/Clipframes
 pub fn root() -> PathBuf {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    // Without the app (the examples): the environment. On Windows HOME is something a
+    // developer's shell may set to another place than the profile folder.
+    let from_env = || {
+        let names = if cfg!(windows) { ["USERPROFILE", "HOME"] } else { ["HOME", "USERPROFILE"] };
+        names.iter().find_map(std::env::var_os).map(PathBuf::from)
+    };
+    let home = HOME.get().cloned().or_else(from_env).unwrap_or_else(|| PathBuf::from("."));
     home.join("Clipframes")
 }
 
