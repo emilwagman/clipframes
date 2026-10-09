@@ -404,8 +404,3 @@ impl Element {
 pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     element_at(x, y)
 }
-
-/// Reading an element already wakes its app here.
-pub fn wake_at(_x: f64, _y: f64) -> bool {
-    false
-}

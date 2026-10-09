@@ -44,30 +44,35 @@ pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
         let automation = automation.as_ref().ok_or(ReadError::Other("UI Automation is not available.".into()))?;
         let el = automation.element_from_point(Point::new(x as i32, y as i32)).map_err(|_| ReadError::Nothing)?;
         let mut info = describe(&el, x as i32, y as i32);
-        let Ok(walker) = automation.get_control_view_walker() else { return Ok(info) };
+        // The raw tree: the simplified one leaves out plain containers, and in a page those
+        // are the elements that carry the ids and classes.
+        let Ok(walker) = automation.get_raw_view_walker() else { return Ok(info) };
 
+        let borrow = info.role == "Text" && info.dom_id.is_empty() && info.dom_classes.is_empty();
         let mut parent = walker.get_parent(&el).ok();
-        let mut nearest = true;
         let mut steps = 0;
         while let Some(p) = parent {
             let role = role_of(&p);
             if role == "Window" || steps > 40 {
                 break;
             }
-            if nearest && is_web(&p) && info.dom_id.is_empty() && info.dom_classes.is_empty() && info.role == "Text" {
+            let web = is_web(&p);
+            let (id, class) = if web && role != "Document" { (p.get_automation_id().unwrap_or_default(), p.get_classname().unwrap_or_default()) } else { Default::default() };
+            if borrow && steps < 3 && info.dom_id.is_empty() && info.dom_classes.is_empty() {
                 // A piece of text has no id or class of its own; the element holding it does.
-                info.dom_id = p.get_automation_id().unwrap_or_default();
-                info.dom_classes = p.get_classname().unwrap_or_default();
+                info.dom_id = id.clone();
+                info.dom_classes = class;
             }
-            nearest = false;
             if role == "Document" {
-                if info.url.is_empty() && is_web(&p) {
+                if info.url.is_empty() && web {
                     info.url = p.get_pattern::<UIValuePattern>().and_then(|v| v.get_value()).unwrap_or_default();
                 }
             } else if role != "Pane" && info.path.len() < 4 {
+                // Named by what it says, or failing that by its id.
                 let name = p.get_name().unwrap_or_default();
-                if !name.is_empty() && name.chars().count() <= 40 && name != info.name {
-                    info.path.insert(0, name);
+                let label = if !name.is_empty() && name.chars().count() <= 40 { name } else if !id.is_empty() { format!("#{id}") } else { String::new() };
+                if !label.is_empty() && label != info.name && label != format!("#{}", info.dom_id) {
+                    info.path.insert(0, label);
                 }
             }
             steps += 1;
@@ -122,15 +127,6 @@ fn role_of(el: &UIElement) -> String {
 
 pub fn sleep_idle(_older_than: std::time::Duration) {}
 
-/// Asks the browser under a point for its full description of the page.
-///
-/// Chrome gives UI Automation a thin tree until something that looks like a screen reader
-/// turns up: ids but no classes. Screen readers announce themselves by asking the page for
-/// the IAccessible2 family of interfaces, so this asks for them once per window.
-pub fn wake_at(x: f64, y: f64) -> bool {
-    win::wake_at(x as i32, y as i32)
-}
-
 /// The few window-system calls this needs, declared by hand to keep the build small.
 mod win {
     use std::collections::HashMap;
@@ -168,91 +164,6 @@ mod win {
         fn GetFileVersionInfoSizeW(file: *const u16, handle: *mut u32) -> u32;
         fn GetFileVersionInfoW(file: *const u16, handle: u32, len: u32, data: *mut c_void) -> i32;
         fn VerQueryValueW(block: *const c_void, sub: *const u16, out: *mut *mut c_void, len: *mut u32) -> i32;
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy, PartialEq)]
-    struct Guid(u32, u16, u16, [u8; 8]);
-
-    const IID_IACCESSIBLE: Guid = Guid(0x618736e0, 0x3c3d, 0x11cf, [0x81, 0x0c, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71]);
-    const IID_ISERVICE_PROVIDER: Guid = Guid(0x6d5140c1, 0x7436, 0x11ce, [0x80, 0x34, 0x00, 0xaa, 0x00, 0x60, 0x09, 0xfa]);
-    /// What a screen reader asks a page for: IAccessible2, IAccessibleText, ISimpleDOMNode.
-    const WAKING: [Guid; 3] = [
-        Guid(0xe89f726e, 0xc4f4, 0x4c19, [0xbb, 0x19, 0xb6, 0x47, 0xd7, 0xfa, 0x84, 0x78]),
-        Guid(0x24fd2ffb, 0x3aad, 0x4a08, [0x83, 0x35, 0xa3, 0xad, 0x89, 0xc0, 0xfb, 0x4b]),
-        Guid(0x1814ceeb, 0x49e2, 0x407f, [0xaf, 0x99, 0xfa, 0x75, 0x5a, 0x7d, 0x26, 0x07]),
-    ];
-    const OBJID_CLIENT: u32 = 0xFFFF_FFFC;
-
-    #[link(name = "oleacc")]
-    extern "system" {
-        fn AccessibleObjectFromWindow(hwnd: Handle, object: u32, iid: *const Guid, out: *mut *mut c_void) -> i32;
-    }
-
-    #[link(name = "user32")]
-    extern "system" {
-        fn FindWindowExW(parent: Handle, after: Handle, class: *const u16, title: *const u16) -> Handle;
-        fn GetClassNameW(hwnd: Handle, text: *mut u16, max: i32) -> i32;
-    }
-
-    /// The first three entries of every COM interface, and the fourth of IServiceProvider.
-    #[repr(C)]
-    struct Vtable {
-        query_interface: unsafe extern "system" fn(*mut c_void, *const Guid, *mut *mut c_void) -> i32,
-        add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
-        release: unsafe extern "system" fn(*mut c_void) -> u32,
-        query_service: unsafe extern "system" fn(*mut c_void, *const Guid, *const Guid, *mut *mut c_void) -> i32,
-    }
-
-    unsafe fn vtable(object: *mut c_void) -> &'static Vtable {
-        &**(object as *mut *const Vtable)
-    }
-
-    /// True if a browser's page was found there and asked.
-    pub fn wake_at(x: i32, y: i32) -> bool {
-        static WOKEN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
-        unsafe {
-            let top = GetAncestor(WindowFromPoint(P { x, y }), GA_ROOT);
-            if top.is_null() {
-                return false;
-            }
-            let mut class = [0u16; 64];
-            let n = GetClassNameW(top, class.as_mut_ptr(), class.len() as i32).max(0) as usize;
-            // Chrome, Edge, Brave and the rest of the family share this window class.
-            if !String::from_utf16_lossy(&class[..n]).starts_with("Chrome_WidgetWin") {
-                return false;
-            }
-            let page = FindWindowExW(top, std::ptr::null_mut(), wide("Chrome_RenderWidgetHostHWND").as_ptr(), std::ptr::null());
-            if page.is_null() {
-                return false;
-            }
-            {
-                let mut woken = WOKEN.lock().unwrap();
-                if woken.contains(&(page as usize)) {
-                    return true;
-                }
-                if woken.len() > 64 {
-                    woken.clear();
-                }
-                woken.push(page as usize);
-            }
-            let mut accessible = std::ptr::null_mut();
-            if AccessibleObjectFromWindow(page, OBJID_CLIENT, &IID_IACCESSIBLE, &mut accessible) < 0 || accessible.is_null() {
-                return false;
-            }
-            let mut provider = std::ptr::null_mut();
-            if (vtable(accessible).query_interface)(accessible, &IID_ISERVICE_PROVIDER, &mut provider) >= 0 && !provider.is_null() {
-                for iid in &WAKING {
-                    let mut out = std::ptr::null_mut();
-                    if (vtable(provider).query_service)(provider, iid, iid, &mut out) >= 0 && !out.is_null() {
-                        (vtable(out).release)(out);
-                    }
-                }
-                (vtable(provider).release)(provider);
-            }
-            (vtable(accessible).release)(accessible);
-            true
-        }
     }
 
     fn wide(s: &str) -> Vec<u16> {

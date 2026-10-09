@@ -116,12 +116,6 @@ pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     platform::element_at(x, y)
 }
 
-/// Asks the app under a point to describe itself in full, where an app holds back until asked
-/// (browsers do). Cheap to repeat; the effect arrives a moment later.
-pub fn wake_at(x: f64, y: f64) -> bool {
-    platform::wake_at(x, y)
-}
-
 /// The same, with everything worth knowing about it: what it sits inside, the page it is on.
 /// Slower where that takes extra questions, so it is asked once, when the user clicks.
 pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {

@@ -23,10 +23,6 @@ fn main() {
     if args.first().map(String::as_str) == Some("up") {
         let x = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
         let y = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
-        if args.iter().any(|a| a == "wake") {
-            println!("wake: {}", element::wake_at(x as f64, y as f64));
-            std::thread::sleep(std::time::Duration::from_millis(1500));
-        }
         up(x, y);
         return;
     }
