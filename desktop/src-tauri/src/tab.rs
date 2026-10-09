@@ -77,7 +77,7 @@ mod native {
         fn RegisterClassExW(class: *const WndClass) -> u16;
         fn CreateWindowExW(ex: u32, class: *const u16, name: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: Handle, menu: Handle, instance: Handle, param: Handle) -> Handle;
         fn DefWindowProcW(hwnd: Handle, msg: u32, wparam: usize, lparam: isize) -> isize;
-        fn GetMessageW(msg: *mut Msg, hwnd: Handle, min: u32, max: u32) -> i32;
+        fn GetMessageW(msg: *mut c_void, hwnd: Handle, min: u32, max: u32) -> i32;
         fn DispatchMessageW(msg: *const Msg) -> isize;
         fn PostMessageW(hwnd: Handle, msg: u32, wparam: usize, lparam: isize) -> i32;
         fn SetWindowPos(hwnd: Handle, after: Handle, x: i32, y: i32, w: i32, h: i32, flags: u32) -> i32;
@@ -232,7 +232,7 @@ mod native {
                     }
                     let _ = ready.send(Some((hwnd as isize, side)));
                     let mut msg: Msg = std::mem::zeroed();
-                    while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                    while GetMessageW((&mut msg as *mut Msg).cast(), std::ptr::null_mut(), 0, 0) > 0 {
                         DispatchMessageW(&msg);
                     }
                 })

@@ -339,8 +339,10 @@ mod tests {
         r.push(Pick { kind: Kind::Area, image: "1.png".into(), pixels: (800, 400), ..Default::default() });
         r.push(Pick { kind: Kind::Clip, image: "2".into(), pixels: (1600, 900), frames: 24, seconds: 6.04, clicks: vec![Click { at: 1.5, frame: 7, what: "Button \"Save\"".into() }], ..Default::default() });
         let text = notes_text(&r, Path::new("/c"), TAKEN);
-        assert!(text.contains("## 1. Screenshot\n\n- Image: /c/1.png (800×400 px)"), "{text}");
-        assert!(text.contains("## 2. Screen clip, 6 s\n\n- Length: 6.0 s\n- Frames: 24, in order, in /c/2 (001.png, 002.png, …), 1600×900 px"), "{text}");
+        // Joined the way this system joins paths.
+        let (picture, frames) = (Path::new("/c").join("1.png"), Path::new("/c").join("2"));
+        assert!(text.contains(&format!("## 1. Screenshot\n\n- Image: {} (800×400 px)", picture.display())), "{text}");
+        assert!(text.contains(&format!("## 2. Screen clip, 6 s\n\n- Length: 6.0 s\n- Frames: 24, in order, in {} (001.png, 002.png, …), 1600×900 px", frames.display())), "{text}");
         assert!(text.contains("  - 1.5 s, frame 007: Button \"Save\""), "{text}");
     }
 
