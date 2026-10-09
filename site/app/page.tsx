@@ -1,6 +1,7 @@
 import Header from "./Header";
 import { DownloadIcon } from "./DownloadButton";
 import { DOWNLOAD_PATH, MAKER_URL, REPO_URL, REQUIREMENTS, VERSION } from "@/lib/site";
+import { starCount } from "@/lib/github";
 import s from "./home.module.css";
 
 /// A hand-drawn loop around a few words, stretched to fit them.
@@ -43,10 +44,11 @@ function Shot({ src, alt, caption }: { src: string; alt: string; caption?: strin
 
 const ref = '[Element: Button "New invoice" (#new-invoice .btn-primary) in Chrome "Invoices". Read ~/Clipframes/2026-10-07_11-42-30/notes.md]';
 
-export default function Home() {
+export default async function Home() {
+  const stars = await starCount(3600);
   return (
     <>
-      <Header />
+      <Header stars={stars} />
       <main className={s.main}>
         <div className={`${s.col} ${s.intro}`}>
           <h1>Point at <Circled>the thing</Circled> you want changed.</h1>

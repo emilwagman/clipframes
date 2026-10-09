@@ -9,7 +9,10 @@
 @media (prefers-color-scheme: dark) { .wordmark { filter: invert(1); } }
 .brand { display: flex; align-items: center; gap: 10px;
   text-decoration: none; margin-right: auto; }
-.gh { color: var(--text-2); text-decoration: none; font-size: 15px; }
+.gh { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); text-decoration: none; font-size: 15px; }
+.stars { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text-2);
+  background: var(--surface-2); padding: 3px 8px 3px 6px; border-radius: 999px; }
+.stars svg { width: 13px; height: 13px; fill: currentColor; }
 .gh:hover { color: var(--text); }
 
 .pill { display: inline-flex; align-items: center; gap: 8px; background: var(--text); color: var(--bg); text-decoration: none;
