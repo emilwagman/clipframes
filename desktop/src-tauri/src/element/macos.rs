@@ -2,7 +2,7 @@
 //!
 //! The hit-test never asks the system "what is at this point", because the answer would be
 //! Clipframes' own overlay. It finds the front window of another app under the point and asks
-//! that app, with a short timeout so a hung app can't stall the pointer.
+//! that app, with a short timeout on every question so a hung app can't stall the pointer.
 
 use super::{ElementInfo, ReadError, Rect};
 use accessibility_sys::*;
@@ -31,6 +31,18 @@ const INTERACTIVE: &[&str] = &[
     "Button", "Link", "CheckBox", "RadioButton", "PopUpButton", "MenuButton", "TextField", "TextArea", "ComboBox", "Slider",
     "Tab", "MenuItem", "Cell", "Row", "Switch", "DisclosureTriangle", "Image", "Heading", "SearchField",
 ];
+
+/// Sets the timeout for every accessibility call this process makes, once. Set on the
+/// system-wide element it holds for all of them; set on one element it covers that element
+/// only (AXUIElement.h), which left every question after the hit-test (parents, children,
+/// each attribute) waiting the default several seconds on an app that had hung.
+fn limit_waiting() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| unsafe {
+        let system = Element(AXUIElementCreateSystemWide());
+        AXUIElementSetMessagingTimeout(system.0, TIMEOUT_SECONDS);
+    });
+}
 
 pub fn permitted() -> bool {
     unsafe { AXIsProcessTrusted() }
@@ -105,6 +117,7 @@ pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     if !permitted() {
         return Err(ReadError::NotPermitted);
     }
+    limit_waiting();
     unsafe {
         let app = Element(AXUIElementCreateApplication(win.pid));
         AXUIElementSetMessagingTimeout(app.0, TIMEOUT_SECONDS);
@@ -274,6 +287,7 @@ pub fn sleep_idle(older_than: Duration) {
 }
 
 fn set_tree(pid: i32, on: bool) {
+    limit_waiting();
     unsafe {
         let app = Element(AXUIElementCreateApplication(pid));
         let value = if on { CFBoolean::true_value() } else { CFBoolean::false_value() };
