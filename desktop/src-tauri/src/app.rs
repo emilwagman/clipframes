@@ -956,7 +956,7 @@ fn history_open(app: AppHandle) {
             let _ = window.set_focus();
             return;
         }
-        let built = WebviewWindowBuilder::new(app, HISTORY, WebviewUrl::App("index.html".into())).title("Clipframes History").inner_size(680.0, 620.0).min_inner_size(520.0, 320.0).center().build();
+        let built = WebviewWindowBuilder::new(app, HISTORY, WebviewUrl::App("index.html".into())).title("Clipframes History").inner_size(680.0, 620.0).min_inner_size(520.0, 320.0).center().background_color(tauri::window::Color(18, 18, 19, 255)).build();
         if let Ok(window) = built {
             let _ = window.set_focus();
         }
@@ -1122,6 +1122,7 @@ fn open_settings(app: &AppHandle) {
         .maximizable(false)
         .minimizable(false)
         .center()
+        .background_color(tauri::window::Color(18, 18, 19, 255))
         .build();
     if let Ok(window) = built {
         let _ = window.set_focus();
