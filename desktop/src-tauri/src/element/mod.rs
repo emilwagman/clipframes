@@ -107,6 +107,11 @@ pub fn permitted() -> bool {
     platform::permitted()
 }
 
+/// Has the system ask the user for that permission, where there is one to ask for.
+pub fn ask_permission() {
+    platform::ask_permission()
+}
+
 /// The pointer's position in global screen points, top-left origin.
 pub fn pointer() -> Option<(f64, f64)> {
     platform::pointer()

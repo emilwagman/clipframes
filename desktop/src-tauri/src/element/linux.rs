@@ -7,6 +7,8 @@ pub fn permitted() -> bool {
     true
 }
 
+pub fn ask_permission() {}
+
 pub fn pointer() -> Option<(f64, f64)> {
     None
 }

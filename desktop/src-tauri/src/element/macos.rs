@@ -36,6 +36,17 @@ pub fn permitted() -> bool {
     unsafe { AXIsProcessTrusted() }
 }
 
+/// Has macOS ask the user for the Accessibility permission. Asking this way is what puts
+/// Clipframes in the list under Privacy & Security, where the user can switch it on; an app
+/// that only checks may not be listed at all. Does nothing once the permission is given.
+pub fn ask_permission() {
+    unsafe {
+        let prompt = CFString::wrap_under_get_rule(kAXTrustedCheckOptionPrompt);
+        let options = CFDictionary::from_CFType_pairs(&[(prompt.as_CFType(), CFBoolean::true_value().as_CFType())]);
+        AXIsProcessTrustedWithOptions(options.as_concrete_TypeRef());
+    }
+}
+
 pub fn pointer() -> Option<(f64, f64)> {
     let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()?;
     let p = CGEvent::new(source).ok()?.location();

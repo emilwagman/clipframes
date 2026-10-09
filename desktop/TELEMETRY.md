@@ -18,7 +18,7 @@ the ones still waiting.
 |---|---|---|
 | `app_started` | The app starts | how (`login`, `hand`, `update`), first run or not, whether the shortcut could be taken, whether start at login is on |
 | `round_opened` | The bar opens | how (`shortcut`, `tab`, `tray`, `launch`, `other`), whether the bar was kept warm, milliseconds until clicks were captured and until all windows were up, number of displays |
-| `round_blocked` | The bar opens but cannot pick | how it was asked for (as for `round_opened`), why (`permission`, `picker`) |
+| `round_blocked` | The bar opens but cannot pick | how it was asked for (as for `round_opened`), why (`permission`, `screen`, `picker`) |
 | `pick_added` | Something is picked | kind (`element`, `area`, `clip`), whether a picture was taken; for an element whether it had a selector, a name and a web address (yes or no each); for an area its size in pixels; for a clip its seconds, frames and number of clicks |
 | `pick_removed` | Remove is pressed | nothing |
 | `round_closed` | The bar closes | number of picks of each kind, how many had a comment, seconds the bar was open |

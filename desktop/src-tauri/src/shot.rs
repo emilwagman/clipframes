@@ -15,6 +15,16 @@ pub fn capture_to_file(rect: &Rect, path: &Path, max_width: Option<u32>) -> Resu
     platform::capture_to_file(rect, path, max_width)
 }
 
+/// Whether this app may take pictures of the screen. Always true where no permission is needed.
+pub fn permitted() -> bool {
+    platform::permitted()
+}
+
+/// Has the system ask the user for that permission, where there is one to ask for.
+pub fn ask_permission() {
+    platform::ask_permission()
+}
+
 /// Width and height from a PNG file's header.
 pub fn png_size(path: &Path) -> Option<(u32, u32)> {
     use std::io::Read;
@@ -150,6 +160,12 @@ mod platform {
         }
     }
 
+    pub fn permitted() -> bool {
+        true
+    }
+
+    pub fn ask_permission() {}
+
     pub fn capture_to_file(rect: &Rect, path: &Path, max_width: Option<u32>) -> Result<(u32, u32), String> {
         let image = capture(rect)?;
         let image = match max_width {
@@ -164,8 +180,22 @@ mod platform {
 #[cfg(target_os = "macos")]
 mod platform {
     use crate::element::Rect;
+    use core_graphics::access::ScreenCaptureAccess;
     use std::path::Path;
     use std::process::Command;
+
+    /// Screen Recording, under Privacy & Security. Asked before a round starts: the first
+    /// screenshot would otherwise bring up the system's question in the middle of a round,
+    /// while every click, including those on that question, is being taken as a pick.
+    pub fn permitted() -> bool {
+        ScreenCaptureAccess.preflight()
+    }
+
+    /// Shows the system's question the first time, which also puts Clipframes in the list
+    /// under Screen Recording. Later calls show nothing.
+    pub fn ask_permission() {
+        ScreenCaptureAccess.request();
+    }
 
     /// The system's own tool writes the file. It asks for Screen Recording permission in
     /// Clipframes' name the first time, and leaves protected windows out.
@@ -183,6 +213,12 @@ mod platform {
 mod platform {
     use crate::element::Rect;
     use std::path::Path;
+
+    pub fn permitted() -> bool {
+        true
+    }
+
+    pub fn ask_permission() {}
 
     pub fn capture_to_file(_rect: &Rect, _path: &Path, _max_width: Option<u32>) -> Result<(u32, u32), String> {
         Err("Screenshots are not built for Linux yet.".into())

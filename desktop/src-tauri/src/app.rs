@@ -636,7 +636,16 @@ fn open_now(app: &AppHandle) {
     core.files.store(0, Ordering::SeqCst);
     *core.folder.lock().unwrap() = None;
     *core.notes.lock().unwrap() = None;
-    *core.trouble.lock().unwrap() = (!element::permitted()).then(|| "permission".to_string());
+    // Both permissions are settled before a round starts, so the system never has to ask for
+    // one while clicks are being taken as picks.
+    let missing = if !element::permitted() {
+        Some("permission")
+    } else if !shot::permitted() {
+        Some("screen")
+    } else {
+        None
+    };
+    *core.trouble.lock().unwrap() = missing.map(String::from);
 
     let was_warm = app.get_webview_window(BAR).is_some();
     if was_warm {
@@ -663,8 +672,9 @@ fn open_now(app: &AppHandle) {
     }
     trace("open: bar on screen");
     if let Some(trouble) = core.trouble.lock().unwrap().as_deref() {
-        // "permission" is a known state; anything else is the picker's own error message.
-        let kind = if trouble == "permission" { "permission" } else { "picker" };
+        // "permission" and "screen" are known states; anything else is the picker's own
+        // error message.
+        let kind = if trouble == "permission" || trouble == "screen" { trouble } else { "picker" };
         telemetry::event("round_blocked", json!({ "via": via, "why": kind }));
         if kind == "picker" {
             telemetry::error("picker", trouble, "picker::start");
@@ -703,7 +713,9 @@ fn close(app: &AppHandle) {
 fn close_now(app: &AppHandle) {
     trace("close: begin");
     let core = app.state::<Core>();
-    let was_open = core.picker.lock().unwrap().is_some();
+    // The overlays are there for as long as a round is, also one that has stopped taking
+    // input because the screen could not be captured.
+    let was_open = core.picker.lock().unwrap().is_some() || !core.screens.lock().unwrap().is_empty();
     // A clip still recording is finished first, so it is kept.
     stop_recording(app);
     let waiting = Instant::now();
@@ -839,6 +851,11 @@ fn cannot_capture(app: &AppHandle) {
     let core = app.state::<Core>();
     telemetry::error("capture", "the screen could not be captured", "app::cannot_capture");
     *core.trouble.lock().unwrap() = Some(if cfg!(target_os = "macos") { "screen".into() } else { "The screen could not be captured.".into() });
+    // Nothing more can be picked, so the round stops taking input. Left on, it would swallow
+    // the clicks the user now needs elsewhere: on the system's own question about the
+    // permission, or in System Settings. Never called from the picker's own threads.
+    let picker = core.picker.lock().unwrap().take();
+    drop(picker);
     // The round's folder was made for the picture that failed. With nothing picked it is
     // empty, and would sit among the captures for good.
     {
@@ -1089,9 +1106,19 @@ fn round_done(app: AppHandle) {
 #[tauri::command]
 fn permission_open(app: AppHandle, kind: String) {
     use tauri_plugin_opener::OpenerExt;
+    // The system's own question first: being asked is what puts Clipframes in the list the
+    // user is about to look at.
+    if kind == "screen" {
+        shot::ask_permission();
+    } else {
+        element::ask_permission();
+    }
     let pane = if kind == "screen" { "Privacy_ScreenCapture" } else { "Privacy_Accessibility" };
     let _ = app.opener().open_url(format!("x-apple.systempreferences:com.apple.preference.security?{pane}"), None::<&str>);
     *app.state::<Core>().trouble.lock().unwrap() = None;
+    // The round ends and the bar goes: nothing of Clipframes may be in the way, or taking
+    // clicks, while the user is in System Settings.
+    later(&app, close);
 }
 
 #[tauri::command]
