@@ -20,6 +20,8 @@ export interface PickView {
   /** "#new-invoice .btn.btn-primary", or empty when there is none. */
   selector: string;
   note: string;
+  /** On a web page: `2nd of 2 on the page`, `under heading "…"`, as the copied text says them. The app's core words its own. */
+  whereabouts?: string[];
 }
 
 /** The app or site the bar is open over, when Clipframes can tell. */

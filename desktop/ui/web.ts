@@ -6,6 +6,7 @@
 
 import { EMPTY_ROUND } from "./platform";
 import type { AreaView, HoverView, MarkView, PickView, Platform, Rect, RoundView, Tool } from "./platform";
+import { whereabouts } from "./whereabouts";
 
 export interface Stage {
   /** Covers the page and receives the pointer. Rects are in its own pixels. */
@@ -53,7 +54,17 @@ export function selector(element: Element): string {
 function describe(pick: PickView, number: number): string {
   if (pick.kind === "area") return `Screenshot (${number}.png)`;
   if (pick.kind === "clip") return `${pick.headline} (${number}/)`;
-  return pick.selector ? `${pick.headline} (${pick.selector})` : pick.headline;
+  // What it is, then which one, then under what: the order the app's core says them in.
+  const what = pick.selector ? `${pick.headline} (${pick.selector})` : pick.headline;
+  return [what, ...(pick.whereabouts ?? [])].join(", ");
+}
+
+/** Which of the page's elements that read the same this one is, and the heading it is under. */
+function placeOf(element: Element): string[] {
+  const said = headline(element);
+  // Only something with a name is counted: `Group` alone is said of every plain container.
+  const same = said.includes('"') ? (other: Element) => headline(other) === said : null;
+  return whereabouts(element.ownerDocument.body as Element, element, same);
 }
 
 /** What goes on the clipboard: one line for one pick, a numbered list for several. */
@@ -129,7 +140,7 @@ export function webPlatform(stage: Stage, options: { tools?: Tool[]; shortcut?: 
       const element = stage.elementAt(point.x, point.y);
       if (!element) return;
       setHover({ rect: null, label: "" });
-      return add({ kind: "element", headline: headline(element), selector: selector(element), note: "" }, element);
+      return add({ kind: "element", headline: headline(element), selector: selector(element), note: "", whereabouts: placeOf(element) }, element);
     }
     drag = point;
     glass.setPointerCapture(event.pointerId);
