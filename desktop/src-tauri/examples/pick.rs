@@ -27,6 +27,7 @@ fn main() {
                 let selector = element.selector();
                 println!("PICK  ({x:.0}, {y:.0})  {}{}", element.headline(), if selector.is_empty() { String::new() } else { format!("  ({selector})") });
             }
+            Event::Drag { .. } | Event::Area { .. } | Event::Click { .. } => {}
             Event::Cancel => {
                 println!("cancelled with Esc");
                 done.store(true, Ordering::SeqCst);

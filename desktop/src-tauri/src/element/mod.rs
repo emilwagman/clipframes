@@ -22,6 +22,7 @@ use linux as platform;
 
 /// A rectangle in global screen points, top-left origin.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Rect {
     pub x: f64,
     pub y: f64,
@@ -30,7 +31,7 @@ pub struct Rect {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct ElementInfo {
     pub app: String,
     pub pid: i32,

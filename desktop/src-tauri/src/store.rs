@@ -3,7 +3,7 @@
 //!
 //! The folder is written on every pick, so the path in the pasted reference is always real.
 
-use crate::round::{place_name, shared_place, Round};
+use crate::round::{place_name, shared_place, Kind, Round};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -104,7 +104,7 @@ pub fn new_folder(root: &Path, stamp: Stamp) -> PathBuf {
 pub fn save(round: &Round, folder: &Path, taken: Stamp) -> io::Result<PathBuf> {
     fs::create_dir_all(folder)?;
     let notes = folder.join("notes.md");
-    write_whole(&notes, notes_text(round, taken).as_bytes())?;
+    write_whole(&notes, notes_text(round, folder, taken).as_bytes())?;
     let json = serde_json::to_vec_pretty(round).map_err(io::Error::other)?;
     write_whole(&folder.join("capture.json"), &json)?;
     Ok(notes)
@@ -117,12 +117,14 @@ fn write_whole(path: &Path, bytes: &[u8]) -> io::Result<()> {
     fs::rename(&part, path)
 }
 
-/// notes.md: everything known about each pick, in the order the user picked them.
-pub fn notes_text(round: &Round, taken: Stamp) -> String {
+/// notes.md: everything known about each pick, in the order the user made them. Pictures are
+/// given by their full path, so an agent can open them from wherever it is working.
+pub fn notes_text(round: &Round, folder: &Path, taken: Stamp) -> String {
     let mut o: Vec<String> = Vec::new();
     let shared = shared_place(&round.picks);
     match round.picks.as_slice() {
-        [one] => o.push(format!("# Element: {}", one.element.headline())),
+        [one] if one.kind == Kind::Element => o.push(format!("# Element: {}", one.element.headline())),
+        [one] => o.push(format!("# {}", one.headline())),
         many => o.push(format!("# Clipframes: {} things{}", many.len(), shared.as_deref().map(|p| format!(" in {p}")).unwrap_or_default())),
     }
     o.push(String::new());
@@ -133,7 +135,7 @@ pub fn notes_text(round: &Round, taken: Stamp) -> String {
         let e = &pick.element;
         if numbered {
             o.push(String::new());
-            o.push(format!("## {}. {}", i + 1, e.headline()));
+            o.push(format!("## {}. {}", i + 1, pick.headline()));
         }
         if !pick.note.is_empty() {
             o.push(String::new());
@@ -149,28 +151,109 @@ pub fn notes_text(round: &Round, taken: Stamp) -> String {
         if !e.url.is_empty() {
             o.push(format!("- Page: {}", e.url));
         }
-        if !pick.image.is_empty() {
-            o.push(format!("- Image: {}", pick.image));
-        }
-        let selector = e.selector();
-        if !selector.is_empty() {
-            o.push(format!("- Selector: {selector}"));
-        }
-        if !e.path.is_empty() {
-            o.push(format!("- Inside: {}", e.path.join(" › ")));
-        }
-        if !e.name.is_empty() && !e.inner_text.is_empty() {
-            o.push(format!("- Text inside: {}", e.inner_text));
-        }
-        if !e.value.is_empty() && e.value != e.name {
-            o.push(format!("- Value: {}", e.value));
-        }
-        if e.frame.width > 0.0 {
-            o.push(format!("- Size on screen: {}×{}", e.frame.width as i64, e.frame.height as i64));
+        let (w, h) = pick.pixels;
+        let file = folder.join(&pick.image);
+        match pick.kind {
+            Kind::Element => {
+                if !pick.image.is_empty() {
+                    o.push(format!("- Image: {} ({w}×{h} px): the element with a little space around it", file.display()));
+                }
+                let selector = e.selector();
+                if !selector.is_empty() {
+                    o.push(format!("- Selector: {selector}"));
+                }
+                if !e.path.is_empty() {
+                    o.push(format!("- Inside: {}", e.path.join(" › ")));
+                }
+                if !e.name.is_empty() && !e.inner_text.is_empty() {
+                    o.push(format!("- Text inside: {}", e.inner_text));
+                }
+                if !e.value.is_empty() && e.value != e.name {
+                    o.push(format!("- Value: {}", e.value));
+                }
+                if e.frame.width > 0.0 {
+                    o.push(format!("- Size on screen: {}×{}", e.frame.width as i64, e.frame.height as i64));
+                }
+            }
+            Kind::Area => {
+                if !pick.image.is_empty() {
+                    o.push(format!("- Image: {} ({w}×{h} px)", file.display()));
+                }
+            }
+            Kind::Clip => {
+                o.push(format!("- Length: {:.1} s", pick.seconds));
+                o.push(format!("- Frames: {}, in order, in {} (001.png, 002.png, …), {w}×{h} px", pick.frames, file.display()));
+                if !pick.clicks.is_empty() {
+                    o.push("- Clicks made while recording:".into());
+                    for click in &pick.clicks {
+                        let what = if click.what.is_empty() { "somewhere on screen" } else { &click.what };
+                        o.push(format!("  - {:.1} s, frame {:03}: {what}", click.at, click.frame));
+                    }
+                }
+            }
         }
     }
     o.push(String::new());
     o.join("\n")
+}
+
+/// One past round, as History lists it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Entry {
+    /// The folder's name, which is also when it was made.
+    pub id: String,
+    pub title: String,
+    pub when: String,
+    pub count: usize,
+    /// Full paths of up to four pictures.
+    pub images: Vec<String>,
+}
+
+/// Past rounds, newest first: `count` of them starting at `from`, and how many there are in
+/// all. Only the page asked for is read from disk, so a long history opens as fast as a short one.
+pub fn list(root: &Path, from: usize, count: usize) -> (Vec<Entry>, usize) {
+    let mut names: Vec<String> = fs::read_dir(root)
+        .map(|dir| dir.filter_map(|e| e.ok()).filter(|e| e.path().join("capture.json").is_file()).filter_map(|e| e.file_name().into_string().ok()).collect())
+        .unwrap_or_default();
+    names.sort_unstable_by(|a, b| b.cmp(a));
+    let total = names.len();
+    let entries = names.into_iter().skip(from).take(count).filter_map(|id| entry(root, id)).collect();
+    (entries, total)
+}
+
+fn entry(root: &Path, id: String) -> Option<Entry> {
+    let folder = root.join(&id);
+    let round = load(&folder)?;
+    let first = round.picks.first()?;
+    let title = match round.picks.len() {
+        1 => first.headline(),
+        n => format!("{} and {} more", first.headline(), n - 1),
+    };
+    let images = round
+        .picks
+        .iter()
+        .filter(|p| !p.image.is_empty())
+        .map(|p| if p.kind == Kind::Clip { folder.join(&p.image).join("001.png") } else { folder.join(&p.image) })
+        .take(4)
+        .map(|p| p.display().to_string())
+        .collect();
+    // "2026-10-09_11-42-30" reads as "2026-10-09 11:42".
+    let when = match id.split_once('_') {
+        Some((day, time)) => format!("{day} {}", time.splitn(3, '-').take(2).collect::<Vec<_>>().join(":")),
+        None => id.clone(),
+    };
+    Some(Entry { id, title, when, count: round.picks.len(), images })
+}
+
+pub fn load(folder: &Path) -> Option<Round> {
+    serde_json::from_slice(&fs::read(folder.join("capture.json")).ok()?).ok()
+}
+
+/// A round's folder by its id, refusing anything that is not a plain folder name under root.
+pub fn folder_of(root: &Path, id: &str) -> Option<PathBuf> {
+    let plain = !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    let folder = root.join(id);
+    (plain && folder.join("capture.json").is_file()).then_some(folder)
 }
 
 #[cfg(test)]
@@ -217,7 +300,7 @@ mod tests {
         let i = r.add(button());
         r.set_note(i, "make this secondary");
         assert_eq!(
-            notes_text(&r, TAKEN),
+            notes_text(&r, Path::new("/c"), TAKEN),
             "# Element: Button \"New invoice\"\n\n- Taken: 2026-10-09 11:42\n\n> make this secondary\n\n- App: Google Chrome \"Invoices\"\n- Page: http://localhost:3000/invoices\n- Selector: #new-invoice .btn.btn-primary\n- Inside: Main › Toolbar\n- Size on screen: 110×39\n"
         );
     }
@@ -228,7 +311,7 @@ mod tests {
         r.add(button());
         let second = r.add(ElementInfo { app: "Google Chrome".into(), window: "Invoices".into(), role: "Group".into(), name: "Overdue".into(), ..Default::default() });
         r.set_note(second, "red is too strong");
-        let text = notes_text(&r, TAKEN);
+        let text = notes_text(&r, Path::new("/c"), TAKEN);
         assert!(text.starts_with("# Clipframes: 2 things in Google Chrome \"Invoices\"\n"), "{text}");
         assert!(text.contains("\n## 1. Button \"New invoice\"\n\n- App:"), "{text}");
         assert!(text.contains("\n## 2. Group \"Overdue\"\n\n> red is too strong\n\n- App:"), "{text}");
@@ -247,6 +330,42 @@ mod tests {
         assert_eq!(back, r);
         assert!(!folder.join("notes.part").exists());
         fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[test]
+    fn notes_give_pictures_by_full_path_and_list_a_clips_clicks() {
+        use crate::round::{Click, Pick};
+        let mut r = Round::default();
+        r.push(Pick { kind: Kind::Area, image: "1.png".into(), pixels: (800, 400), ..Default::default() });
+        r.push(Pick { kind: Kind::Clip, image: "2".into(), pixels: (1600, 900), frames: 24, seconds: 6.04, clicks: vec![Click { at: 1.5, frame: 7, what: "Button \"Save\"".into() }], ..Default::default() });
+        let text = notes_text(&r, Path::new("/c"), TAKEN);
+        assert!(text.contains("## 1. Screenshot\n\n- Image: /c/1.png (800×400 px)"), "{text}");
+        assert!(text.contains("## 2. Screen clip, 6 s\n\n- Length: 6.0 s\n- Frames: 24, in order, in /c/2 (001.png, 002.png, …), 1600×900 px"), "{text}");
+        assert!(text.contains("  - 1.5 s, frame 007: Button \"Save\""), "{text}");
+    }
+
+    #[test]
+    fn history_lists_newest_first_one_page_at_a_time() {
+        let root = scratch("history");
+        for (i, day) in ["2026-10-07_09-00-00", "2026-10-09_11-42-30", "2026-10-08_10-00-00"].iter().enumerate() {
+            let mut r = Round::default();
+            r.add(button());
+            if i == 1 {
+                r.add(button());
+            }
+            save(&r, &root.join(day), TAKEN).unwrap();
+        }
+        fs::create_dir_all(root.join("not-a-capture")).unwrap();
+        let (page, total) = list(&root, 0, 2);
+        assert_eq!(total, 3);
+        assert_eq!(page.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["2026-10-09_11-42-30", "2026-10-08_10-00-00"]);
+        assert_eq!(page[0].title, "Button \"New invoice\" and 1 more");
+        assert_eq!(page[0].when, "2026-10-09 11:42");
+        assert_eq!(list(&root, 2, 2).0.len(), 1);
+        assert!(folder_of(&root, "2026-10-09_11-42-30").is_some());
+        assert!(folder_of(&root, "../elsewhere").is_none());
+        assert!(folder_of(&root, "not-a-capture").is_none());
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

@@ -239,11 +239,6 @@ unsafe fn inner_text(el: &Element) -> String {
 
 static WOKEN: Mutex<Option<HashMap<i32, Instant>>> = Mutex::new(None);
 
-/// Ask an app for its tree ahead of time; Chromium takes a few seconds to build it.
-pub fn prepare(pid: i32) {
-    wake(pid);
-}
-
 fn wake(pid: i32) {
     let mut guard = WOKEN.lock().unwrap();
     let woken = guard.get_or_insert_with(HashMap::new);

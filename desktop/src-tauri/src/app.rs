@@ -9,13 +9,15 @@
 //! points on macOS and physical pixels on Windows, so every conversion to a window lives here.
 
 use crate::element::{self, ElementInfo, Rect};
-use crate::picker::{Event, Picker};
-use crate::round::Round;
+use crate::picker::{Event, Mode, Picker};
+use crate::round::{Click, Kind, Pick, Round};
+use crate::shot;
 use crate::settings::{self, Settings};
 use crate::store::{self, Stamp};
 use crate::updates;
 use serde::Serialize;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
@@ -28,6 +30,12 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 const BAR: &str = "bar";
 const NOTE: &str = "note";
 const SETTINGS: &str = "settings";
+const HISTORY: &str = "history";
+/// A clip stops by itself after this long.
+const LONGEST_CLIP: Duration = Duration::from_secs(60);
+/// Clip frames are taken this far apart and no wider than this.
+const FRAME_EVERY: Duration = Duration::from_millis(250);
+const FRAME_WIDTH: u32 = 1600;
 /// How long the hidden bar is kept after closing, ready to open again at once.
 const KEEP_WARM: Duration = Duration::from_secs(90);
 
@@ -81,6 +89,12 @@ pub struct Core {
     folder: Mutex<Option<(PathBuf, Stamp)>>,
     /// The round's notes.md, once written: the path the pasted reference points to.
     notes: Mutex<Option<PathBuf>>,
+    /// The tool that is on in the bar.
+    tool: Mutex<Kind>,
+    /// The clip being recorded.
+    recording: Mutex<Option<Recording>>,
+    /// Numbers handed to this round's pictures, so a removed pick never frees a name.
+    files: AtomicU32,
     settings: Mutex<Settings>,
     /// False when another app owns the shortcut, so Clipframes could not take it.
     shortcut_works: Mutex<bool>,
@@ -96,11 +110,25 @@ pub struct Core {
     opened: Mutex<Option<Instant>>,
 }
 
+/// A clip in the making.
+#[derive(Clone)]
+struct Recording {
+    started: Instant,
+    stop: Arc<AtomicBool>,
+    /// Seconds in, and what was clicked.
+    clicks: Arc<Mutex<Vec<(f64, String)>>>,
+}
+
 /// What the bar and the comment box draw.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RoundView {
     picking: bool,
+    tool: Kind,
+    /// Seconds recorded so far, while a clip is being recorded.
+    recording: Option<f64>,
+    /// The app or site the bar is open over.
+    place: Option<PlaceView>,
     picks: Vec<PickView>,
     /// The pick whose comment box is open.
     noting: Option<usize>,
@@ -113,7 +141,14 @@ struct RoundView {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct PlaceView {
+    name: String,
+    auto: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct PickView {
+    kind: Kind,
     headline: String,
     selector: String,
     note: String,
@@ -129,6 +164,13 @@ struct HoverView {
 struct MarkView {
     number: usize,
     rect: Rect,
+    kind: Kind,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AreaView {
+    rect: Option<Rect>,
+    recording: bool,
 }
 
 fn view(app: &AppHandle) -> RoundView {
@@ -137,9 +179,13 @@ fn view(app: &AppHandle) -> RoundView {
     let picking = core.picker.lock().unwrap().is_some();
     let noting = *core.noting.lock().unwrap();
     let trouble = core.trouble.lock().unwrap().clone();
+    let recording = core.recording.lock().unwrap().as_ref().map(|r| r.started.elapsed().as_secs_f64());
     let state = RoundView {
         picking,
-        picks: round.picks.iter().map(|p| PickView { headline: p.element.headline(), selector: p.element.selector(), note: p.note.clone() }).collect(),
+        tool: *core.tool.lock().unwrap(),
+        recording,
+        place: None,
+        picks: round.picks.iter().map(|p| PickView { kind: p.kind, headline: p.headline(), selector: if p.kind == Kind::Element { p.element.selector() } else { String::new() }, note: p.note.clone() }).collect(),
         noting,
         reference: round.reference(core.notes.lock().unwrap().as_deref().and_then(|p| p.to_str())),
         trouble,
@@ -148,42 +194,54 @@ fn view(app: &AppHandle) -> RoundView {
     state
 }
 
+fn copy_text(app: &AppHandle, text: &str) {
+    let core = app.state::<Core>();
+    let mut clipboard = core.clipboard.lock().unwrap();
+    if clipboard.is_none() {
+        *clipboard = arboard::Clipboard::new().ok();
+    }
+    if let Some(c) = clipboard.as_mut() {
+        // Windows programs expect CRLF; a terminal there joins lines that end in a bare LF.
+        let _ = c.set_text(if cfg!(windows) { text.replace('\n', "\r\n") } else { text.to_string() });
+    }
+}
+
 /// Tells every window what the round looks like now, and puts it on the clipboard.
 fn publish(app: &AppHandle) {
     let core = app.state::<Core>();
     save(&core);
     let state = view(app);
     if !state.reference.is_empty() {
-        let mut clipboard = core.clipboard.lock().unwrap();
-        if clipboard.is_none() {
-            *clipboard = arboard::Clipboard::new().ok();
-        }
-        if let Some(c) = clipboard.as_mut() {
-            // Windows programs expect CRLF; a terminal there joins lines that end in a bare LF.
-            let text = if cfg!(windows) { state.reference.replace('\n', "\r\n") } else { state.reference.clone() };
-            let _ = c.set_text(text);
-        }
+        copy_text(app, &state.reference);
     }
     let _ = app.emit("round", &state);
 
-    let frames: Vec<Rect> = core.round.lock().unwrap().picks.iter().map(|p| p.element.frame).collect();
+    let frames: Vec<(Rect, Kind)> = core.round.lock().unwrap().picks.iter().map(|p| (p.element.frame, p.kind)).collect();
     for screen in core.screens.lock().unwrap().iter() {
-        let marks: Vec<MarkView> = frames.iter().enumerate().map(|(i, f)| MarkView { number: i + 1, rect: screen.local(f) }).collect();
+        let marks: Vec<MarkView> = frames.iter().enumerate().map(|(i, (f, kind))| MarkView { number: i + 1, rect: screen.local(f), kind: *kind }).collect();
         let _ = app.emit_to(screen.label.as_str(), "marks", marks);
     }
 }
 
-/// Writes the round to its folder, making the folder at the first pick.
-fn save(core: &Core) {
-    let round = core.round.lock().unwrap();
-    if round.picks.is_empty() {
-        return;
-    }
+/// The round's folder, made the first time something needs it.
+fn round_folder(core: &Core) -> (PathBuf, Stamp) {
     let mut folder = core.folder.lock().unwrap();
     let (path, taken) = folder.get_or_insert_with(|| {
         let taken = Stamp::now();
         (store::new_folder(&store::root(), taken), taken)
     });
+    let _ = std::fs::create_dir_all(&*path);
+    (path.clone(), *taken)
+}
+
+/// Writes the round to its folder.
+fn save(core: &Core) {
+    let round = core.round.lock().unwrap();
+    if round.picks.is_empty() {
+        return;
+    }
+    let (path, taken) = round_folder(core);
+    let (path, taken) = (&path, &taken);
     match store::save(&round, path, *taken) {
         Ok(notes) => *core.notes.lock().unwrap() = Some(notes),
         Err(e) => eprintln!("could not save the round to {}: {e}", path.display()),
@@ -211,6 +269,12 @@ fn refresh_exempt(app: &AppHandle) {
     };
 }
 
+/// Clipframes' own windows are left out of screenshots and recordings, its own included.
+/// CLIPFRAMES_CAPTURABLE keeps them in, for recording a demo of Clipframes itself.
+fn protected() -> bool {
+    std::env::var_os("CLIPFRAMES_CAPTURABLE").is_none()
+}
+
 fn small_window<'a>(app: &'a AppHandle, label: &str, size: (f64, f64)) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title("Clipframes")
@@ -225,6 +289,7 @@ fn small_window<'a>(app: &'a AppHandle, label: &str, size: (f64, f64)) -> Webvie
         .accept_first_mouse(true)
         .focused(false)
         .visible(false)
+        .content_protected(protected())
         .on_page_load(|window, payload| {
             trace(&format!("{}: page {:?}", window.label(), payload.event()));
         })
@@ -274,6 +339,7 @@ fn open_overlays(app: &AppHandle) -> Vec<Screen> {
             .visible_on_all_workspaces(true)
             .focused(false)
             .visible(false)
+            .content_protected(protected())
             .build();
         let Ok(w) = built else { continue };
         let (pos, size, scale) = (*m.position(), *m.size(), m.scale_factor());
@@ -317,6 +383,8 @@ fn open(app: &AppHandle) {
     *core.round.lock().unwrap() = Round::default();
     *core.noting.lock().unwrap() = None;
     *core.shown.lock().unwrap() = None;
+    *core.tool.lock().unwrap() = Kind::Element;
+    core.files.store(0, Ordering::SeqCst);
     *core.folder.lock().unwrap() = None;
     *core.notes.lock().unwrap() = None;
     *core.trouble.lock().unwrap() = (!element::permitted()).then(|| "permission".to_string());
@@ -359,6 +427,12 @@ fn open(app: &AppHandle) {
 fn close(app: &AppHandle) {
     trace("close: begin");
     let core = app.state::<Core>();
+    // A clip still recording is finished first, so it is kept.
+    stop_recording(app);
+    let waiting = Instant::now();
+    while core.recording.lock().unwrap().is_some() && waiting.elapsed() < Duration::from_secs(3) {
+        thread::sleep(Duration::from_millis(30));
+    }
     // Taken out first and dropped unlocked: stopping the picker waits for its threads.
     let picker = core.picker.lock().unwrap().take();
     trace("close: picker taken");
@@ -417,15 +491,153 @@ fn on_event(app: &AppHandle, event: Event) {
         Event::Pick { element, .. } => {
             trace("pick");
             let frame = element.frame;
-            let index = core.round.lock().unwrap().add(element);
+            // A picture of the element with a little space around it. Not having one is fine.
+            let pad = if cfg!(windows) { 18.0 } else { 12.0 };
+            let around = Rect { x: (frame.x - pad).max(0.0), y: (frame.y - pad).max(0.0), width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
+            let (image, pixels) = snap(&core, &around).unwrap_or_default();
+            let index = core.round.lock().unwrap().push(Pick { element, image, pixels, ..Default::default() });
             *core.noting.lock().unwrap() = Some(index);
             show_note(app, &frame);
             publish(app);
+        }
+        Event::Drag { rect } => show_area(app, rect, false),
+        // These arrive on the input thread, which must not wait for a screenshot.
+        Event::Area { rect } => {
+            let app = app.clone();
+            thread::spawn(move || if *app.state::<Core>().tool.lock().unwrap() == Kind::Clip { start_recording(&app, rect) } else { add_area(&app, rect) });
+        }
+        Event::Click { element, .. } => {
+            if let Some(recording) = core.recording.lock().unwrap().as_ref() {
+                recording.clicks.lock().unwrap().push((recording.started.elapsed().as_secs_f64(), element.map(|e| e.headline()).unwrap_or_default()));
+            }
         }
         Event::Cancel => {
             trace("esc");
             later(app, escape)
         }
+    }
+}
+
+/// Takes a picture of part of the screen into the round's folder. Returns its name and size.
+fn snap(core: &Core, rect: &Rect) -> Option<(String, (u32, u32))> {
+    let (folder, _) = round_folder(core);
+    let name = format!("{}.png", core.files.fetch_add(1, Ordering::SeqCst) + 1);
+    match shot::capture_to_file(rect, &folder.join(&name), None) {
+        Ok(pixels) => Some((name, pixels)),
+        Err(e) => {
+            trace(&format!("no picture: {e}"));
+            None
+        }
+    }
+}
+
+/// Where an area was taken: the app, window and page under its middle, with the area as frame.
+fn place_of(rect: &Rect) -> ElementInfo {
+    let under = element::element_full_at(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0).unwrap_or_default();
+    ElementInfo { app: under.app, pid: under.pid, window: under.window, url: under.url, frame: *rect, ..Default::default() }
+}
+
+/// Draws (or clears) the area being dragged or recorded on every overlay.
+fn show_area(app: &AppHandle, rect: Option<Rect>, recording: bool) {
+    for screen in app.state::<Core>().screens.lock().unwrap().iter() {
+        let _ = app.emit_to(screen.label.as_str(), "area", AreaView { rect: rect.map(|r| screen.local(&r)), recording });
+    }
+}
+
+/// The screen could not be captured: say so in the bar instead of adding an empty pick.
+fn cannot_capture(app: &AppHandle) {
+    let core = app.state::<Core>();
+    *core.trouble.lock().unwrap() = Some(if cfg!(target_os = "macos") { "screen".into() } else { "The screen could not be captured.".into() });
+    let _ = app.emit("round", view(app));
+}
+
+fn add_area(app: &AppHandle, rect: Rect) {
+    let core = app.state::<Core>();
+    show_area(app, None, false);
+    // One frame for the outline to leave the screen, where it is not protected from capture.
+    if !protected() {
+        thread::sleep(Duration::from_millis(60));
+    }
+    let Some((image, pixels)) = snap(&core, &rect) else { return cannot_capture(app) };
+    let index = core.round.lock().unwrap().push(Pick { kind: Kind::Area, element: place_of(&rect), image, pixels, ..Default::default() });
+    *core.noting.lock().unwrap() = Some(index);
+    show_note(app, &rect);
+    publish(app);
+}
+
+fn start_recording(app: &AppHandle, rect: Rect) {
+    let core = app.state::<Core>();
+    let (folder, _) = round_folder(&core);
+    let name = (core.files.fetch_add(1, Ordering::SeqCst) + 1).to_string();
+    let dir = folder.join(&name);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return cannot_capture(app);
+    }
+    let recording = Recording { started: Instant::now(), stop: Arc::new(AtomicBool::new(false)), clicks: Arc::new(Mutex::new(Vec::new())) };
+    *core.recording.lock().unwrap() = Some(recording.clone());
+    if let Some(picker) = core.picker.lock().unwrap().as_ref() {
+        picker.set_mode(Mode::Watch);
+    }
+    if core.noting.lock().unwrap().take().is_some() {
+        if let Some(note) = app.get_webview_window(NOTE) {
+            let _ = note.hide();
+        }
+    }
+    refresh_exempt(app);
+    show_area(app, Some(rect), true);
+    let _ = app.emit("round", view(app));
+
+    let app = app.clone();
+    thread::spawn(move || {
+        let (mut frames, mut pixels, mut times) = (0u32, (0u32, 0u32), Vec::new());
+        loop {
+            let at = recording.started.elapsed();
+            if recording.stop.load(Ordering::SeqCst) || at > LONGEST_CLIP {
+                break;
+            }
+            match shot::capture_to_file(&rect, &dir.join(format!("{:03}.png", frames + 1)), Some(FRAME_WIDTH)) {
+                Ok(size) => {
+                    frames += 1;
+                    pixels = size;
+                    times.push(at.as_secs_f64());
+                }
+                Err(_) if frames == 0 => break,
+                Err(_) => {}
+            }
+            if frames % 4 == 0 {
+                let _ = app.emit("round", view(&app)); // the clock in the bar
+            }
+            let next = FRAME_EVERY * frames.max(1);
+            thread::sleep(next.saturating_sub(recording.started.elapsed()).max(Duration::from_millis(10)));
+        }
+        let seconds = recording.started.elapsed().as_secs_f64();
+        let core = app.state::<Core>();
+        *core.recording.lock().unwrap() = None;
+        if let Some(picker) = core.picker.lock().unwrap().as_ref() {
+            picker.set_mode(Mode::Area);
+        }
+        show_area(&app, None, false);
+        if frames == 0 {
+            let _ = std::fs::remove_dir_all(&dir);
+            return cannot_capture(&app);
+        }
+        // Each click is tied to the first frame taken after it.
+        let clicks = recording.clicks.lock().unwrap().iter().map(|(at, what)| Click { at: *at, frame: (times.iter().position(|t| t >= at).unwrap_or(times.len() - 1) + 1) as u32, what: what.clone() }).collect();
+        let index = core.round.lock().unwrap().push(Pick { kind: Kind::Clip, element: place_of(&rect), image: name, pixels, frames, seconds, clicks, ..Default::default() });
+        *core.noting.lock().unwrap() = Some(index);
+        show_note(&app, &rect);
+        publish(&app);
+    });
+}
+
+/// True if a clip was being recorded.
+fn stop_recording(app: &AppHandle) -> bool {
+    match app.state::<Core>().recording.lock().unwrap().as_ref() {
+        Some(recording) => {
+            recording.stop.store(true, Ordering::SeqCst);
+            true
+        }
+        None => false,
     }
 }
 
@@ -451,8 +663,11 @@ fn show_note(app: &AppHandle, frame: &Rect) {
     refresh_exempt(app);
 }
 
-/// Esc closes the comment box if one is open, and the round otherwise.
+/// Esc stops a recording, or closes the comment box if one is open, or else ends the round.
 fn escape(app: &AppHandle) {
+    if stop_recording(app) {
+        return;
+    }
     if !hide_note(app) {
         close(app);
     }
@@ -513,12 +728,93 @@ fn round_done(app: AppHandle) {
     later(&app, close);
 }
 
-/// Opens the system's page for the permission Clipframes needs to read other apps.
+/// Opens the system's page for a permission Clipframes needs.
 #[tauri::command]
-fn permission_open(app: AppHandle) {
+fn permission_open(app: AppHandle, kind: String) {
     use tauri_plugin_opener::OpenerExt;
-    let _ = app.opener().open_url("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility", None::<&str>);
+    let pane = if kind == "screen" { "Privacy_ScreenCapture" } else { "Privacy_Accessibility" };
+    let _ = app.opener().open_url(format!("x-apple.systempreferences:com.apple.preference.security?{pane}"), None::<&str>);
+    *app.state::<Core>().trouble.lock().unwrap() = None;
 }
+
+#[tauri::command]
+fn tool_set(app: AppHandle, tool: Kind) {
+    let core = app.state::<Core>();
+    if core.recording.lock().unwrap().is_some() {
+        return;
+    }
+    *core.tool.lock().unwrap() = tool;
+    *core.trouble.lock().unwrap() = None;
+    if let Some(picker) = core.picker.lock().unwrap().as_ref() {
+        picker.set_mode(if tool == Kind::Element { Mode::Element } else { Mode::Area });
+    }
+    // The element highlight belongs to the element tool.
+    *core.shown.lock().unwrap() = None;
+    for screen in core.screens.lock().unwrap().iter() {
+        let _ = app.emit_to(screen.label.as_str(), "hover", HoverView { rect: None, label: String::new() });
+    }
+    let _ = app.emit("round", view(&app));
+}
+
+#[tauri::command]
+fn recording_stop(app: AppHandle) {
+    stop_recording(&app);
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct HistoryPage {
+    entries: Vec<store::Entry>,
+    total: usize,
+}
+
+#[tauri::command]
+fn history_open(app: AppHandle) {
+    later(&app, |app| {
+        close(app);
+        if let Some(window) = app.get_webview_window(HISTORY) {
+            let _ = window.show();
+            let _ = window.set_focus();
+            return;
+        }
+        let built = WebviewWindowBuilder::new(app, HISTORY, WebviewUrl::App("index.html".into())).title("Clipframes History").inner_size(680.0, 620.0).min_inner_size(520.0, 320.0).center().build();
+        if let Ok(window) = built {
+            let _ = window.set_focus();
+        }
+    });
+}
+
+#[tauri::command]
+fn history_list(from: usize, count: usize) -> HistoryPage {
+    let (entries, total) = store::list(&store::root(), from, count.min(200));
+    HistoryPage { entries, total }
+}
+
+/// Puts a past round back on the clipboard.
+#[tauri::command]
+fn history_copy(app: AppHandle, id: String) -> Result<(), String> {
+    let folder = store::folder_of(&store::root(), &id).ok_or("That capture is gone.")?;
+    let round = store::load(&folder).ok_or("That capture could not be read.")?;
+    let text = round.reference(folder.join("notes.md").to_str());
+    copy_text(&app, &text);
+    Ok(())
+}
+
+#[tauri::command]
+fn history_reveal(app: AppHandle, id: String) {
+    use tauri_plugin_opener::OpenerExt;
+    if let Some(folder) = store::folder_of(&store::root(), &id) {
+        let _ = app.opener().open_path(folder.display().to_string(), None::<&str>);
+    }
+}
+
+#[tauri::command]
+fn history_delete(id: String) -> Result<(), String> {
+    let folder = store::folder_of(&store::root(), &id).ok_or("That capture is gone.")?;
+    std::fs::remove_dir_all(folder).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn place_auto_set(_app: AppHandle, _on: bool) {}
 
 /// What the settings window draws.
 #[derive(Debug, Clone, Serialize)]
@@ -597,7 +893,7 @@ fn set_launch_at_login(app: &AppHandle, on: bool) {
 /// Nothing of Clipframes is on screen: a safe moment to restart for an update.
 pub fn idle(app: &AppHandle) -> bool {
     let visible = |label: &str| app.get_webview_window(label).is_some_and(|w| w.is_visible().unwrap_or(false));
-    app.state::<Core>().picker.lock().unwrap().is_none() && !visible(BAR) && !visible(SETTINGS)
+    app.state::<Core>().picker.lock().unwrap().is_none() && !visible(BAR) && !visible(SETTINGS) && !visible(HISTORY)
 }
 
 pub fn set_update_status(app: &AppHandle, status: String) {
@@ -690,6 +986,14 @@ pub fn run() {
             round_done,
             escape_key,
             permission_open,
+            tool_set,
+            recording_stop,
+            history_open,
+            history_list,
+            history_copy,
+            history_reveal,
+            history_delete,
+            place_auto_set,
             settings_get,
             shortcut_set,
             launch_set,

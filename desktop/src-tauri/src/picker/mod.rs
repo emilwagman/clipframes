@@ -6,7 +6,7 @@
 //! round is running.
 
 use crate::element::{self, ElementInfo, Rect};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -36,6 +36,33 @@ pub enum Input {
     Cancel,
 }
 
+/// What the pointer does during a round.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Mode {
+    /// Hover names elements, a click picks one.
+    Element = 0,
+    /// A drag marks out an area.
+    Area = 1,
+    /// Recording: clicks go to the app as usual and are only noted.
+    Watch = 2,
+}
+
+impl Mode {
+    fn from(n: u8) -> Mode {
+        match n {
+            1 => Mode::Area,
+            2 => Mode::Watch,
+            _ => Mode::Element,
+        }
+    }
+}
+
+/// The rectangle between two corners, whichever way it was dragged.
+pub fn span(a: (f64, f64), b: (f64, f64)) -> Rect {
+    Rect { x: a.0.min(b.0), y: a.1.min(b.1), width: (a.0 - b.0).abs(), height: (a.1 - b.1).abs() }
+}
+
 /// What a round tells the interface.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -44,6 +71,12 @@ pub enum Event {
     Hover { x: f64, y: f64, element: Option<ElementInfo>, read_ms: f64 },
     /// The user clicked this element.
     Pick { x: f64, y: f64, element: ElementInfo },
+    /// An area is being dragged (`None`: the drag was dropped).
+    Drag { rect: Option<Rect> },
+    /// The user finished dragging this area.
+    Area { rect: Rect },
+    /// While watching: the user clicked here, and the click went to the app.
+    Click { x: f64, y: f64, element: Option<ElementInfo> },
     Cancel,
 }
 
@@ -56,6 +89,9 @@ struct Shared {
     last: Mutex<Option<(f64, f64, ElementInfo)>>,
     /// Clipframes' own windows: clicks there are not picks.
     exempt: Mutex<Vec<Rect>>,
+    mode: AtomicU8,
+    /// Where the drag in progress began.
+    drag: Mutex<Option<(f64, f64)>>,
     running: AtomicBool,
 }
 
@@ -89,6 +125,12 @@ impl Picker {
     pub fn set_exempt(&self, rects: Vec<Rect>) {
         *self.shared.exempt.lock().unwrap() = rects;
     }
+
+    pub fn set_mode(&self, mode: Mode) {
+        self.shared.mode.store(mode as u8, Ordering::SeqCst);
+        *self.shared.drag.lock().unwrap() = None;
+        *self.shared.pending.lock().unwrap() = None;
+    }
 }
 
 impl Drop for Picker {
@@ -108,19 +150,46 @@ fn exempt(shared: &Shared, x: f64, y: f64) -> bool {
 
 /// Runs on the system's input thread: must return at once. Returns true to swallow the input.
 fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input) -> bool {
+    let mode = Mode::from(shared.mode.load(Ordering::SeqCst));
     match input {
         Input::Move(x, y) => {
-            if !exempt(shared, x, y) {
+            // A drag keeps following the pointer even across Clipframes' own windows.
+            let dragging = shared.drag.lock().unwrap().is_some();
+            if mode != Mode::Watch && (dragging || !exempt(shared, x, y)) {
                 *shared.pending.lock().unwrap() = Some((x, y));
                 shared.wake.notify_one();
             }
             false
         }
-        // The press is swallowed so the app underneath never sees a click begin.
-        Input::Down(x, y) => !exempt(shared, x, y),
-        Input::Up(x, y) => {
+        Input::Down(x, y) => {
             if exempt(shared, x, y) {
                 return false;
+            }
+            match mode {
+                // The press is swallowed so the app underneath never sees a click begin.
+                Mode::Element => true,
+                Mode::Area => {
+                    *shared.drag.lock().unwrap() = Some((x, y));
+                    true
+                }
+                Mode::Watch => {
+                    let emit = emit.clone();
+                    thread::spawn(move || emit(Event::Click { x, y, element: quick(x, y) }));
+                    false
+                }
+            }
+        }
+        Input::Up(x, y) => {
+            if let Some(start) = shared.drag.lock().unwrap().take() {
+                let rect = span(start, (x, y));
+                *shared.pending.lock().unwrap() = None;
+                // A click without a drag is not an area.
+                emit(if rect.width >= 8.0 && rect.height >= 8.0 { Event::Area { rect } } else { Event::Drag { rect: None } });
+                return true;
+            }
+            if mode != Mode::Element || exempt(shared, x, y) {
+                // In area mode a release with no drag belongs to a press that was let through.
+                return mode == Mode::Area && !exempt(shared, x, y);
             }
             // The click asks once more, for the full description. The hover answer is the
             // fallback when the app does not reply.
@@ -134,10 +203,21 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             true
         }
         Input::Cancel => {
+            *shared.drag.lock().unwrap() = None;
             emit(Event::Cancel);
             true
         }
     }
+}
+
+#[cfg(not(test))]
+fn quick(x: f64, y: f64) -> Option<ElementInfo> {
+    element::element_at(x, y).ok()
+}
+
+#[cfg(test)]
+fn quick(_x: f64, _y: f64) -> Option<ElementInfo> {
+    None
 }
 
 #[cfg(not(test))]
@@ -166,6 +246,13 @@ fn read_loop(shared: Arc<Shared>, emit: Arc<dyn Fn(Event) + Send + Sync>) {
             pending.take()
         };
         let Some((x, y)) = next else { continue };
+        if Mode::from(shared.mode.load(Ordering::SeqCst)) == Mode::Area {
+            // No element reading while an area is drawn: only the rectangle so far.
+            if let Some(start) = *shared.drag.lock().unwrap() {
+                emit(Event::Drag { rect: Some(span(start, (x, y))) });
+            }
+            continue;
+        }
         let started = Instant::now();
         let element = element::element_at(x, y).ok();
         let read_ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -228,6 +315,37 @@ mod tests {
             Event::Pick { element, .. } => assert_eq!(element.headline(), "Button \"New invoice\""),
             other => panic!("expected a pick, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_drag_in_area_mode_becomes_an_area_and_nothing_reaches_the_app() {
+        let (shared, emit, rx) = round();
+        shared.mode.store(Mode::Area as u8, Ordering::SeqCst);
+        assert!(handle(&shared, &emit, Input::Down(400.0, 300.0)));
+        assert!(!handle(&shared, &emit, Input::Move(250.0, 380.0)), "moves always pass");
+        assert!(handle(&shared, &emit, Input::Up(100.0, 500.0)));
+        match rx.recv_timeout(Duration::from_secs(1)).expect("an area") {
+            Event::Area { rect } => assert_eq!(rect, Rect { x: 100.0, y: 300.0, width: 300.0, height: 200.0 }),
+            other => panic!("expected an area, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_click_without_a_drag_in_area_mode_is_dropped() {
+        let (shared, emit, rx) = round();
+        shared.mode.store(Mode::Area as u8, Ordering::SeqCst);
+        assert!(handle(&shared, &emit, Input::Down(400.0, 300.0)));
+        assert!(handle(&shared, &emit, Input::Up(402.0, 301.0)));
+        assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Drag { rect: None })));
+    }
+
+    #[test]
+    fn while_recording_clicks_reach_the_app_and_are_noted() {
+        let (shared, emit, rx) = round();
+        shared.mode.store(Mode::Watch as u8, Ordering::SeqCst);
+        assert!(!handle(&shared, &emit, Input::Down(50.0, 60.0)));
+        assert!(!handle(&shared, &emit, Input::Up(50.0, 60.0)));
+        assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Click { .. })));
     }
 
     #[test]
