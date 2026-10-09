@@ -85,7 +85,7 @@ function Composer({ stage }: { stage: Lab }) {
     if (lead !== "" && !/\s$/.test(lead)) pieces.append(" ");
     pieces.append(chip, space);
     range.insertNode(pieces);
-    range.setStartAfter(space);
+    range.setStart(space, 1);
     range.collapse(true);
     const selection = window.getSelection() as Selection;
     selection.removeAllRanges();
@@ -230,6 +230,15 @@ function Composer({ stage }: { stage: Lab }) {
           role="textbox"
           aria-label="What should change"
           data-placeholder="What should change? Click things on screen as you write."
+          onBeforeInput={(e) => {
+            // A full stop or a comma typed straight after a reference sits against it: the
+            // space that was put after the reference gives way.
+            const typed = (e.nativeEvent as InputEvent).data ?? "";
+            const selection = window.getSelection();
+            const node = selection?.anchorNode;
+            if (!/^[.,;:!?)]/.test(typed) || !node || node.nodeType !== Node.TEXT_NODE || selection?.anchorOffset !== 1) return;
+            if (node.textContent?.[0] === " " && (node.previousSibling as Element | null)?.classList?.contains("ref")) (node as Text).deleteData(0, 1);
+          }}
           onInput={() => {
             sync();
             find();

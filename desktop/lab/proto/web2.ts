@@ -114,7 +114,7 @@ export function webPlatform2(stage: Stage, options: Options = {}): Platform2 {
     const earlier = badgeAt(p);
     if (earlier >= 0) {
       setTrail(null);
-      return setHover({ rect: rectOf(earlier), label: `Edit ${earlier + 1}: ${round.picks[earlier].headline}` });
+      return setHover({ rect: rectOf(earlier), label: `Edit ${earlier + 1}` });
     }
     const element = chosen(p);
     setHover(element ? { rect: stage.rectOf(element), label: headline(element) } : { rect: null, label: "" });
