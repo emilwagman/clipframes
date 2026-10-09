@@ -399,3 +399,8 @@ impl Element {
 pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     element_at(x, y)
 }
+
+pub fn foreground() -> Option<super::Foreground> {
+    let front = windows().into_iter().next()?;
+    Some(super::Foreground { app: front.owner, title: front.title, pid: front.pid, frame: front.frame })
+}

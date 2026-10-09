@@ -248,7 +248,9 @@ fn read_loop(shared: Arc<Shared>, emit: Arc<dyn Fn(Event) + Send + Sync>) {
         let Some((x, y)) = next else { continue };
         if Mode::from(shared.mode.load(Ordering::SeqCst)) == Mode::Area {
             // No element reading while an area is drawn: only the rectangle so far.
-            if let Some(start) = *shared.drag.lock().unwrap() {
+            // Sent while holding the drag, so it can never arrive after the drag has ended.
+            let drag = shared.drag.lock().unwrap();
+            if let Some(start) = *drag {
                 emit(Event::Drag { rect: Some(span(start, (x, y))) });
             }
             continue;

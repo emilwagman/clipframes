@@ -127,6 +127,10 @@ fn role_of(el: &UIElement) -> String {
 
 pub fn sleep_idle(_older_than: std::time::Duration) {}
 
+pub fn foreground() -> Option<super::Foreground> {
+    win::foreground()
+}
+
 /// The few window-system calls this needs, declared by hand to keep the build small.
 mod win {
     use std::collections::HashMap;
@@ -168,6 +172,42 @@ mod win {
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(Some(0)).collect()
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct Bounds {
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    }
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetForegroundWindow() -> Handle;
+        fn GetWindowRect(hwnd: Handle, rect: *mut Bounds) -> i32;
+    }
+
+    /// The window in front, unless it is one of Clipframes' own.
+    pub fn foreground() -> Option<crate::element::Foreground> {
+        unsafe {
+            let hwnd = GetForegroundWindow();
+            if hwnd.is_null() {
+                return None;
+            }
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            if pid == 0 || pid == std::process::id() {
+                return None;
+            }
+            let mut text = [0u16; 512];
+            let n = GetWindowTextW(hwnd, text.as_mut_ptr(), text.len() as i32).max(0) as usize;
+            let mut b = Bounds::default();
+            GetWindowRect(hwnd, &mut b);
+            let frame = crate::element::Rect { x: b.left as f64, y: b.top as f64, width: (b.right - b.left) as f64, height: (b.bottom - b.top) as f64 };
+            Some(crate::element::Foreground { app: app_name(pid), title: String::from_utf16_lossy(&text[..n]), pid: pid as i32, frame })
+        }
     }
 
     /// The title and process of the top-level window at a point.

@@ -10,8 +10,10 @@
 
 use crate::element::{self, ElementInfo, Rect};
 use crate::picker::{Event, Mode, Picker};
+use crate::places::{self, Place, Places};
 use crate::round::{Click, Kind, Pick, Round};
 use crate::shot;
+use crate::tab;
 use crate::settings::{self, Settings};
 use crate::store::{self, Stamp};
 use crate::updates;
@@ -31,6 +33,8 @@ const BAR: &str = "bar";
 const NOTE: &str = "note";
 const SETTINGS: &str = "settings";
 const HISTORY: &str = "history";
+#[cfg(not(windows))]
+const TAB: &str = "tab";
 /// A clip stops by itself after this long.
 const LONGEST_CLIP: Duration = Duration::from_secs(60);
 /// Clip frames are taken this far apart and no wider than this.
@@ -89,6 +93,13 @@ pub struct Core {
     folder: Mutex<Option<(PathBuf, Stamp)>>,
     /// The round's notes.md, once written: the path the pasted reference points to.
     notes: Mutex<Option<PathBuf>>,
+    places: Mutex<Places>,
+    /// The app or site in front right now, as far as it is known.
+    front: Mutex<Option<Place>>,
+    /// The app or site the bar was opened over.
+    over: Mutex<Option<Place>>,
+    #[cfg(windows)]
+    tab: Mutex<Option<tab::Tab>>,
     /// The tool that is on in the bar.
     tool: Mutex<Kind>,
     /// The clip being recorded.
@@ -184,7 +195,7 @@ fn view(app: &AppHandle) -> RoundView {
         picking,
         tool: *core.tool.lock().unwrap(),
         recording,
-        place: None,
+        place: core.over.lock().unwrap().as_ref().filter(|p| p.known()).map(|p| PlaceView { name: p.name(), auto: core.places.lock().unwrap().auto(p) }),
         picks: round.picks.iter().map(|p| PickView { kind: p.kind, headline: p.headline(), selector: if p.kind == Kind::Element { p.element.selector() } else { String::new() }, note: p.note.clone() }).collect(),
         noting,
         reference: round.reference(core.notes.lock().unwrap().as_deref().and_then(|p| p.to_str())),
@@ -220,6 +231,108 @@ fn publish(app: &AppHandle) {
     for screen in core.screens.lock().unwrap().iter() {
         let marks: Vec<MarkView> = frames.iter().enumerate().map(|(i, (f, kind))| MarkView { number: i + 1, rect: screen.local(f), kind: *kind }).collect();
         let _ = app.emit_to(screen.label.as_str(), "marks", marks);
+    }
+}
+
+fn config_dir(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_config_dir().ok()
+}
+
+/// Clipframes was just used on this element's app or site: the tab will appear there.
+fn remember(app: &AppHandle, element: &ElementInfo) {
+    let core = app.state::<Core>();
+    let place = Place::new(&element.app, &element.url);
+    {
+        let mut places = core.places.lock().unwrap();
+        places.used(&place, places::now());
+        if let Some(dir) = config_dir(app) {
+            let _ = places.save(&dir);
+        }
+    }
+    // The bar's switch is about the place being worked in now.
+    *core.over.lock().unwrap() = Some(place);
+}
+
+/// Where the tab sits: in the middle of where the bar opens. Physical pixels.
+fn tab_position(app: &AppHandle, side: f64) -> Option<PhysicalPosition<i32>> {
+    let (bar, scale) = bar_position(app)?;
+    Some(PhysicalPosition::new(bar.x + ((BAR_SIZE.0 * scale - side) / 2.0) as i32, bar.y + ((BAR_SIZE.1 * scale - side) / 2.0) as i32))
+}
+
+#[cfg(windows)]
+fn show_tab(app: &AppHandle) {
+    let core = app.state::<Core>();
+    let mut tab = core.tab.lock().unwrap();
+    if tab.is_none() {
+        let handle = app.clone();
+        *tab = tab::Tab::start(protected(), move || later(&handle, open));
+    }
+    if let Some(tab) = tab.as_ref() {
+        if let Some(at) = tab_position(app, tab.side() as f64) {
+            tab.show(at.x, at.y);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn hide_tab(app: &AppHandle) {
+    if let Some(tab) = app.state::<Core>().tab.lock().unwrap().as_ref() {
+        tab.hide();
+    }
+}
+
+/// Elsewhere the tab is a very small window of the app's own.
+#[cfg(not(windows))]
+fn show_tab(app: &AppHandle) {
+    let window = app.get_webview_window(TAB).or_else(|| small_window(app, TAB, (tab::SIZE + 12.0, tab::SIZE + 12.0)).build().ok());
+    let Some(window) = window else { return };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    if let Some(at) = tab_position(app, (tab::SIZE + 12.0) * scale) {
+        let _ = window.set_position(at);
+    }
+    let _ = window.show();
+}
+
+#[cfg(not(windows))]
+fn hide_tab(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window(TAB) {
+        let _ = window.hide();
+    }
+}
+
+/// Once a second: which app or site is in front, and whether the tab belongs there. Reading
+/// the page address is the only part that costs anything, and it happens only when the
+/// window in front has changed.
+fn watch(app: AppHandle) {
+    let mut seen: Option<(i32, String)> = None;
+    let mut read_at = Instant::now();
+    let mut showing = false;
+    loop {
+        thread::sleep(Duration::from_secs(1));
+        let core = app.state::<Core>();
+        if core.picker.lock().unwrap().is_some() {
+            if showing {
+                hide_tab(&app);
+                showing = false;
+            }
+            continue;
+        }
+        let Some(front) = element::foreground() else { continue };
+        let key = (front.pid, front.title.clone());
+        if seen.as_ref() != Some(&key) {
+            if seen.is_some() && read_at.elapsed() < Duration::from_millis(1500) {
+                continue; // titles that change all the time do not get a reading each
+            }
+            let url = if element::permitted() { element::element_full_at(front.frame.x + front.frame.width / 2.0, front.frame.y + front.frame.height / 2.0).map(|e| e.url).unwrap_or_default() } else { String::new() };
+            *core.front.lock().unwrap() = Some(Place::new(&front.app, &url));
+            seen = Some(key);
+            read_at = Instant::now();
+        }
+        let wanted = core.front.lock().unwrap().as_ref().is_some_and(|p| core.places.lock().unwrap().wants(p, places::now()));
+        if wanted != showing {
+            if wanted { show_tab(&app) } else { hide_tab(&app) }
+            showing = wanted;
+        }
     }
 }
 
@@ -384,6 +497,9 @@ fn open(app: &AppHandle) {
     *core.noting.lock().unwrap() = None;
     *core.shown.lock().unwrap() = None;
     *core.tool.lock().unwrap() = Kind::Element;
+    let front = core.front.lock().unwrap().clone();
+    *core.over.lock().unwrap() = front;
+    hide_tab(app);
     core.files.store(0, Ordering::SeqCst);
     *core.folder.lock().unwrap() = None;
     *core.notes.lock().unwrap() = None;
@@ -495,6 +611,7 @@ fn on_event(app: &AppHandle, event: Event) {
             let pad = if cfg!(windows) { 18.0 } else { 12.0 };
             let around = Rect { x: (frame.x - pad).max(0.0), y: (frame.y - pad).max(0.0), width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
             let (image, pixels) = snap(&core, &around).unwrap_or_default();
+            remember(app, &element);
             let index = core.round.lock().unwrap().push(Pick { element, image, pixels, ..Default::default() });
             *core.noting.lock().unwrap() = Some(index);
             show_note(app, &frame);
@@ -559,7 +676,9 @@ fn add_area(app: &AppHandle, rect: Rect) {
         thread::sleep(Duration::from_millis(60));
     }
     let Some((image, pixels)) = snap(&core, &rect) else { return cannot_capture(app) };
-    let index = core.round.lock().unwrap().push(Pick { kind: Kind::Area, element: place_of(&rect), image, pixels, ..Default::default() });
+    let element = place_of(&rect);
+    remember(app, &element);
+    let index = core.round.lock().unwrap().push(Pick { kind: Kind::Area, element, image, pixels, ..Default::default() });
     *core.noting.lock().unwrap() = Some(index);
     show_note(app, &rect);
     publish(app);
@@ -623,7 +742,9 @@ fn start_recording(app: &AppHandle, rect: Rect) {
         }
         // Each click is tied to the first frame taken after it.
         let clicks = recording.clicks.lock().unwrap().iter().map(|(at, what)| Click { at: *at, frame: (times.iter().position(|t| t >= at).unwrap_or(times.len() - 1) + 1) as u32, what: what.clone() }).collect();
-        let index = core.round.lock().unwrap().push(Pick { kind: Kind::Clip, element: place_of(&rect), image: name, pixels, frames, seconds, clicks, ..Default::default() });
+        let element = place_of(&rect);
+        remember(&app, &element);
+        let index = core.round.lock().unwrap().push(Pick { kind: Kind::Clip, element, image: name, pixels, frames, seconds, clicks, ..Default::default() });
         *core.noting.lock().unwrap() = Some(index);
         show_note(&app, &rect);
         publish(&app);
@@ -813,8 +934,25 @@ fn history_delete(id: String) -> Result<(), String> {
     std::fs::remove_dir_all(folder).map_err(|e| e.to_string())
 }
 
+/// Turns the tab on or off for the place the bar is open over.
 #[tauri::command]
-fn place_auto_set(_app: AppHandle, _on: bool) {}
+fn place_auto_set(app: AppHandle, on: bool) {
+    let core = app.state::<Core>();
+    if let Some(place) = core.over.lock().unwrap().as_ref() {
+        let mut places = core.places.lock().unwrap();
+        places.set_auto(place, on, places::now());
+        if let Some(dir) = config_dir(&app) {
+            let _ = places.save(&dir);
+        }
+    }
+    let _ = app.emit("round", view(&app));
+}
+
+/// The tab was clicked.
+#[tauri::command]
+fn tab_open(app: AppHandle) {
+    later(&app, open);
+}
 
 /// What the settings window draws.
 #[derive(Debug, Clone, Serialize)]
@@ -994,6 +1132,7 @@ pub fn run() {
             history_reveal,
             history_delete,
             place_auto_set,
+            tab_open,
             settings_get,
             shortcut_set,
             launch_set,
@@ -1039,6 +1178,12 @@ pub fn run() {
                 None => tray,
             };
             tray.build(app)?;
+
+            if let Some(dir) = config_dir(&handle) {
+                *core.places.lock().unwrap() = Places::load(&dir);
+            }
+            let watcher = handle.clone();
+            thread::Builder::new().name("clipframes-watch".into()).spawn(move || watch(watcher))?;
 
             if installed() || std::env::var_os("CLIPFRAMES_UPDATES").is_some() {
                 updates::start(&handle);

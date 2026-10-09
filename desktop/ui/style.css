@@ -116,3 +116,8 @@ html.window, html.window body { background: var(--surface); overflow: auto; }
 .plain { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
 .plain:hover { border-color: var(--text-2); }
 .plain.danger { background: var(--record); border-color: var(--record); color: #fff; font-weight: 600; }
+
+/* The tab: only the mark, on a window just large enough for it. */
+.tabmark { position: absolute; inset: 6px; padding: 0; border-radius: 12px; }
+.tabmark img { display: block; width: 100%; height: 100%; }
+.tabmark:hover { filter: brightness(1.25); }

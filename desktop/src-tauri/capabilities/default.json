@@ -5,6 +5,7 @@
   "windows": [
     "bar",
     "note",
+    "tab",
     "settings",
     "history",
     "overlay-*"

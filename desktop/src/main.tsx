@@ -9,8 +9,9 @@ import { connect } from "../ui/store";
 import { History } from "./History";
 import { Settings } from "./Settings";
 import { label, platform } from "./tauri";
+import { TabMark } from "./TabMark";
 
-const own = label === "settings" || label === "history";
+const own = label === "settings" || label === "history" || label === "tab";
 if (!own) {
   connect(platform);
   // While another app has the keyboard, the core hears Esc itself. While one of these windows
@@ -23,5 +24,5 @@ if (!own) {
 // These are tool windows, not pages: no context menu.
 window.addEventListener("contextmenu", (event) => event.preventDefault());
 
-const view = label === "bar" ? <Bar /> : label === "note" ? <Note /> : label === "settings" ? <Settings /> : label === "history" ? <History /> : <Overlay />;
+const view = label === "bar" ? <Bar /> : label === "note" ? <Note /> : label === "settings" ? <Settings /> : label === "history" ? <History /> : label === "tab" ? <TabMark /> : <Overlay />;
 createRoot(document.getElementById("root") as HTMLElement).render(view);
