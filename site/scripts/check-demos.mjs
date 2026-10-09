@@ -24,6 +24,10 @@ async function session(name, options, body) {
   const errors = [];
   page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
   page.on("pageerror", (error) => errors.push(String(error)));
+  // Nothing may fail to load, and nothing may be asked of another host.
+  page.on("requestfailed", (request) => errors.push(`failed: ${request.url()}`));
+  page.on("response", (response) => response.status() >= 400 && errors.push(`${response.status()}: ${response.url()}`));
+  await context.route((address) => address.origin !== new URL(url).origin, (route) => route.abort());
   const t = {
     page,
     stage: (id) => page.locator(`[data-demo="${id}"]`),

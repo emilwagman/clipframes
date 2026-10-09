@@ -9,17 +9,18 @@ import s from "./home.module.css";
 
 /// The quiet top bar. A hairline appears under it once the page scrolls. `stars` is the count the
 /// server had when it built the page; the bar refreshes it from /stars.json after loading.
-export default function Header({ stars: initial }: { stars: number | null }) {
+export default function Header({ stars: initial, refresh = true }: { stars: number | null; refresh?: boolean }) {
   const [scrolled, setScrolled] = useState(false);
   const [stars, setStars] = useState(initial);
   useEffect(() => {
+    if (!refresh) return;
     let live = true;
     fetch("/stars.json")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (live && typeof d?.stars === "number") setStars(d.stars); })
       .catch(() => {});
     return () => { live = false; };
-  }, []);
+  }, [refresh]);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();

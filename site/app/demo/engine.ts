@@ -86,8 +86,12 @@ function stamp(now: Date): string {
 
 /// Puts text on the visitor's clipboard, the way the app does after every pick.
 export function copyToClipboard(text: string): void {
-  if (!navigator.clipboard) return;
-  navigator.clipboard.writeText(text).then(() => useSite.setState({ clipboard: text }), () => {});
+  // A page shown inside another page may be refused the clipboard; the text on the page is still right.
+  try {
+    navigator.clipboard.writeText(text).then(() => useSite.setState({ clipboard: text }), () => {});
+  } catch {
+    /* no clipboard here */
+  }
 }
 
 /// A round of the visitor's is a capture: History lists it, and the visitor's clipboard gets it.
