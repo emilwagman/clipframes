@@ -150,6 +150,10 @@ fn exempt(shared: &Shared, x: f64, y: f64) -> bool {
 
 /// Runs on the system's input thread: must return at once. Returns true to swallow the input.
 fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input) -> bool {
+    // An input source that outlives its round must be harmless: nothing is swallowed.
+    if !shared.running.load(Ordering::SeqCst) {
+        return false;
+    }
     let mode = Mode::from(shared.mode.load(Ordering::SeqCst));
     match input {
         Input::Move(x, y) => {
@@ -279,7 +283,9 @@ mod tests {
         let emit: Arc<dyn Fn(Event) + Send + Sync> = Arc::new(move |e| {
             let _ = tx.lock().unwrap().send(e);
         });
-        (Arc::new(Shared::default()), emit, rx)
+        let shared = Arc::new(Shared::default());
+        shared.running.store(true, Ordering::SeqCst);
+        (shared, emit, rx)
     }
 
     #[test]
@@ -355,5 +361,15 @@ mod tests {
         let (shared, emit, rx) = round();
         assert!(handle(&shared, &emit, Input::Cancel));
         assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Cancel)));
+    }
+
+    #[test]
+    fn a_round_that_has_stopped_swallows_nothing_even_if_its_input_source_lives_on() {
+        let (shared, emit, rx) = round();
+        shared.running.store(false, Ordering::SeqCst); // what Picker::drop sets first
+        assert!(!handle(&shared, &emit, Input::Down(300.0, 300.0)));
+        assert!(!handle(&shared, &emit, Input::Up(300.0, 300.0)));
+        assert!(!handle(&shared, &emit, Input::Cancel));
+        assert!(rx.recv_timeout(Duration::from_millis(200)).is_err(), "and nothing is picked");
     }
 }
