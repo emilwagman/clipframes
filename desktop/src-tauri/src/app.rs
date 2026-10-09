@@ -39,6 +39,8 @@ const BAR: &str = "bar";
 const NOTE: &str = "note";
 const SETTINGS: &str = "settings";
 const HISTORY: &str = "history";
+/// Overlays are "overlay-0", "overlay-1", …: one per display.
+const OVERLAY: &str = "overlay-";
 #[cfg(not(windows))]
 const TAB: &str = "tab";
 /// A clip stops by itself after this long.
@@ -91,6 +93,10 @@ impl Screen {
 
 #[derive(Default)]
 pub struct Core {
+    /// Held for the whole of an open and of a close, so the two never run into each other:
+    /// every trigger (shortcut, Esc, tray, tab, a second launch) arrives on its own thread.
+    /// Never taken on the main thread, which the holder waits for while it builds windows.
+    gate: Mutex<()>,
     round: Mutex<Round>,
     picker: Mutex<Option<Picker>>,
     screens: Mutex<Vec<Screen>>,
@@ -463,20 +469,24 @@ fn show_bar(app: &AppHandle) -> Option<WebviewWindow> {
 fn open_overlays(app: &AppHandle) -> Vec<Screen> {
     let mut screens = Vec::new();
     for (i, m) in app.available_monitors().unwrap_or_default().iter().enumerate() {
-        let label = format!("overlay-{i}");
-        let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
-            .title("Clipframes")
-            .decorations(false)
-            .transparent(true)
-            .shadow(false)
-            .resizable(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .visible_on_all_workspaces(true)
-            .focused(false)
-            .visible(false)
-            .content_protected(protected())
-            .build();
+        let label = format!("{OVERLAY}{i}");
+        // One left over from a round that ended badly is used again: a label can only be
+        // built once, and a display without its overlay shows no highlight and no marks.
+        let built = app.get_webview_window(&label).map(Ok).unwrap_or_else(|| {
+            WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+                .title("Clipframes")
+                .decorations(false)
+                .transparent(true)
+                .shadow(false)
+                .resizable(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .visible_on_all_workspaces(true)
+                .focused(false)
+                .visible(false)
+                .content_protected(protected())
+                .build()
+        });
         let Ok(w) = built else { continue };
         let (pos, size, scale) = (*m.position(), *m.size(), m.scale_factor());
         let _ = w.set_position(PhysicalPosition::new(pos.x, pos.y));
@@ -495,23 +505,58 @@ fn open_overlays(app: &AppHandle) -> Vec<Screen> {
 }
 
 fn close_round_windows(app: &AppHandle) {
-    let core = app.state::<Core>();
-    for screen in core.screens.lock().unwrap().drain(..) {
-        if let Some(w) = app.get_webview_window(&screen.label) {
+    app.state::<Core>().screens.lock().unwrap().clear();
+    // Every overlay there is, not only the ones this round knows about.
+    for (label, w) in app.webview_windows() {
+        if label == NOTE || label.starts_with(OVERLAY) {
             let _ = w.destroy();
         }
     }
-    if let Some(w) = app.get_webview_window(NOTE) {
-        let _ = w.destroy();
+}
+
+fn bar_visible(app: &AppHandle) -> bool {
+    app.get_webview_window(BAR).is_some_and(|w| w.is_visible().unwrap_or(false))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Turn {
+    Open,
+    Close,
+    Stay,
+}
+
+/// What a request does, given what is running. `toggle` is the shortcut; anything else (the
+/// tray, the tab, a second launch) asks to open.
+fn turn(toggle: bool, picking: bool, bar_visible: bool) -> Turn {
+    match (toggle, picking, bar_visible) {
+        (true, false, false) => Turn::Open,
+        // The shortcut always gets the user out of a round, also one whose bar is not there.
+        (true, _, _) => Turn::Close,
+        (false, true, true) => Turn::Stay,
+        // Clicks are being taken and there is nothing to see or press: end it.
+        (false, true, false) => Turn::Close,
+        (false, false, _) => Turn::Open,
+    }
+}
+
+fn take_turn(app: &AppHandle, toggle: bool) {
+    let core = app.state::<Core>();
+    let _gate = core.gate.lock().unwrap();
+    let picking = core.picker.lock().unwrap().is_some();
+    match turn(toggle, picking, bar_visible(app)) {
+        Turn::Open => open_now(app),
+        Turn::Close => close_now(app),
+        Turn::Stay => {}
     }
 }
 
 /// Opens the bar and starts picking. Call from a thread that may wait: it builds windows.
 fn open(app: &AppHandle) {
+    take_turn(app, false);
+}
+
+fn open_now(app: &AppHandle) {
     let core = app.state::<Core>();
-    if core.picker.lock().unwrap().is_some() {
-        return;
-    }
     trace("open: begin");
     let started = Instant::now();
     let via = telemetry::take_via();
@@ -579,8 +624,15 @@ fn open(app: &AppHandle) {
     telemetry::event("round_opened", json!({ "via": via, "warm": was_warm, "ms_to_input": picking.as_millis() as u64, "ms_to_windows": started.elapsed().as_millis() as u64, "displays": core.screens.lock().unwrap().len() }));
 }
 
-/// Ends the round and hides everything. What was picked stays on the clipboard.
+/// Ends the round and hides everything. What was picked stays on the clipboard. Call from a
+/// thread that may wait: stopping the picker waits for its threads.
 fn close(app: &AppHandle) {
+    let core = app.state::<Core>();
+    let _gate = core.gate.lock().unwrap();
+    close_now(app);
+}
+
+fn close_now(app: &AppHandle) {
     trace("close: begin");
     let core = app.state::<Core>();
     let was_open = core.picker.lock().unwrap().is_some();
@@ -616,7 +668,10 @@ fn close(app: &AppHandle) {
     let app = app.clone();
     thread::spawn(move || {
         thread::sleep(KEEP_WARM);
-        if app.state::<Core>().turn.load(Ordering::SeqCst) == turn {
+        let core = app.state::<Core>();
+        // Held so that an open cannot begin between the check and the bar going away.
+        let _gate = core.gate.lock().unwrap();
+        if core.turn.load(Ordering::SeqCst) == turn && core.picker.lock().unwrap().is_none() {
             if let Some(bar) = app.get_webview_window(BAR) {
                 let _ = bar.destroy();
             }
@@ -625,8 +680,7 @@ fn close(app: &AppHandle) {
 }
 
 fn toggle(app: &AppHandle) {
-    let open_now = app.get_webview_window(BAR).is_some_and(|w| w.is_visible().unwrap_or(false));
-    if open_now { close(app) } else { open(app) }
+    take_turn(app, true);
 }
 
 /// Runs `f` off the calling thread. The picker's own threads must never stop the picker, and
@@ -1133,7 +1187,7 @@ fn set_launch_at_login(app: &AppHandle, on: bool) {
 /// Nothing of Clipframes is on screen: a safe moment to restart for an update.
 pub fn idle(app: &AppHandle) -> bool {
     let visible = |label: &str| app.get_webview_window(label).is_some_and(|w| w.is_visible().unwrap_or(false));
-    app.state::<Core>().picker.lock().unwrap().is_none() && !visible(BAR) && !visible(SETTINGS) && !visible(HISTORY)
+    app.state::<Core>().picker.lock().unwrap().is_none() && !bar_visible(app) && !visible(SETTINGS) && !visible(HISTORY)
 }
 
 pub fn set_update_status(app: &AppHandle, status: String) {
@@ -1241,6 +1295,17 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Core::default())
+        // The system asking one of the round's windows to close (Alt+F4 on Windows) would
+        // leave the round running without it. The window stays and the round ends properly.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let label = window.label();
+                if label == BAR || label == NOTE || label.starts_with(OVERLAY) {
+                    api.prevent_close();
+                    later(window.app_handle(), close);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             round_state,
             note_set,
@@ -1365,4 +1430,30 @@ pub fn run() {
                 let _ = app;
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_shortcut_opens_when_nothing_is_running_and_closes_otherwise() {
+        assert_eq!(turn(true, false, false), Turn::Open);
+        assert_eq!(turn(true, true, true), Turn::Close);
+        // The bar showing a message, with no round behind it.
+        assert_eq!(turn(true, false, true), Turn::Close);
+    }
+
+    #[test]
+    fn the_shortcut_ends_a_round_whose_bar_is_not_on_screen() {
+        assert_eq!(turn(true, true, false), Turn::Close);
+    }
+
+    #[test]
+    fn asking_to_open_leaves_an_open_round_alone_and_ends_one_with_no_bar() {
+        assert_eq!(turn(false, false, false), Turn::Open);
+        assert_eq!(turn(false, false, true), Turn::Open);
+        assert_eq!(turn(false, true, true), Turn::Stay);
+        assert_eq!(turn(false, true, false), Turn::Close);
+    }
 }
