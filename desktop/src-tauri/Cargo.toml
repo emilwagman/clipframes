@@ -75,3 +75,8 @@ lto = true
 opt-level = "s"   # small first: this app stays tiny
 panic = "abort"
 strip = true
+
+# Times opening History on a folder with many captures.
+[[example]]
+name = "cf-history"
+path = "examples/history.rs"

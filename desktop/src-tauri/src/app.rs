@@ -40,6 +40,9 @@ const LONGEST_CLIP: Duration = Duration::from_secs(60);
 /// Clip frames are taken this far apart and no wider than this.
 const FRAME_EVERY: Duration = Duration::from_millis(250);
 const FRAME_WIDTH: u32 = 1600;
+/// Pictures are shrunk to these widths at most: enough to read, without filling the disk.
+const ELEMENT_WIDTH: u32 = 1600;
+const AREA_WIDTH: u32 = 2560;
 /// How long the hidden bar is kept after closing, ready to open again at once.
 const KEEP_WARM: Duration = Duration::from_secs(90);
 
@@ -616,7 +619,7 @@ fn on_event(app: &AppHandle, event: Event) {
             // A picture of the element with a little space around it. Not having one is fine.
             let pad = if cfg!(windows) { 18.0 } else { 12.0 };
             let around = Rect { x: (frame.x - pad).max(0.0), y: (frame.y - pad).max(0.0), width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
-            let (image, pixels) = snap(&core, &around).unwrap_or_default();
+            let (image, pixels) = snap(&core, &around, ELEMENT_WIDTH).unwrap_or_default();
             remember(app, &element);
             let index = core.round.lock().unwrap().push(Pick { element, image, pixels, ..Default::default() });
             *core.noting.lock().unwrap() = Some(index);
@@ -642,10 +645,10 @@ fn on_event(app: &AppHandle, event: Event) {
 }
 
 /// Takes a picture of part of the screen into the round's folder. Returns its name and size.
-fn snap(core: &Core, rect: &Rect) -> Option<(String, (u32, u32))> {
+fn snap(core: &Core, rect: &Rect, widest: u32) -> Option<(String, (u32, u32))> {
     let (folder, _) = round_folder(core);
     let name = format!("{}.png", core.files.fetch_add(1, Ordering::SeqCst) + 1);
-    match shot::capture_to_file(rect, &folder.join(&name), None) {
+    match shot::capture_to_file(rect, &folder.join(&name), Some(widest)) {
         Ok(pixels) => Some((name, pixels)),
         Err(e) => {
             trace(&format!("no picture: {e}"));
@@ -681,7 +684,7 @@ fn add_area(app: &AppHandle, rect: Rect) {
     if !protected() {
         thread::sleep(Duration::from_millis(60));
     }
-    let Some((image, pixels)) = snap(&core, &rect) else { return cannot_capture(app) };
+    let Some((image, pixels)) = snap(&core, &rect, AREA_WIDTH) else { return cannot_capture(app) };
     let element = place_of(&rect);
     remember(app, &element);
     let index = core.round.lock().unwrap().push(Pick { kind: Kind::Area, element, image, pixels, ..Default::default() });
