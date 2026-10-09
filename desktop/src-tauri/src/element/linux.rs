@@ -14,3 +14,5 @@ pub fn pointer() -> Option<(f64, f64)> {
 pub fn element_at(_x: f64, _y: f64) -> Result<ElementInfo, ReadError> {
     Err(ReadError::Unsupported("Reading elements on Linux is not built yet.".into()))
 }
+
+pub fn sleep_idle(_older_than: std::time::Duration) {}

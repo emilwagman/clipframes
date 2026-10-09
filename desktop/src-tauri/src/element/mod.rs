@@ -46,6 +46,10 @@ pub struct ElementInfo {
     pub dom_id: String,
     /// In web content: its class list, space-separated.
     pub dom_classes: String,
+    /// For an element without a name: the first text found inside it.
+    pub inner_text: String,
+    /// Up to four named containers around it, outermost first.
+    pub path: Vec<String>,
     pub frame: Rect,
 }
 
@@ -58,6 +62,8 @@ impl ElementInfo {
     pub fn headline(&self) -> String {
         if !self.name.is_empty() {
             format!("{} \"{}\"", self.role_name(), self.name)
+        } else if !self.inner_text.is_empty() {
+            format!("{} containing \"{}\"", self.role_name(), self.inner_text)
         } else if !self.value.is_empty() {
             format!("{} \"{}\"", self.role_name(), self.value)
         } else {
@@ -105,9 +111,15 @@ pub fn pointer() -> Option<(f64, f64)> {
     platform::pointer()
 }
 
-/// The deepest element at a point on screen.
+/// The element a person means at a point on screen, in another app's window.
 pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     platform::element_at(x, y)
+}
+
+/// Housekeeping to call now and then: lets apps that were asked for their page structure go
+/// back to sleep once they have not been looked at for `older_than`.
+pub fn sleep_idle(older_than: std::time::Duration) {
+    platform::sleep_idle(older_than)
 }
 
 #[cfg(test)]

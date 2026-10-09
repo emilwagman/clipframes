@@ -71,3 +71,5 @@ pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
 fn role_of(el: &UIElement) -> String {
     el.get_control_type().map(|t| format!("{:?}", t).trim_end_matches("Control").to_string()).unwrap_or_default()
 }
+
+pub fn sleep_idle(_older_than: std::time::Duration) {}

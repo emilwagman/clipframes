@@ -41,11 +41,16 @@ path = "src/main.rs"
 name = "cf-probe"
 path = "src/bin/probe.rs"
 
+# Times element readings across the screen: the number behind "the highlight never lags".
+[[bin]]
+name = "cf-bench"
+path = "src/bin/bench.rs"
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = 3
+opt-level = "s"   # small first: this app stays tiny
 panic = "abort"
 strip = true
