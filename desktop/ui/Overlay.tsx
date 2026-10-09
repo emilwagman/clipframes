@@ -49,7 +49,7 @@ export function Overlay() {
         ))}
       </div>
       {area.rect && (
-        <div className={area.recording ? "area recording" : "area"} style={box(area.rect)}>
+        <div className={area.recording ? "drag recording" : "drag"} style={box(area.rect)}>
           {!area.recording && <span className="size">{`${Math.round(area.rect.width)} × ${Math.round(area.rect.height)}`}</span>}
         </div>
       )}
