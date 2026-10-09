@@ -308,7 +308,10 @@ fn show_tab(app: &AppHandle) {
     let mut tab = core.tab.lock().unwrap();
     if tab.is_none() {
         let handle = app.clone();
-        *tab = tab::Tab::start(protected(), move || later(&handle, open));
+        *tab = tab::Tab::start(protected(), move || {
+            telemetry::via("tab");
+            later(&handle, open)
+        });
     }
     if let Some(tab) = tab.as_ref() {
         if let Some(at) = tab_position(app, tab.side() as f64) {

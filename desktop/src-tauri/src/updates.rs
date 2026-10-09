@@ -45,17 +45,38 @@ pub fn check(app: &AppHandle) -> Result<String, String> {
     let result = run(app);
     BUSY.store(false, Ordering::SeqCst);
     if let Err(e) = &result {
-        crate::telemetry::error("update", e, "updates::check");
+        if worth_reporting(&e.kind) {
+            // Only which kind of error: its text can hold a path on this computer.
+            crate::telemetry::error("update", &e.kind, "updates::check");
+        }
     }
     app::set_update_status(app, match &result {
         Ok(message) => message.clone(),
-        Err(e) => format!("Could not check for updates: {e}"),
+        Err(e) => format!("Could not check for updates: {}", e.text),
     });
-    result
+    result.map_err(|e| e.text)
 }
 
-fn run(app: &AppHandle) -> Result<String, String> {
-    let text = |e: tauri_plugin_updater::Error| e.to_string();
+/// Why an update did not happen: `text` for the user, `kind` for the error report.
+struct Failure {
+    kind: String,
+    text: String,
+}
+
+/// The name of an error's variant from its debug form: "Reqwest" from
+/// `Reqwest(reqwest::Error { … })`.
+fn kind_of(debug: &str) -> String {
+    debug.chars().take_while(char::is_ascii_alphanumeric).collect()
+}
+
+/// Being offline ("Reqwest") and there being no release to find yet ("ReleaseNotFound") are
+/// not things that went wrong in Clipframes.
+fn worth_reporting(kind: &str) -> bool {
+    !matches!(kind, "Reqwest" | "ReleaseNotFound")
+}
+
+fn run(app: &AppHandle) -> Result<String, Failure> {
+    let text = |e: tauri_plugin_updater::Error| Failure { kind: kind_of(&format!("{e:?}")), text: e.to_string() };
     let updater = app.updater().map_err(text)?;
     let Some(update) = tauri::async_runtime::block_on(updater.check()).map_err(text)? else {
         return Ok(format!("Clipframes {} is the latest version.", app.package_info().version));
@@ -90,4 +111,25 @@ fn run(app: &AppHandle) -> Result<String, String> {
         return Err(text(e));
     }
     app.restart();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_update_error_is_reported_by_its_kind_not_its_text() {
+        let lost = tauri_plugin_updater::Error::PreviousAppNotRestored("/var/folders/ab/sam/T/clipframes-old".into());
+        assert_eq!(kind_of(&format!("{lost:?}")), "PreviousAppNotRestored");
+        assert_eq!(kind_of(&format!("{:?}", tauri_plugin_updater::Error::ReleaseNotFound)), "ReleaseNotFound");
+        assert_eq!(kind_of("Reqwest(reqwest::Error { kind: Request, url: \"https://github.com/\" })"), "Reqwest");
+    }
+
+    #[test]
+    fn being_offline_or_having_no_release_yet_is_not_reported() {
+        assert!(!worth_reporting("Reqwest"));
+        assert!(!worth_reporting("ReleaseNotFound"));
+        assert!(worth_reporting("Minisign"));
+        assert!(worth_reporting("PreviousAppNotRestored"));
+    }
 }
