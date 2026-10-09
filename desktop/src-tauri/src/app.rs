@@ -1408,40 +1408,97 @@ fn set_launch_at_login(app: &AppHandle, on: bool) {
     }
 }
 
-/// Whether Clipframes has an entry among the programs Windows starts at login. `None` where
-/// the system keeps no on/off choice of its own beside the entry.
+/// What the login start is given on its command line: it is the one start that shows nothing.
+const LOGIN_ARGS: &str = "--hidden";
+
+/// Clipframes' entry among the programs Windows starts at login.
 #[cfg(windows)]
-fn login_entry_present(name: &str) -> Option<bool> {
+mod login {
     use std::ffi::c_void;
+
     #[link(name = "advapi32")]
     extern "system" {
         fn RegGetValueW(key: *mut c_void, sub_key: *const u16, value: *const u16, flags: u32, kind: *mut u32, data: *mut c_void, size: *mut u32) -> i32;
+        fn RegSetKeyValueW(key: *mut c_void, sub_key: *const u16, value: *const u16, kind: u32, data: *const c_void, size: u32) -> i32;
     }
-    const HKEY_CURRENT_USER: isize = 0x8000_0001u32 as i32 as isize;
-    const HKEY_LOCAL_MACHINE: isize = 0x8000_0002u32 as i32 as isize;
-    const RRF_RT_ANY: u32 = 0x0000_ffff;
-    let wide = |s: &str| s.encode_utf16().chain(Some(0)).collect::<Vec<u16>>();
-    let (run, name) = (wide(r"Software\Microsoft\Windows\CurrentVersion\Run"), wide(name));
-    // Zero is success: the value is there. Its content is not needed.
-    let found = |root: isize| unsafe { RegGetValueW(root as *mut c_void, run.as_ptr(), name.as_ptr(), RRF_RT_ANY, std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut()) } == 0;
-    Some(found(HKEY_CURRENT_USER) || found(HKEY_LOCAL_MACHINE))
+
+    const ROOTS: [isize; 2] = [0x8000_0001u32 as i32 as isize, 0x8000_0002u32 as i32 as isize]; // current user, local machine
+    const RUN: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+    const RRF_RT_REG_SZ: u32 = 0x0000_0002;
+    const REG_SZ: u32 = 1;
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(Some(0)).collect()
+    }
+
+    /// Where the entry is and the command it holds, if there is one.
+    fn find(name: &str) -> Option<(isize, String)> {
+        let (run, name) = (wide(RUN), wide(name));
+        ROOTS.into_iter().find_map(|root| {
+            let mut text = [0u16; 2048];
+            let mut bytes = (text.len() * 2) as u32;
+            let read = unsafe { RegGetValueW(root as *mut c_void, run.as_ptr(), name.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), text.as_mut_ptr().cast(), &mut bytes) };
+            // Zero is success. The size counts bytes and the ending zero.
+            (read == 0).then(|| (root, String::from_utf16_lossy(&text[..(bytes as usize / 2).min(text.len())]).trim_end_matches('\0').to_string()))
+        })
+    }
+
+    /// The entry's command, or `None` when there is no entry.
+    pub fn command(name: &str) -> Option<String> {
+        find(name).map(|(_, command)| command)
+    }
+
+    /// Puts another command in the entry that is there, and touches nothing else: the on/off
+    /// that Task Manager keeps beside it stays as the user left it.
+    pub fn repoint(name: &str, command: &str) {
+        if let Some((root, _)) = find(name) {
+            let data = wide(command);
+            unsafe { RegSetKeyValueW(root as *mut c_void, wide(RUN).as_ptr(), wide(name).as_ptr(), REG_SZ, data.as_ptr().cast(), (data.len() * 2) as u32) };
+        }
+    }
 }
 
-#[cfg(not(windows))]
-fn login_entry_present(_name: &str) -> Option<bool> {
+/// The state of the login entry where the system keeps an on/off of its own beside it
+/// (Windows): `Some(None)` for no entry, `Some(Some(command))` for one. `None` elsewhere.
+fn login_entry(_name: &str) -> Option<Option<String>> {
+    #[cfg(windows)]
+    return Some(login::command(_name));
+    #[cfg(not(windows))]
     None
 }
 
-/// What to do about the login entry when the app starts: add it, remove it, or (`None`) leave
-/// it alone. On Windows, Task Manager and Settings keep the user's own on/off beside the
-/// entry, and writing the entry again switches it back on. So an entry that is there is never
-/// written again: it is only added when missing (the first run, or an install after an
-/// uninstall) and removed when the setting says off.
-fn login_entry_at_start(wanted: bool, present: Option<bool>) -> Option<bool> {
-    match present {
-        Some(present) => (wanted != present).then_some(wanted),
-        None => Some(wanted),
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Login {
+    Add,
+    Remove,
+    /// The entry is there but starts a copy of the app somewhere else.
+    Repoint,
+    Leave,
+}
+
+/// What to do about the login entry when the app starts. On Windows, Task Manager and
+/// Settings keep the user's own on/off beside the entry, and adding the entry again switches
+/// it back on. So an entry that is there is never added again: it is only added when missing
+/// (the first run, or an install after an uninstall) and removed when the setting says off.
+/// One that is there but points at another place than the app that is running (an install
+/// moved, a profile brought back from a backup) would start nothing: its command is put
+/// right, and only that.
+fn login_entry_at_start(wanted: bool, entry: Option<Option<&str>>, exe: &str) -> Login {
+    match (wanted, entry) {
+        (true, None) | (true, Some(None)) => Login::Add,
+        (false, None) | (false, Some(Some(_))) => Login::Remove,
+        (false, Some(None)) => Login::Leave,
+        (true, Some(Some(command))) if starts(command, exe) => Login::Leave,
+        (true, Some(Some(_))) => Login::Repoint,
     }
+}
+
+/// Whether a login entry's command starts this executable, however the path is written.
+fn starts(command: &str, exe: &str) -> bool {
+    let plain = |s: &str| s.replace(r"\\?\", "").replace('"', "").replace('/', "\\").to_lowercase();
+    let (command, exe) = (plain(command), plain(exe));
+    // The path, and then nothing or the arguments.
+    !exe.is_empty() && command.strip_prefix(&exe).is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
 }
 
 /// Nothing of Clipframes is on screen: a safe moment to restart for an update.
@@ -1552,7 +1609,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // The login start says so, and that is the one start that shows nothing.
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec![LOGIN_ARGS])))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Core::default())
         // The system asking one of the round's windows to close (Alt+F4 on Windows) would
@@ -1612,8 +1669,15 @@ pub fn run() {
             telemetry::start(saved.install_id.clone(), &app.package_info().version.to_string(), saved.share_usage);
             // Every start, so the login entry matches the setting even when the settings were
             // there before this copy was installed.
-            if let Some(on) = login_entry_at_start(saved.launch_at_login, login_entry_present(&app.package_info().name)) {
-                set_launch_at_login(&handle, on);
+            let name = app.package_info().name.clone();
+            let exe = std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default();
+            match login_entry_at_start(saved.launch_at_login, login_entry(&name).as_ref().map(|e| e.as_deref()), &exe) {
+                Login::Add => set_launch_at_login(&handle, true),
+                Login::Remove => set_launch_at_login(&handle, false),
+                // Written the way the entry is first made: the path, then the argument.
+                #[cfg(windows)]
+                Login::Repoint if installed() => login::repoint(&name, &format!("{exe} {LOGIN_ARGS}")),
+                Login::Repoint | Login::Leave => {}
             }
 
             // Another app may own the shortcut already. Clipframes still runs: the tray opens
@@ -1669,7 +1733,7 @@ pub fn run() {
                 return Ok(());
             }
             let updated = updates::just_updated(&handle);
-            let hidden = std::env::args().any(|a| a == "--hidden");
+            let hidden = std::env::args().any(|a| a == LOGIN_ARGS);
             telemetry::event("app_started", json!({ "how": if updated { "update" } else if hidden { "login" } else { "hand" }, "first_run": first_run, "shortcut_works": bound, "launch_at_login": saved.launch_at_login }));
             let quiet = hidden | updated;
             if !quiet {
@@ -1776,18 +1840,34 @@ mod tests {
         assert!(newer(&newest, 1_760_000_000_004));
     }
 
+    const HERE: &str = r"C:\Users\sam\AppData\Local\Clipframes\clipframes.exe";
+
     #[test]
     fn a_login_entry_switched_off_in_task_manager_is_not_written_again() {
+        let ours = format!("{HERE} --hidden");
         // Windows: the entry is there, and whether it is on is the user's business.
-        assert_eq!(login_entry_at_start(true, Some(true)), None);
+        assert_eq!(login_entry_at_start(true, Some(Some(&ours)), HERE), Login::Leave);
         // First run, or installed again after an uninstall: add it.
-        assert_eq!(login_entry_at_start(true, Some(false)), Some(true));
+        assert_eq!(login_entry_at_start(true, Some(None), HERE), Login::Add);
         // The setting says off: take it away, and do nothing when it is already gone.
-        assert_eq!(login_entry_at_start(false, Some(true)), Some(false));
-        assert_eq!(login_entry_at_start(false, Some(false)), None);
+        assert_eq!(login_entry_at_start(false, Some(Some(&ours)), HERE), Login::Remove);
+        assert_eq!(login_entry_at_start(false, Some(None), HERE), Login::Leave);
         // Elsewhere the entry simply follows the setting.
-        assert_eq!(login_entry_at_start(true, None), Some(true));
-        assert_eq!(login_entry_at_start(false, None), Some(false));
+        assert_eq!(login_entry_at_start(true, None, HERE), Login::Add);
+        assert_eq!(login_entry_at_start(false, None, HERE), Login::Remove);
+    }
+
+    #[test]
+    fn a_login_entry_that_starts_a_copy_somewhere_else_is_pointed_at_this_one() {
+        assert_eq!(login_entry_at_start(true, Some(Some(r"D:\Old\Clipframes\clipframes.exe --hidden")), HERE), Login::Repoint);
+        // A longer name that begins the same is another program.
+        assert_eq!(login_entry_at_start(true, Some(Some(r"C:\Users\sam\AppData\Local\Clipframes\clipframes.exe.old --hidden")), HERE), Login::Repoint);
+        // The same place written another way is this one.
+        for same in [r#""C:\Users\sam\AppData\Local\Clipframes\clipframes.exe" --hidden"#, r"c:\users\SAM\appdata\local\clipframes\CLIPFRAMES.EXE --hidden", r"\\?\C:\Users\sam\AppData\Local\Clipframes\clipframes.exe", "C:/Users/sam/AppData/Local/Clipframes/clipframes.exe --hidden"] {
+            assert_eq!(login_entry_at_start(true, Some(Some(same)), HERE), Login::Leave, "{same}");
+        }
+        // With the setting off it is removed, wherever it points.
+        assert_eq!(login_entry_at_start(false, Some(Some(r"D:\Old\clipframes.exe")), HERE), Login::Remove);
     }
 
     #[test]
