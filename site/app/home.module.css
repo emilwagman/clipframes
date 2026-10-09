@@ -5,7 +5,9 @@
   backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); }
 .scrolled { border-bottom-color: var(--border); }
 .headerIn { max-width: calc(var(--col) + 48px); margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 22px; }
-.brand { display: flex; align-items: center; gap: 10px; font: 650 17px var(--text); letter-spacing: -0.02em;
+.wordmark { display: block; height: 40px; width: auto; }
+@media (prefers-color-scheme: dark) { .wordmark { filter: invert(1); } }
+.brand { display: flex; align-items: center; gap: 10px;
   text-decoration: none; margin-right: auto; }
 .gh { color: var(--text-2); text-decoration: none; font-size: 15px; }
 .gh:hover { color: var(--text); }
@@ -22,12 +24,12 @@
 .main { padding: 0 24px; }
 .col { max-width: var(--col); margin: 0 auto; }
 
-.main h1 { font: 650 clamp(38px, 6vw, 58px)/1.06 var(--sans); letter-spacing: -0.03em; margin: 0 0 28px; text-wrap: balance; }
+.main h1 { font: 650 clamp(36px, 5vw, 48px)/1.16 var(--sans); letter-spacing: -0.025em; margin: 0 0 22px; text-wrap: balance; }
 .main h2 { font: 650 clamp(27px, 3.4vw, 34px)/1.15 var(--sans); letter-spacing: -0.02em; margin: 0 0 14px; text-wrap: balance; }
 .main p { margin: 0 0 16px; color: var(--text-2); }
 .main p strong { color: var(--text); font-weight: 600; }
 
-.intro { padding: 96px 0 24px; }
+.intro { padding: 88px 0 0; }
 .intro p { margin-bottom: 18px; }
 .section { padding-top: 112px; }
 .keys { font: 500 15px var(--sans); color: var(--text-2); background: var(--surface-2); border-radius: var(--radius-sm); padding: 3px 9px;
@@ -83,3 +85,16 @@
   .section { padding-top: 84px; }
   .figure { margin-left: -8px; margin-right: -8px; }
 }
+
+/* Hand-drawn marks: the circle around "the thing", the note and its arrow. */
+.circled { position: relative; display: inline-block; white-space: nowrap; }
+.circled svg { position: absolute; left: -12px; top: -16px; width: calc(100% + 38px); height: calc(100% + 38px); overflow: visible; pointer-events: none; }
+.circled path { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.get .note { position: relative; margin-left: 44px; font-family: var(--hand); font-weight: 700; font-size: 26px; line-height: 1; color: var(--accent); }
+.note svg { position: absolute; left: -50px; top: -2px; width: 44px; height: 26px; overflow: visible; }
+.note path { vector-effect: non-scaling-stroke; fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 640px) { .note svg { display: none; } }
+
+.lede { font-size: 18px; line-height: 1.6; }
+.main .meta { margin-top: 16px; font-size: 14px; color: var(--text-3); }
+.intro + .section { padding-top: 72px; }

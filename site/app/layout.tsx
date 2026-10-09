@@ -1,8 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Caveat } from "next/font/google";
 import "./globals.css";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 const description = "Point at the thing you want changed, and Clipframes tells your agent exactly what it is. A Mac app for building with Claude Code and Codex.";
+
+// The handwriting for notes and marks, served from this site.
+const hand = Caveat({ subsets: ["latin"], weight: ["700"], variable: "--hand", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -25,7 +29,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={hand.variable}>
       <body>{children}</body>
     </html>
   );
