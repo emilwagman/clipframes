@@ -15,7 +15,7 @@ use std::thread;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
-use tauri_plugin_global_shortcut::ShortcutState;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const BAR: &str = "bar";
 const NOTE: &str = "note";
@@ -385,17 +385,7 @@ fn permission_open(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcut(SHORTCUT)
-                .expect("the shortcut is spelled right")
-                .with_handler(|app, _, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        later(app, toggle);
-                    }
-                })
-                .build(),
-        )
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(Core::default())
         .invoke_handler(tauri::generate_handler![round_state, note_set, note_close, pick_remove, round_done, permission_open])
         .setup(|app| {
@@ -404,7 +394,18 @@ pub fn run() {
 
             small_window(app.handle(), BAR, BAR_SIZE)?;
 
-            let open_item = MenuItem::with_id(app, "open", "Open Clipframes", true, None::<&str>)?;
+            // Another app may own the shortcut already. Clipframes still runs: the tray opens it.
+            let taken = app
+                .global_shortcut()
+                .on_shortcut(SHORTCUT, |app, _, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        later(app, toggle);
+                    }
+                })
+                .is_err();
+
+            let open_label = if taken { "Open Clipframes (shortcut in use by another app)" } else { "Open Clipframes" };
+            let open_item = MenuItem::with_id(app, "open", open_label, true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit Clipframes", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
             let mut tray = TrayIconBuilder::new().tooltip("Clipframes").menu(&menu).on_menu_event(|app, event| match event.id.as_ref() {
