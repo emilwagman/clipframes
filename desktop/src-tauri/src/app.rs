@@ -821,6 +821,17 @@ fn cannot_capture(app: &AppHandle) {
     let core = app.state::<Core>();
     telemetry::error("capture", "the screen could not be captured", "app::cannot_capture");
     *core.trouble.lock().unwrap() = Some(if cfg!(target_os = "macos") { "screen".into() } else { "The screen could not be captured.".into() });
+    // The round's folder was made for the picture that failed. With nothing picked it is
+    // empty, and would sit among the captures for good.
+    {
+        let round = core.round.lock().unwrap();
+        if round.picks.is_empty() {
+            if let Some((path, _)) = core.folder.lock().unwrap().take() {
+                let _ = std::fs::remove_dir_all(path);
+            }
+            core.files.store(0, Ordering::SeqCst);
+        }
+    }
     let _ = app.emit("round", view(app));
 }
 
@@ -1089,12 +1100,6 @@ fn recording_stop(app: AppHandle) {
     stop_recording(&app);
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct HistoryPage {
-    entries: Vec<store::Entry>,
-    total: usize,
-}
-
 #[tauri::command]
 fn history_open(app: AppHandle) {
     later(&app, |app| {
@@ -1112,9 +1117,8 @@ fn history_open(app: AppHandle) {
 }
 
 #[tauri::command]
-fn history_list(from: usize, count: usize) -> HistoryPage {
-    let (entries, total) = store::list(&store::root(), from, count.min(200));
-    HistoryPage { entries, total }
+fn history_list(from: usize, count: usize) -> store::Page {
+    store::list(&store::root(), from, count.min(200))
 }
 
 /// Puts a past round back on the clipboard.

@@ -22,6 +22,7 @@ const NOTE = { w: 316, h: 172 };
 const examples: HistoryApi = {
   list: async () => ({
     total: 4,
+    next: 4,
     entries: [
       { id: "a", title: 'Button "New invoice" and 2 more', when: "2026-10-09 11:42", count: 3, images: ["/lab/thumbs/1.png", "/lab/thumbs/2.png", "/lab/thumbs/3.png"] },
       { id: "b", title: "Screen clip, 6 s", when: "2026-10-09 10:15", count: 1, images: ["/lab/thumbs/4.png"] },

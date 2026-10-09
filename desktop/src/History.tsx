@@ -18,6 +18,8 @@ export interface Entry {
 export interface Page {
   entries: Entry[];
   total: number;
+  /** Where the page after this one starts. */
+  next: number;
 }
 
 /** Where History gets its captures. The app asks the core; the lab hands in examples. */
@@ -46,6 +48,9 @@ export function History({ api = core }: { api?: HistoryApi }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const loading = useRef(false);
+  // Where the next page starts. Not the number of rows shown: a capture that could not be
+  // read has no row, and counting rows would ask for some of them twice.
+  const next = useRef(0);
 
   const load = useCallback(async (from: number) => {
     if (loading.current) return;
@@ -53,6 +58,7 @@ export function History({ api = core }: { api?: HistoryApi }) {
     const page = await api.list(from, PAGE);
     setEntries((before) => (from === 0 ? page.entries : [...before, ...page.entries]));
     setTotal(page.total);
+    next.current = page.next;
     loading.current = false;
   }, [api]);
 
@@ -63,7 +69,7 @@ export function History({ api = core }: { api?: HistoryApi }) {
 
   const onScroll = (event: React.UIEvent<HTMLElement>) => {
     const node = event.currentTarget;
-    if (total !== null && entries.length < total && node.scrollTop + node.clientHeight > node.scrollHeight - 600) void load(entries.length);
+    if (total !== null && next.current < total && node.scrollTop + node.clientHeight > node.scrollHeight - 600) void load(next.current);
   };
 
   const copy = async (id: string) => {
@@ -75,6 +81,8 @@ export function History({ api = core }: { api?: HistoryApi }) {
     await api.remove(id);
     setEntries((before) => before.filter((e) => e.id !== id));
     setTotal((n) => (n === null ? n : n - 1));
+    // Everything after it moved up one place.
+    next.current = Math.max(0, next.current - 1);
     setConfirming(null);
   };
 

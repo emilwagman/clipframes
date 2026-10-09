@@ -224,17 +224,36 @@ pub struct Entry {
     pub images: Vec<String>,
 }
 
-/// Past rounds, newest first: `count` of them starting at `from`, and how many there are in
-/// all. Only the page asked for is read from disk, so a long history opens as fast as a short
-/// one: the folder is listed once, by name, and nothing else is touched.
-pub fn list(root: &Path, from: usize, count: usize) -> (Vec<Entry>, usize) {
+/// One page of History.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Page {
+    pub entries: Vec<Entry>,
+    /// How many captures there are in all.
+    pub total: usize,
+    /// Where the page after this one starts. Not `from` plus the number of entries: a capture
+    /// that cannot be read is left out of the page but still has its place in the order.
+    pub next: usize,
+}
+
+/// Past rounds, newest first: `count` of them starting at `from`. Only the page asked for is
+/// read from disk, so a long history opens as fast as a short one: the folder is listed once,
+/// by name, and each round's folder is only asked whether it holds a capture. One that does
+/// not (a round whose only screenshot failed) is not a capture and is not counted.
+pub fn list(root: &Path, from: usize, count: usize) -> Page {
     let mut names: Vec<String> = fs::read_dir(root)
-        .map(|dir| dir.filter_map(|e| e.ok()).filter(|e| e.file_type().is_ok_and(|t| t.is_dir())).filter_map(|e| e.file_name().into_string().ok()).filter(|name| is_stamp(name)).collect())
+        .map(|dir| {
+            dir.filter_map(|e| e.ok())
+                .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|name| is_stamp(name) && root.join(name).join("capture.json").is_file())
+                .collect()
+        })
         .unwrap_or_default();
     names.sort_unstable_by(|a, b| b.cmp(a));
     let total = names.len();
+    let next = from.saturating_add(count).min(total);
     let entries = names.into_iter().skip(from).take(count).filter_map(|id| entry(root, id)).collect();
-    (entries, total)
+    Page { entries, total, next }
 }
 
 /// Whether a folder is named the way rounds are: "2026-10-09_11-42-30", maybe with "-2" after.
@@ -380,15 +399,56 @@ mod tests {
             save(&r, &root.join(day), TAKEN).unwrap();
         }
         fs::create_dir_all(root.join("not-a-capture")).unwrap();
-        let (page, total) = list(&root, 0, 2);
-        assert_eq!(total, 3);
+        let Page { entries: page, total, next } = list(&root, 0, 2);
+        assert_eq!((total, next), (3, 2));
         assert_eq!(page.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["2026-10-09_11-42-30", "2026-10-08_10-00-00"]);
         assert_eq!(page[0].title, "Button \"New invoice\" and 1 more");
         assert_eq!(page[0].when, "2026-10-09 11:42");
-        assert_eq!(list(&root, 2, 2).0.len(), 1);
+        assert_eq!(list(&root, 2, 2).entries.len(), 1);
         assert!(folder_of(&root, "2026-10-09_11-42-30").is_some());
         assert!(folder_of(&root, "../elsewhere").is_none());
         assert!(folder_of(&root, "not-a-capture").is_none());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    fn ids(page: &Page) -> Vec<&str> {
+        page.entries.iter().map(|e| e.id.as_str()).collect()
+    }
+
+    #[test]
+    fn a_folder_without_a_capture_is_not_counted_and_no_page_repeats_an_entry() {
+        let root = scratch("paging-empty");
+        // What a failed screenshot used to leave behind: the round's folder, with nothing in it.
+        fs::create_dir_all(root.join("2026-10-09_12-00-00")).unwrap();
+        for day in ["2026-10-09_11-00-00", "2026-10-08_10-00-00", "2026-10-07_09-00-00"] {
+            let mut r = Round::default();
+            r.add(button());
+            save(&r, &root.join(day), TAKEN).unwrap();
+        }
+        // History asks for a page, then for the next one from where the first says to go on.
+        let first = list(&root, 0, 2);
+        assert_eq!(first.total, 3, "the empty folder is not a capture");
+        assert_eq!(ids(&first), ["2026-10-09_11-00-00", "2026-10-08_10-00-00"]);
+        let second = list(&root, first.next, 2);
+        assert_eq!(ids(&second), ["2026-10-07_09-00-00"]);
+        assert_eq!(second.next, second.total, "and that was the last page");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_capture_that_cannot_be_read_is_skipped_without_shifting_the_pages() {
+        let root = scratch("paging-damaged");
+        for day in ["2026-10-09_11-00-00", "2026-10-08_10-00-00", "2026-10-07_09-00-00"] {
+            let mut r = Round::default();
+            r.add(button());
+            save(&r, &root.join(day), TAKEN).unwrap();
+        }
+        fs::write(root.join("2026-10-09_11-00-00").join("capture.json"), b"not json").unwrap();
+        let first = list(&root, 0, 2);
+        assert_eq!(ids(&first), ["2026-10-08_10-00-00"], "the page comes back short");
+        let second = list(&root, first.next, 2);
+        assert_eq!(ids(&second), ["2026-10-07_09-00-00"], "and the next one goes on after it, not from how many were shown");
+        assert_eq!(list(&root, second.next, 2).entries, vec![]);
         fs::remove_dir_all(&root).unwrap();
     }
 
