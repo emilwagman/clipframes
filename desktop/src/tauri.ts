@@ -18,6 +18,8 @@ export function listen<T>(event: string, listener: (payload: T) => void): void {
 }
 
 export const platform: Platform = {
+  tools: ["element"],
+  history: false,
   state: () => invoke<RoundView>("round_state"),
   onRound: (listener) => on<RoundView>("round", listener),
   onHover: (listener) => on<HoverView>("hover", listener),

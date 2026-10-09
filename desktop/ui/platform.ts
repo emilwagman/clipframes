@@ -12,6 +12,8 @@ export interface Rect {
 
 export interface PickView {
   headline: string;
+  /** "#new-invoice .btn.btn-primary", or empty when the element has no id or class. */
+  selector: string;
   note: string;
 }
 
@@ -40,7 +42,13 @@ export interface MarkView {
   rect: Rect;
 }
 
+/** A way of capturing. The bar offers the ones the platform can do. */
+export type Tool = "element" | "area" | "clip";
+
 export interface Platform {
+  tools: Tool[];
+  /** Whether there is a history of past rounds to open. */
+  history: boolean;
   state(): Promise<RoundView>;
   onRound(listener: (round: RoundView) => void): void;
   onHover(listener: (hover: HoverView) => void): void;

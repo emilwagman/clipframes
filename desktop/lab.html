@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Clipframes UI lab</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
+  iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+  #overlay, #bar, #note { position: absolute; }
+  #overlay { inset: 0; }
+</style>
+<script type="module" src="/lab/lab.ts"></script>
+</head>
+<body><iframe id="page" src="/lab/northwind.html"></iframe><div id="overlay"></div><div id="bar"></div><div id="note"></div></body>
+</html>

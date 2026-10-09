@@ -5,10 +5,12 @@ import { el } from "./dom";
 import type { Platform, RoundView } from "./platform";
 
 export function mountNote(root: HTMLElement, platform: Platform): void {
-  const what = el("div", { class: "what" });
-  const input = el("input", { type: "text", placeholder: "What should change? (optional)", spellcheck: "false", autocomplete: "off" });
-  const hint = el("div", { class: "hint", text: "Enter to save · Esc to skip · or click the next thing" });
-  root.append(el("div", { class: "note" }, what, input, hint));
+  const number = el("b", { class: "num" });
+  const what = el("strong", { class: "what" });
+  const selector = el("code", { class: "selector" });
+  const input = el("input", { type: "text", id: "comment", placeholder: "What should change?", spellcheck: "false", autocomplete: "off" });
+  const keys = el("div", { class: "keys" }, el("kbd", { text: "Enter" }), el("span", { text: "save" }), el("kbd", { text: "Esc" }), el("span", { text: "skip" }), el("span", { class: "or", text: "or click the next thing" }));
+  root.append(el("div", { class: "note" }, el("div", { class: "head" }, number, el("div", { class: "names" }, what, selector)), input, keys));
 
   let index: number | null = null;
 
@@ -26,7 +28,10 @@ export function mountNote(root: HTMLElement, platform: Platform): void {
     index = round.noting;
     if (index === null) return;
     const pick = round.picks[index];
-    what.textContent = `${index + 1}. ${pick?.headline ?? ""}`;
+    number.textContent = String(index + 1);
+    what.textContent = pick?.headline ?? "";
+    selector.textContent = pick?.selector ?? "";
+    selector.hidden = !pick?.selector;
     input.value = pick?.note ?? "";
     input.focus();
   });

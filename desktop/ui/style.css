@@ -1,29 +1,23 @@
-/* Clipframes' own interface. Tokens match the site (site/app/globals.css). */
+/* Clipframes' own interface: black, so it stands out against whatever it sits on.
+   It looks the same in light and dark mode; it is a tool laid over other people's pages. */
 :root {
-  color-scheme: light dark;
-  --surface: #ffffff;
-  --surface-2: #eef1f4;
-  --border: #e3e7ec;
-  --text: #16181d;
-  --text-2: #555b65;
-  --accent: #2563eb;
-  --accent-wash: rgba(37, 99, 235, 0.1);
-  --on-accent: #ffffff;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.08), 0 4px 10px rgba(16, 24, 40, 0.1);
+  color-scheme: dark;
+  --surface: #0b0b0c;
+  --raised: #1b1c1f;
+  --border: rgba(255, 255, 255, 0.14);
+  --text: #ffffff;
+  --text-2: #a3a4ab;
+  --accent: #ffffff;        /* the one loud thing: Done, the caret, the pick numbers */
+  --on-accent: #0b0b0c;
+  --accent-wash: rgba(255, 255, 255, 0.1);
+  --ring: #0b0b0c;          /* outlines drawn on the page */
+  --ring-halo: #ffffff;     /* a hairline around them, so they show on dark pages too */
+  --ring-fill: transparent;
+  --radius: 16px;
+  --radius-s: 9px;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 6px 14px rgba(0, 0, 0, 0.32);
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #1a1b1e;
-    --surface-2: #222327;
-    --border: #2a2c31;
-    --text: #eceef1;
-    --text-2: #a3a8b0;
-    --accent: #6b9bff;
-    --accent-wash: rgba(107, 155, 255, 0.16);
-    --on-accent: #0b1020;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.4);
-  }
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -32,39 +26,56 @@ body { font: 13px/1.35 var(--sans); color: var(--text); -webkit-font-smoothing: 
 [hidden] { display: none !important; }
 
 button { font: inherit; color: inherit; border: 0; background: none; cursor: default; }
-button.primary { height: 32px; padding: 0 14px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 600; white-space: nowrap; }
-button.primary:hover { filter: brightness(1.06); }
+button.primary { height: 36px; padding: 0 18px; border-radius: var(--radius-s); background: var(--accent); color: var(--on-accent); font-weight: 650; font-size: 14px; white-space: nowrap; }
+button.primary:hover { filter: brightness(0.9); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+kbd { font: 600 11px/1 var(--sans); color: var(--text); padding: 4px 6px; border-radius: 5px; background: var(--raised); border: 1px solid var(--border); border-bottom-width: 2px; }
 
 /* The window is a little larger than the card, so the shadow has room. */
-.bar, .note { position: absolute; inset: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+.bar, .note { position: absolute; inset: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
 
-.bar { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 8px; }
-.tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 60px; height: 46px; border-radius: 10px; color: var(--text-2); font-size: 11px; font-weight: 500; }
-.tool.on { background: var(--accent-wash); color: var(--accent); }
-.tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.status { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.status strong { font-weight: 600; }
+.bar { display: flex; align-items: center; gap: 14px; padding: 0 10px 0 10px; }
+.mode { display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px 0 10px; border-radius: var(--radius-s); background: var(--raised); color: var(--text); font-size: 13px; font-weight: 600; }
+.mode .tool { display: contents; }
+.tools { display: flex; gap: 2px; padding: 3px; border-radius: calc(var(--radius-s) + 3px); background: var(--raised); }
+.tools .tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 60px; height: 46px; border-radius: var(--radius-s); color: var(--text-2); font-size: 11px; font-weight: 600; }
+.tools .tool.on { background: var(--accent); color: var(--on-accent); }
+.tool svg, button.icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+button.icon { width: 36px; height: 36px; border-radius: var(--radius-s); color: var(--text-2); display: grid; place-items: center; }
+button.icon:hover { background: var(--raised); color: var(--text); }
+.mode svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.status { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.status strong { font-weight: 650; font-size: 14px; }
 .status span { color: var(--text-2); font-size: 12px; }
 .status strong, .status span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bar.trouble .tool { display: none; }
-.bar.trouble { padding-left: 14px; }
+.bar .keys { display: none; }
+.bar.empty .keys { display: flex; }
+.picks { display: none; }
+.bar.trouble .mode, .bar.trouble .tools, .bar.trouble .keys, .bar.trouble button.icon { display: none; }
+.bar.trouble { padding-left: 16px; }
 
-.note { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
-.note .what { color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.note input { font: inherit; color: var(--text); width: 100%; height: 30px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); outline: none; user-select: text; -webkit-user-select: text; }
+.note { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.note .head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.num { flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; }
+.note .names { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.note .what { font-weight: 650; font-size: 14px; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note .selector { font: 12px/1.3 var(--mono); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note input { font: inherit; font-size: 14px; color: var(--text); caret-color: var(--accent); width: 100%; height: 40px; padding: 0 12px; border-radius: var(--radius-s); border: 1px solid var(--border); background: var(--raised); outline: none; user-select: text; -webkit-user-select: text; }
+.note input::placeholder { color: var(--text-2); }
 .note input:focus { border-color: var(--accent); }
-.note .hint { color: var(--text-2); font-size: 11px; }
+.note .keys { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; }
+.note .keys kbd + span { margin-right: 8px; }
+.note .keys .or { margin-left: auto; margin-right: 0; }
 
 /* The overlay. Only transform, width and height change while the pointer moves. */
-.highlight, .mark { position: absolute; left: 0; top: 0; border-radius: 4px; pointer-events: none; will-change: transform; }
-.highlight { border: 2px solid var(--accent); background: var(--accent-wash); }
+.highlight, .mark { position: absolute; left: 0; top: 0; border-radius: 5px; pointer-events: none; will-change: transform; }
+.highlight { border: 2px solid var(--ring); background: var(--ring-fill); box-shadow: 0 0 0 1.5px var(--ring-halo), inset 0 0 0 1.5px var(--ring-halo); }
 .highlight.big { background: transparent; }
-.label { position: absolute; left: -2px; bottom: 100%; margin-bottom: 4px; max-width: 420px; padding: 2px 7px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.label.inside { bottom: auto; top: 4px; left: 4px; margin: 0; }
+.label { position: absolute; left: -2px; bottom: 100%; margin-bottom: 6px; max-width: 420px; padding: 4px 9px; border-radius: 7px; background: var(--surface); color: var(--text); border: 1px solid var(--border); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.label.inside { bottom: auto; top: 6px; left: 6px; margin: 0; }
 .label:empty { display: none; }
-.mark { border: 1.5px solid var(--accent); }
-.mark b { position: absolute; left: -9px; top: -9px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: 11px; line-height: 18px; text-align: center; }
+.mark { border: 2px solid var(--ring); box-shadow: 0 0 0 1.5px var(--ring-halo); }
+.mark b { position: absolute; left: -12px; top: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--surface); color: var(--text); box-shadow: 0 0 0 1.5px var(--ring-halo); font-size: 12px; font-weight: 700; line-height: 22px; text-align: center; }
 
 /* Settings: an ordinary window, so it has a background and can be read like a page. */
 html.window, html.window body { background: var(--surface); overflow: auto; }
@@ -75,10 +86,10 @@ html.window, html.window body { background: var(--surface); overflow: auto; }
 .settings .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
 .settings .help { margin: 6px 0 0; color: var(--text-2); font-size: 12px; }
 .settings .row .help { margin: 0; }
-.settings .help.warn { color: #b42318; }
-.settings .key { min-width: 150px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); font-weight: 600; }
+.settings .help.warn { color: #ff8a80; }
+.settings .key { min-width: 150px; height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--raised); font-weight: 600; }
 .settings .key.recording { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); font-weight: 500; }
 .settings .plain { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
 .settings .plain:hover, .settings .key:hover { border-color: var(--text-2); }
 .settings input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
-@media (prefers-color-scheme: dark) { .settings .help.warn { color: #ff8a80; } }
+

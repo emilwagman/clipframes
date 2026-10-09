@@ -32,8 +32,8 @@ const SETTINGS: &str = "settings";
 const KEEP_WARM: Duration = Duration::from_secs(90);
 
 /// Sizes in CSS pixels.
-const BAR_SIZE: (f64, f64) = (372.0, 76.0);
-const NOTE_SIZE: (f64, f64) = (320.0, 104.0);
+const BAR_SIZE: (f64, f64) = (640.0, 80.0);
+const NOTE_SIZE: (f64, f64) = (380.0, 158.0);
 
 /// A line on stderr with the time since start, when CLIPFRAMES_TRACE is set. For chasing
 /// the order of things across threads on a machine with no debugger.
@@ -115,6 +115,7 @@ struct RoundView {
 #[derive(Debug, Clone, Serialize)]
 struct PickView {
     headline: String,
+    selector: String,
     note: String,
 }
 
@@ -138,7 +139,7 @@ fn view(app: &AppHandle) -> RoundView {
     let trouble = core.trouble.lock().unwrap().clone();
     let state = RoundView {
         picking,
-        picks: round.picks.iter().map(|p| PickView { headline: p.element.headline(), note: p.note.clone() }).collect(),
+        picks: round.picks.iter().map(|p| PickView { headline: p.element.headline(), selector: p.element.selector(), note: p.note.clone() }).collect(),
         noting,
         reference: round.reference(core.notes.lock().unwrap().as_deref().and_then(|p| p.to_str())),
         trouble,
