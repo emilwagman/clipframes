@@ -37,6 +37,10 @@ const cursor = $("cursor");
 let clipboard = "";
 Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => void (clipboard = text) } });
 let closedWith = "";
+// The desktop app saves each round to a folder and adds where its notes are to the first line
+// (round.rs, reference); the web platform has no folder. This is that one addition.
+const NOTES = "~/Clipframes/2026-10-09_11-42-30/notes.md";
+const saved = (reference: string) => reference.replace("]", `. Read ${NOTES}]`);
 
 // ---------- the script ----------
 
@@ -44,7 +48,8 @@ let closedWith = "";
 const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * u * (10 - 15 * u + 6 * u * u));
 const mix = (a: number, b: number, u: number) => a + (b - a) * u;
 
-const WIDE: Camera = { x: 0, y: 0, w: 1024 };
+// The film opens close enough to read the page, and eases back as the bar comes up below it.
+const WIDE: Camera = { x: 102, y: 10, w: 820 };
 const cameras: { t0: number; t1: number; to: Camera }[] = [];
 const moves: { t0: number; t1: number; to: () => Point; bend: number; from?: Point; dest?: Point }[] = [];
 const events: { frame: number; run: () => void }[] = [];
@@ -78,14 +83,14 @@ function type(text: string, start: number, per: number): number {
 const REST: Point = { x: 566, y: 396 };
 
 // The window, still; then the shortcut, and the bar rises.
-const OPEN = 1.0;
-cameras.push({ t0: 0, t1: 1.7, to: { x: 12, y: 4, w: 1000 } });
+const OPEN = 0.8;
+cameras.push({ t0: 0, t1: 1.4, to: { x: 37, y: 12, w: 950 } });
 at(OPEN, () => window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", ctrlKey: true, shiftKey: true })));
 // To the button, with the camera going in on it from the same frame.
-moves.push({ t0: 1.75, t1: 2.9, to: inPage("#new-invoice", 0.8, 0.72), bend: 0.16 });
-cameras.push({ t0: 1.75, t1: 2.9, to: { x: 384, y: 10, w: 640 } });
-at(3.3, click);
-const typed = type("make this green", 3.65, 0.085);
+moves.push({ t0: 1.45, t1: 2.6, to: inPage("#new-invoice", 0.8, 0.72), bend: 0.16 });
+cameras.push({ t0: 1.45, t1: 2.6, to: { x: 384, y: 10, w: 640 } });
+at(3.0, click);
+const typed = type("make this green", 3.35, 0.085);
 at(typed + 0.28, () => press("Enter"));
 // Down to the bar for the area tool, then a drag over the rows.
 const NEXT = typed + 0.4;
@@ -105,15 +110,15 @@ moves.push({ t0: CLOSE, t1: CLOSE + 0.8, to: onStage('.bar [aria-label="Close"]'
 at(CLOSE + 0.95, click);
 // Over to the terminal, and paste.
 const OVER = CLOSE + 1.1;
-cameras.push({ t0: OVER, t1: OVER + 1.15, to: { x: 752, y: 0, w: 1024 } });
+cameras.push({ t0: OVER, t1: OVER + 1.15, to: { x: 972, y: 0, w: 1024 } });
 moves.push({ t0: OVER + 0.05, t1: OVER + 1.0, to: onStage("#term .prompt", 0.42, 0.62), bend: -0.1 });
 at(OVER + 1.1, click);
 at(OVER + 1.1, () => (cursor.hidden = false));
 const PASTE = OVER + 1.4;
-at(PASTE, () => (pasted.textContent = clipboard));
-cameras.push({ t0: PASTE + 0.15, t1: PASTE + 2.2, to: { x: 1034, y: 74, w: 760 } });
-moves.push({ t0: PASTE + 0.2, t1: PASTE + 0.9, to: () => ({ x: 1640, y: 404 }), bend: 0.1 });
-const END = Number(query.get("end") ?? PASTE + 3.2);
+at(PASTE, () => (pasted.textContent = saved(clipboard)));
+cameras.push({ t0: PASTE + 0.15, t1: PASTE + 2.0, to: { x: 1034, y: 35, w: 900 } });
+moves.push({ t0: PASTE + 0.2, t1: PASTE + 0.9, to: () => ({ x: 1790, y: 432 }), bend: 0.1 });
+const END = Number(query.get("end") ?? PASTE + 2.9);
 
 // ---------- the hands ----------
 
@@ -302,7 +307,7 @@ frame.addEventListener("load", () => {
   platform.onClose((text) => (closedWith = text));
   window.addEventListener("keydown", (event) => event.ctrlKey && event.shiftKey && event.code === "Space" && platform.open());
 
-  const film = { fps: FPS, frames: Math.round(END * FPS), step, result: () => ({ clipboard, closedWith, shown: pasted.textContent, fastest: Math.round(fastest) }) };
+  const film = { fps: FPS, frames: Math.round(END * FPS), step, result: () => ({ clipboard, closedWith, expected: saved(closedWith), shown: pasted.textContent, fastest: Math.round(fastest) }) };
   Object.assign(window, { film });
   paint(0);
 
