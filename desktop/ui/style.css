@@ -1,0 +1,66 @@
+/* Clipframes' own interface. Tokens match the site (site/app/globals.css). */
+:root {
+  color-scheme: light dark;
+  --surface: #ffffff;
+  --surface-2: #eef1f4;
+  --border: #e3e7ec;
+  --text: #16181d;
+  --text-2: #555b65;
+  --accent: #2563eb;
+  --accent-wash: rgba(37, 99, 235, 0.1);
+  --on-accent: #ffffff;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.08), 0 4px 10px rgba(16, 24, 40, 0.1);
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1a1b1e;
+    --surface-2: #222327;
+    --border: #2a2c31;
+    --text: #eceef1;
+    --text-2: #a3a8b0;
+    --accent: #6b9bff;
+    --accent-wash: rgba(107, 155, 255, 0.16);
+    --on-accent: #0b1020;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 10px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+body { font: 13px/1.35 var(--sans); color: var(--text); -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; cursor: default; }
+[hidden] { display: none !important; }
+
+button { font: inherit; color: inherit; border: 0; background: none; cursor: default; }
+button.primary { height: 32px; padding: 0 14px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 600; white-space: nowrap; }
+button.primary:hover { filter: brightness(1.06); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The window is a little larger than the card, so the shadow has room. */
+.bar, .note { position: absolute; inset: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+
+.bar { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 8px; }
+.tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 60px; height: 46px; border-radius: 10px; color: var(--text-2); font-size: 11px; font-weight: 500; }
+.tool.on { background: var(--accent-wash); color: var(--accent); }
+.tool svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.status { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.status strong { font-weight: 600; }
+.status span { color: var(--text-2); font-size: 12px; }
+.status strong, .status span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar.trouble .tool { display: none; }
+.bar.trouble { padding-left: 14px; }
+
+.note { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+.note .what { color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note input { font: inherit; color: var(--text); width: 100%; height: 30px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); outline: none; user-select: text; -webkit-user-select: text; }
+.note input:focus { border-color: var(--accent); }
+.note .hint { color: var(--text-2); font-size: 11px; }
+
+/* The overlay. Only transform, width and height change while the pointer moves. */
+.highlight, .mark { position: absolute; left: 0; top: 0; border-radius: 4px; pointer-events: none; will-change: transform; }
+.highlight { border: 2px solid var(--accent); background: var(--accent-wash); }
+.label { position: absolute; left: -2px; bottom: 100%; margin-bottom: 4px; max-width: 420px; padding: 2px 7px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.label.inside { bottom: auto; top: 4px; left: 4px; margin: 0; }
+.label:empty { display: none; }
+.mark { border: 1.5px solid var(--accent); }
+.mark b { position: absolute; left: -9px; top: -9px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: 11px; line-height: 18px; text-align: center; }
