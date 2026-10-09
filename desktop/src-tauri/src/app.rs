@@ -1194,7 +1194,11 @@ fn update_check(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         // Starting Clipframes while it is running opens the bar of the one that is.
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            // `clipframes --settings` opens Settings in the copy that is running.
+            if args.iter().any(|a| a == "--settings") {
+                return later(app, open_settings);
+            }
             telemetry::via("launch");
             later(app, open)
         }))
