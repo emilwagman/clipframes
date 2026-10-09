@@ -28,7 +28,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[cfg(all(feature = "selftest", target_os = "macos"))]
@@ -332,8 +332,14 @@ fn hide_tab(app: &AppHandle) {
 fn show_tab(app: &AppHandle) {
     let window = app.get_webview_window(TAB).or_else(|| small_window(app, TAB, (tab::SIZE + 12.0, tab::SIZE + 12.0)).build().ok());
     let Some(window) = window else { return };
-    let scale = window.scale_factor().unwrap_or(1.0);
-    if let Some(at) = tab_position(app, (tab::SIZE + 12.0) * scale) {
+    let side = tab::SIZE + 12.0;
+    if cfg!(target_os = "macos") {
+        // In points, for the reason given in `open_overlays`: the new window may not be on
+        // the main display yet, and its own scale would be the wrong one to convert with.
+        if let Some((bar, scale)) = bar_position(app) {
+            let _ = window.set_position(LogicalPosition::new(bar.x as f64 / scale + (BAR_SIZE.0 - side) / 2.0, bar.y as f64 / scale + (BAR_SIZE.1 - side) / 2.0));
+        }
+    } else if let Some(at) = tab_position(app, side * window.scale_factor().unwrap_or(1.0)) {
         let _ = window.set_position(at);
     }
     let _ = window.show();
@@ -511,11 +517,20 @@ fn open_overlays(app: &AppHandle) -> Vec<Screen> {
         });
         let Ok(w) = built else { continue };
         let (pos, size) = (*m.position(), *m.size());
-        let _ = w.set_position(PhysicalPosition::new(pos.x, pos.y));
-        let _ = w.set_size(PhysicalSize::new(size.width, size.height));
+        let (frame, css) = display(m);
+        if cfg!(target_os = "macos") {
+            // In points. macOS turns a position or size given in pixels into points with the
+            // scale of the display the window is on at that moment, not the one it is going
+            // to. With a Retina and an ordinary display side by side that put the overlay in
+            // the wrong place at the wrong size, and every highlight with it.
+            let _ = w.set_position(LogicalPosition::new(frame.x, frame.y));
+            let _ = w.set_size(LogicalSize::new(frame.width, frame.height));
+        } else {
+            let _ = w.set_position(PhysicalPosition::new(pos.x, pos.y));
+            let _ = w.set_size(PhysicalSize::new(size.width, size.height));
+        }
         let _ = w.set_ignore_cursor_events(true);
         let _ = w.show();
-        let (frame, css) = display(m);
         screens.push(Screen { label, frame, css });
     }
     screens
@@ -958,7 +973,7 @@ fn show_note(app: &AppHandle, frame: &Rect) {
     let y = if below + h <= s.y + s.height - gap { below } else { (frame.y - h - gap).max(s.y + gap) };
     drop(screens);
     let _ = if cfg!(target_os = "macos") {
-        note.set_position(tauri::LogicalPosition::new(x, y))
+        note.set_position(LogicalPosition::new(x, y))
     } else {
         note.set_position(PhysicalPosition::new(x as i32, y as i32))
     };
