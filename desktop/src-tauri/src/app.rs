@@ -158,7 +158,9 @@ fn publish(app: &AppHandle) {
             *clipboard = arboard::Clipboard::new().ok();
         }
         if let Some(c) = clipboard.as_mut() {
-            let _ = c.set_text(state.reference.clone());
+            // Windows programs expect CRLF; a terminal there joins lines that end in a bare LF.
+            let text = if cfg!(windows) { state.reference.replace('\n', "\r\n") } else { state.reference.clone() };
+            let _ = c.set_text(text);
         }
     }
     let _ = app.emit("round", &state);
