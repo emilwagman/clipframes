@@ -55,3 +55,28 @@ ARCHITECTURE.md under "Idle size against opening speed".
 Found while testing, fixed: a hidden web view at idle; Esc not reaching the keyboard hook while
 the comment box had the keyboard; a plain `cargo build` loading the interface from a dev server.
 Not measured yet: macOS as a whole app, a very large page, many windows, 200 picks, 8 h idle.
+
+## 2026-10-09: stress run on Windows
+
+`tools/win-stress.ps1` in the desktop session of fleet-win, with `demo/northwind` maximised in
+Chrome. Real input events: 200 clicks 60 ms apart in one round, then 30 open/close cycles,
+then 100 s of nothing.
+
+| State | Core process | Threads | Handles | Web views |
+|---|---|---|---|---|
+| Idle, just started | 15.3 MB (4.9 private) | 2 | 154 | none |
+| Round open, nothing picked | 33.8 MB (10.9 private) | 29 | 402 | 8 processes, 427 MB |
+| After 200 clicks | 71.5 MB (45.5 private) | 30 | 438 | 8 processes, 571 MB |
+| Round closed, bar warm | 39.6 MB (13.5 private) | 27 | 389 | 6 processes, 342 MB |
+| After 30 open/close cycles | 41.1 MB (16.8 private) | 56 | 418 | 6 processes, 346 MB |
+| Idle again, bar let go | 40.2 MB (15.0 private) | 24 | 344 | none |
+
+- 200 clicks in 17.9 s gave 199 picks, all saved; none reached the page. The one missing click
+  landed on Clipframes' own comment box, which had opened under the pointer.
+- notes.md for 199 picks: 37 KB. The clipboard held all of them.
+- Memory used by a long round is given back when it closes; threads and handles return to
+  where they were after 30 cycles, so nothing leaks per round.
+- Idle CPU afterwards: 0.016 s in 30 s (0.05% of one core).
+
+Still to run: the 50,000-element page (`demo/stress/big.html`), several screens, 8 h idle,
+and everything on macOS as a whole app.
