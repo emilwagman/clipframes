@@ -72,7 +72,14 @@ fn run(app: &AppHandle) -> Result<String, String> {
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(dir.join(MARKER), update.version.as_bytes());
     }
+    crate::telemetry::flush();
     // On Windows the installer takes over from here and starts the new version itself.
-    update.install(bytes).map_err(text)?;
+    if let Err(e) = update.install(bytes) {
+        // Nothing was installed, so the next start is an ordinary one.
+        if let Ok(dir) = app.path().app_config_dir() {
+            let _ = std::fs::remove_file(dir.join(MARKER));
+        }
+        return Err(text(e));
+    }
     app.restart();
 }

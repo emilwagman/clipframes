@@ -1266,7 +1266,10 @@ pub fn run() {
                     later(app, open)
                 }
                 "settings" => later(app, open_settings),
-                "quit" => app.exit(0),
+                "quit" => {
+                    telemetry::flush();
+                    app.exit(0)
+                }
                 _ => {}
             });
             // macOS menu bar icons are one colour and take the bar's own; elsewhere the app icon.

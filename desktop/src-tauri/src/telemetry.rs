@@ -93,15 +93,19 @@ pub fn start(install: String, version: &str, on: bool) {
     thread::spawn(move || {
         // Blocks until there is something to send, so an idle app does nothing here.
         while let Ok(first) = events.recv() {
-            let mut batch = vec![first];
+            // A null is `flush` asking for whatever is waiting to leave now.
+            let mut batch: Vec<Value> = if first.is_null() { Vec::new() } else { vec![first] };
             let until = std::time::Instant::now() + HOLD;
-            while batch.len() < FULL {
+            while !batch.is_empty() && batch.len() < FULL {
                 match events.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) {
+                    Ok(Value::Null) => break,
                     Ok(next) => batch.push(next),
                     Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => break,
                 }
             }
-            post(&url, &key, batch, Duration::from_secs(10));
+            if !batch.is_empty() {
+                post(&url, &key, batch, Duration::from_secs(10));
+            }
         }
     });
     // A crash is reported before the process goes.
@@ -153,6 +157,15 @@ fn exception(kind: &str, message: &str, at: &str) -> Value {
 /// Records an error: something that should have worked and did not.
 pub fn error(kind: &str, message: &str, at: &str) {
     event("$exception", exception(kind, message, at));
+}
+
+/// Sends what is waiting and gives it a moment to leave. For just before the app goes away.
+pub fn flush() {
+    if let Some(sink) = SINK.get() {
+        if ON.load(Ordering::SeqCst) && sink.queue.lock().unwrap().send(Value::Null).is_ok() {
+            thread::sleep(Duration::from_millis(1500));
+        }
+    }
 }
 
 /// Says how the round about to open was asked for.
