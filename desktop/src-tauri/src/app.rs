@@ -329,6 +329,11 @@ fn watch(app: AppHandle) {
             continue;
         }
         let Some(front) = element::foreground() else { continue };
+        // One of Clipframes' own windows in front (Settings, History, the tab itself) says
+        // nothing about where the user is working, and is never read as if it were a page.
+        if front.pid == std::process::id() as i32 {
+            continue;
+        }
         let key = (front.pid, front.title.clone());
         if seen.as_ref() != Some(&key) {
             if seen.is_some() && read_at.elapsed() < Duration::from_millis(1500) {
