@@ -23,7 +23,7 @@ function State([string]$label) {
 }
 
 Stop-Process -Name clipframes -Force -ErrorAction SilentlyContinue
-Start-Process $exe; Start-Sleep 4
+Start-Process $exe -ArgumentList "--hidden"; Start-Sleep 4
 State "idle, just started"
 
 Start-Process $exe -ArgumentList "--open"; Start-Sleep 4
