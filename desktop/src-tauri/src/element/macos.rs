@@ -110,23 +110,21 @@ fn window_at(x: f64, y: f64) -> Option<ScreenWindow> {
 }
 
 pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
-    read(x, y, true, false)
+    read(x, y, Wake::Keep, false)
 }
 
 /// The address of the page at a point, or nothing when there is no page there. With
 /// `may_wake` off, a Chromium or Electron app whose page structure is not switched on is
 /// left as it is, and has no address to give.
 pub fn page_at(x: f64, y: f64, may_wake: bool) -> String {
-    read(x, y, may_wake, false).map(|e| e.url).unwrap_or_default()
+    read(x, y, if may_wake { Wake::Once } else { Wake::No }, false).map(|e| e.url).unwrap_or_default()
 }
 
 /// `locate` adds which one it is and what heading it is under: a look through the whole page
 /// or window, for a click only.
-fn read(x: f64, y: f64, may_wake: bool, locate: bool) -> Result<ElementInfo, ReadError> {
+fn read(x: f64, y: f64, wake_how: Wake, locate: bool) -> Result<ElementInfo, ReadError> {
     let win = window_at(x, y).ok_or(ReadError::Nothing)?;
-    if may_wake {
-        wake(win.pid);
-    }
+    wake(win.pid, wake_how);
 
     // When the app gives nothing, the window itself is still an answer.
     let base = ElementInfo { app: win.owner.clone(), pid: win.pid, window: win.title.clone(), role: "Window".into(), frame: win.frame, ..Default::default() };
@@ -292,40 +290,89 @@ unsafe fn inner_text(el: &Element) -> String {
 
 // MARK: Chromium and Electron only build their page tree when asked.
 
-static WOKEN: Mutex<Option<HashMap<i32, Instant>>> = Mutex::new(None);
+/// The two switches that make a Chromium or Electron app build its page tree.
+const SWITCHES: [&str; 2] = ["AXManualAccessibility", "AXEnhancedUserInterface"];
 
-fn wake(pid: i32) {
+/// An app Clipframes asked for its page tree.
+struct Woken {
+    /// When it was last looked at during a round.
+    at: Instant,
+    /// Which of the switches Clipframes turned on itself. One that was already on belongs to
+    /// someone else (VoiceOver, a window manager, a keyboard tool) and is never turned off.
+    ours: [bool; 2],
+}
+
+static WOKEN: Mutex<Option<HashMap<i32, Woken>>> = Mutex::new(None);
+
+/// How much a reading may do to an app that only builds its page tree when asked.
+#[derive(Clone, Copy, PartialEq)]
+enum Wake {
+    /// Leave it as it is.
+    No,
+    /// Switch the tree on if it is not, and let it go off again five minutes later however
+    /// often this is asked: the place watcher, which looks at every change of title.
+    Once,
+    /// Switch it on and keep it on while this goes on: hovering and clicking in a round.
+    Keep,
+}
+
+fn wake(pid: i32, how: Wake) {
+    if how == Wake::No {
+        return;
+    }
     let mut guard = WOKEN.lock().unwrap();
     let woken = guard.get_or_insert_with(HashMap::new);
-    if !woken.contains_key(&pid) {
-        if !is_chromium(pid) {
-            return;
+    match woken.get_mut(&pid) {
+        Some(known) if how == Wake::Keep => known.at = Instant::now(),
+        Some(_) => {}
+        None if is_chromium(pid) => {
+            woken.insert(pid, Woken { at: Instant::now(), ours: switch_on(pid) });
         }
-        set_tree(pid, true);
+        None => {}
     }
-    woken.insert(pid, Instant::now());
 }
 
 /// Turn it back off for apps not looked at in a while: keeping it on costs them CPU.
 pub fn sleep_idle(older_than: Duration) {
     let mut guard = WOKEN.lock().unwrap();
     let Some(woken) = guard.as_mut() else { return };
-    let stale: Vec<i32> = woken.iter().filter(|(_, at)| at.elapsed() >= older_than).map(|(pid, _)| *pid).collect();
+    let stale: Vec<i32> = woken.iter().filter(|(_, w)| w.at.elapsed() >= older_than).map(|(pid, _)| *pid).collect();
     for pid in stale {
-        set_tree(pid, false);
-        woken.remove(&pid);
+        if let Some(known) = woken.remove(&pid) {
+            switch_off(pid, known.ours);
+        }
     }
 }
 
-fn set_tree(pid: i32, on: bool) {
+/// Turns on the switches that are not on already, and says which ones that was.
+fn switch_on(pid: i32) -> [bool; 2] {
     limit_waiting();
     unsafe {
         let app = Element(AXUIElementCreateApplication(pid));
-        let value = if on { CFBoolean::true_value() } else { CFBoolean::false_value() };
-        for attribute in ["AXManualAccessibility", "AXEnhancedUserInterface"] {
-            AXUIElementSetAttributeValue(app.0, CFString::new(attribute).as_concrete_TypeRef(), value.as_CFTypeRef());
+        SWITCHES.map(|switch| {
+            // An app that will not say counts as off: Chromium does not answer for its own switch.
+            let already = app.copy(switch).is_some_and(|v| is_on(&v));
+            if !already {
+                AXUIElementSetAttributeValue(app.0, CFString::new(switch).as_concrete_TypeRef(), CFBoolean::true_value().as_CFTypeRef());
+            }
+            !already
+        })
+    }
+}
+
+fn switch_off(pid: i32, ours: [bool; 2]) {
+    limit_waiting();
+    unsafe {
+        let app = Element(AXUIElementCreateApplication(pid));
+        for (switch, _) in SWITCHES.iter().zip(ours).filter(|(_, ours)| *ours) {
+            AXUIElementSetAttributeValue(app.0, CFString::new(switch).as_concrete_TypeRef(), CFBoolean::false_value().as_CFTypeRef());
         }
     }
+}
+
+/// Whether a switch's value says on: a true, or a number that is not zero.
+fn is_on(value: &CFType) -> bool {
+    value.downcast::<CFBoolean>().map(bool::from).or_else(|| value.downcast::<CFNumber>().and_then(|n| n.to_i64()).map(|n| n != 0)).unwrap_or(false)
 }
 
 /// The app bundle a process runs from, e.g. /Applications/Slack.app.
@@ -571,5 +618,5 @@ fn focused_title(pid: i32) -> String {
 
 /// The reading for a click: the element, and which one it is and under what heading.
 pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
-    read(x, y, true, true)
+    read(x, y, Wake::Keep, true)
 }
