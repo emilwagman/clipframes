@@ -53,6 +53,28 @@ pub fn run(app: AppHandle) {
             return;
         }
 
+        // With CLIPFRAMES_SELFTEST_SCAN set: read a grid of points over the main display and
+        // print each different thing found, then stop. Nothing is clicked.
+        if std::env::var_os("CLIPFRAMES_SELFTEST_SCAN").is_some() {
+            let frame = element::Rect { x: 0.0, y: 0.0, width: w, height: h };
+            let mut seen: Vec<String> = Vec::new();
+            for row in 1..40 {
+                for column in 1..56 {
+                    let (x, y) = (frame.x + frame.width * column as f64 / 56.0, frame.y + frame.height * row as f64 / 40.0);
+                    if let Ok(e) = element::element_at(x, y) {
+                        let said = format!("{} {} [{}x{}]", e.headline(), e.selector(), e.frame.width as i32, e.frame.height as i32);
+                        if !seen.contains(&said) {
+                            eprintln!("selftest scan: {said}");
+                            seen.push(said);
+                        }
+                    }
+                }
+            }
+            close(&app);
+            eprintln!("selftest done");
+            return;
+        }
+
         // Hover: move across the screen and print what is read under the pointer.
         let middle = (w * 0.5, h * 0.42);
         glide(CGEventType::MouseMoved, (w * 0.3, h * 0.3), middle);
