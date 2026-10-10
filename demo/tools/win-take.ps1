@@ -111,6 +111,27 @@ if ($Scene -eq "which") {
   Go $done 700; Wait 300; [H]::Click(); Wait 1000
 }
 
+if ($Scene -eq "native") {
+  # A desktop app, not a page: Focus (demo/native/Focus.cs) is in front on the left.
+  Start-Process $exe -ArgumentList "--open"
+  Wait 1500
+  [H]::Glide(835, 996, 800);   Wait 600   # the time
+  [H]::Glide(799, 1279, 600);  Wait 450   # Reset
+  [H]::Glide(605, 1279, 420);  Wait 600   # Start
+  [H]::Click();                Wait 1100
+  [H]::Type("make this green"); Wait 650
+  [H]::Glide(1656, 1231, 800); Wait 500   # Clear today
+  [H]::Click();                Wait 1100
+  [H]::Type("ask before clearing"); Wait 500
+  [H]::Key(0x0D);              Wait 900
+  Go $done 800; Wait 350
+  [H]::Click();                Wait 1200
+  Go $prompt 950; Wait 300
+  [H]::Click();                Wait 700
+  [H]::Key(0x11, 0x56);        Wait 1500  # paste
+  [H]::Glide(3300, 1500, 700)
+}
+
 if ($Scene -eq "return") {
   # Clipframes was used on this site before, so its tab is waiting at the bottom.
   Wait 800
