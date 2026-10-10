@@ -78,9 +78,13 @@ interface Site {
   /// The text that is on the visitor's own clipboard, once a demo has put one there.
   clipboard: string | null;
   captures: Capture[];
+  /// How many times a demo has been made the live one. A page that is drawn again without being
+  /// loaded again (the preview's own pages) sets its demos up anew under the same names, and the
+  /// interface has to be drawn for the new one.
+  registered: number;
 }
 
-export const useSite = create<Site>(() => ({ live: null, rounds: {}, playing: {}, taken: {}, clipboard: null, captures: [] }));
+export const useSite = create<Site>(() => ({ live: null, rounds: {}, playing: {}, taken: {}, clipboard: null, captures: [], registered: 0 }));
 
 const demos = new Map<DemoId, Demo>();
 const byGlass = new WeakMap<HTMLElement, Demo>();
@@ -338,7 +342,7 @@ export function activate(next: Demo): void {
   }
   live = next;
   useApp.setState({ platform: next.platform, round: next.round, hover: next.hover, marks: next.marks, area: next.area });
-  useSite.setState({ live: next.id });
+  useSite.setState((s) => ({ live: next.id, registered: s.registered + 1 }));
 }
 
 /// Called once the app's components are drawn for the live demo: its still copy can go, and
