@@ -66,3 +66,18 @@ Rules (my reading of it):
   left out.
 - The critique's findings still hold (the proof must be in the first screen); it was the answer
   to them, more text, that was wrong.
+
+## 2026-10-10, the pilot of the scene (team lead's read; the owner: "if you did not like something, keep trying alternatives")
+
+Rules taken from the second round of the pilot (my reading):
+- An agent's window is drawn in that agent's own arrangement, studied in real pictures of it
+  (Claude Code in the app's recordings, Codex in its repository's picture): its heading, its
+  prompt, its lines. Our own drawing, no logos or mascots, and nothing passed off as a
+  screenshot. What is not seen in a source is left out.
+- No large empty black. The agent's window holds what is really there: what was said before.
+- A visitor's own pick is pasted and answered. The made-up agent claims only what it carried
+  out (app/scene/answer.ts) and says so plainly for the rest.
+- Where a real recording exists, it sits by the mock it proves, behind a play mark, and is
+  fetched only when asked for.
+- Where there is more than one good arrangement, build them all on the real page behind
+  `?scene=` and compare them in place.

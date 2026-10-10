@@ -11,7 +11,7 @@ import { create } from "zustand";
 import type { AreaView, HoverView, MarkView, RoundView, Tool } from "@desktop/ui/platform";
 import { useStore as useApp } from "@desktop/ui/store";
 import { webPlatform } from "@desktop/ui/web";
-import type { WebPlatform } from "@desktop/ui/web";
+import type { Stage, WebPlatform } from "@desktop/ui/web";
 import type { Entry } from "@desktop/src/History";
 import { track } from "@/lib/analytics";
 import { direct } from "./touch";
@@ -40,6 +40,10 @@ export interface Dialect {
 export interface Demo {
   id: DemoId;
   dialect: Dialect | null;
+  /// What the picker is told about the page. A scene that changes what it shows says so here: `where` is read at every pick.
+  stage: Stage;
+  /// The element of the page the picker last asked about: under the pointer, or just picked.
+  pointed: () => Element | null;
   /// The box the demo is in, for telling how much of it is on screen.
   host: HTMLElement;
   page: HTMLElement;
@@ -124,17 +128,19 @@ function keep(d: Demo, text: string): void {
   if (text !== clipboard) copyToClipboard(text);
 }
 
-export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLElement; glass: HTMLElement }, options: { tool?: Tool; opens?: boolean } = {}): Demo {
+export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLElement; glass: HTMLElement }, options: { tool?: Tool; opens?: boolean; history?: boolean } = {}): Demo {
   // The same glass twice is the same demo: React mounts twice while developing.
   const known = byGlass.get(parts.glass);
   if (known) return known;
 
   const { glass, page } = parts;
-  const platform = webPlatform({
+  let pointed: Element | null = null;
+  const stage: Stage = {
     glass,
     elementAt: (x, y) => {
       const box = glass.getBoundingClientRect();
-      return document.elementsFromPoint(box.left + x, box.top + y).find((element) => element !== page && page.contains(element)) ?? null;
+      pointed = document.elementsFromPoint(box.left + x, box.top + y).find((element) => element !== page && page.contains(element)) ?? null;
+      return pointed;
     },
     rectOf: (element) => {
       const box = glass.getBoundingClientRect();
@@ -146,13 +152,14 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
     place: PLACE,
     where: WHERE,
     copy: () => {},
-  });
-  // The clock in the bar goes to the History further down the page.
-  platform.history = true;
+  };
+  const platform = webPlatform(stage);
+  // The clock in the bar goes to the History further down the page, on a page that has one.
+  platform.history = options.history ?? true;
   platform.openHistory = async () => document.getElementById("history")?.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
 
   const d: Demo = {
-    id, dialect: null, ...parts, platform, tool: options.tool ?? "element", opens: options.opens ?? true,
+    id, dialect: null, stage, pointed: () => pointed, ...parts, platform, tool: options.tool ?? "element", opens: options.opens ?? true,
     round: { ...EMPTY, place: { name: PLACE, auto: true } }, hover: { rect: null, label: "" }, marks: [], area: { rect: null, recording: false },
     still: null, taken: false, played: false, own: false, clearing: false, stop: null, rounds: 0, started: false, finished: false,
   };

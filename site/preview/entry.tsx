@@ -14,6 +14,29 @@ const PAGES: Record<string, () => React.ReactNode> = {
   "/compare": () => <ComparePage stars={null} preview />,
 };
 
+/// The scene's three arrangements are chosen with ?scene= on the site. A preview has no address
+/// to put that in, so it has a small control for it.
+function Layouts() {
+  const [layout, setLayout] = useState("a");
+  useEffect(() => {
+    document.documentElement.dataset.sceneLayout = layout;
+    // The app's interface lays itself out again for the scene's new shape.
+    window.dispatchEvent(new Event("resize"));
+  }, [layout]);
+  const NAMES: Record<string, string> = { a: "A: the agent in a narrow column beside the thing (the one the site is built with)", b: "B: the agent as a strip under the thing", c: "C: two overlapping windows" };
+  return (
+    <div style={{ position: "fixed", right: 12, bottom: 12, zIndex: 50, display: "flex", alignItems: "center", gap: 4, padding: "6px 8px 6px 12px", borderRadius: 999, background: "#121213", color: "#fff", font: "500 12.5px system-ui, sans-serif", boxShadow: "0 4px 16px rgba(0,0,0,0.25)" }}>
+      <span style={{ marginRight: 4, opacity: 0.7 }}>Scene</span>
+      {Object.keys(NAMES).map((name) => (
+        <button key={name} title={NAMES[name]} aria-pressed={layout === name} data-layout-choice={name} onClick={() => setLayout(name)}
+          style={{ font: "inherit", fontWeight: 700, width: 28, height: 24, border: 0, borderRadius: 12, cursor: "pointer", background: layout === name ? "#f76808" : "transparent", color: "#fff" }}>
+          {name.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Preview() {
   const [path, setPath] = useState("/");
   useEffect(() => {
@@ -29,7 +52,7 @@ function Preview() {
     return () => document.removeEventListener("click", onClick, true);
   }, []);
   // A page is drawn from nothing each time it is shown, as it is on the site.
-  return <div key={path}>{PAGES[path]()}</div>;
+  return <><div key={path}>{PAGES[path]()}</div>{path === "/" && <Layouts />}</>;
 }
 
 createRoot(document.getElementById("preview") as HTMLElement).render(<Preview />);

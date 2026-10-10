@@ -24,9 +24,17 @@ export const viewport: Viewport = {
   themeColor: "#fafaf9",
 };
 
+/// The scene in the first screen has three arrangements to compare (app/scene/scene.module.css):
+/// ?scene=a, b or c picks one, before anything is drawn. With no choice the page has the one it is built with.
+const SCENE = "a";
+const scene = `try{var v=new URLSearchParams(location.search).get("scene");if(/^[abc]$/.test(v||""))document.documentElement.dataset.sceneLayout=v}catch(e){}`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-scene-layout={SCENE} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: scene }} />
+      </head>
       <body>
         {children}
         <Analytics />
