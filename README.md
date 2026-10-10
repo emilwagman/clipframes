@@ -36,7 +36,7 @@ Switched on, Clipframes adds one line to the `allow` list in Claude Code's own s
 "Read(~/Clipframes/**)"
 ```
 
-Switched off, it removes that line and nothing else. The rest of the file is left as it was, and a copy of the file from before the first change is kept beside it as `settings.json.clipframes-backup-<date>`. If Clipframes cannot read the file as plain JSON it does not change it, and shows the line so you can add it yourself. The switch shows what is in the file, so adding or removing the line by hand moves it too.
+Switched off, it removes that line and nothing else. The rest of the file is left as it was, and a copy of the file from before the first change is kept beside it as `settings.json.clipframes-backup-<date>`. If Clipframes cannot read the file as plain JSON it does not change it, and shows the line so you can add it yourself. If Claude Code has not made the file yet, Clipframes makes it with only this line in it. The switch shows what is in the file, so adding or removing the line by hand moves it too.
 
 If `~/Clipframes` is a link to a folder somewhere else, a second line for that folder is added, because Claude Code checks both.
 

@@ -20,8 +20,10 @@ pub enum State {
     /// The rule is in the file.
     On,
     Off,
-    /// No settings file: Claude Code is not set up on this computer.
+    /// No folder for Claude Code's settings: it is not set up on this computer.
     Missing,
+    /// The captures folder is somewhere a rule cannot name (a network share).
+    Unnamed,
     /// The file is there but Clipframes will not change it (not valid JSON, an unexpected
     /// shape, read-only). The user gets the line to add by hand.
     Manual,
@@ -101,11 +103,18 @@ pub fn rules(folder: &Path, home: &Path) -> Vec<String> {
     rules
 }
 
-/// The file's bytes and what they say, or why it is left alone.
-fn read(file: &Path) -> Result<(Vec<u8>, Value), State> {
+/// The file's bytes and what they say, or why it is left alone. Claude Code makes the file
+/// only when a setting is first changed, so a folder without one is an empty file not yet
+/// written: no bytes, and nothing in it.
+fn read(file: &Path) -> Result<(Option<Vec<u8>>, Value), State> {
     let bytes = match fs::read(file) {
         Ok(bytes) => bytes,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(State::Missing),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // A link that leads nowhere is someone's setup, not an absent file.
+            let absent = fs::symlink_metadata(file).is_err();
+            let folder = file.parent().is_some_and(Path::is_dir);
+            return if !folder { Err(State::Missing) } else if absent { Ok((None, json!({}))) } else { Err(State::Manual) };
+        }
         Err(_) => return Err(State::Manual),
     };
     // Claude Code's settings are strict JSON. A file with comments, or one that is not text,
@@ -115,7 +124,7 @@ fn read(file: &Path) -> Result<(Vec<u8>, Value), State> {
         None => doc.is_object(),
         Some(permissions) => permissions.is_object() && permissions.get("allow").is_none_or(Value::is_array),
     };
-    if fits { Ok((bytes, doc)) } else { Err(State::Manual) }
+    if fits { Ok((Some(bytes), doc)) } else { Err(State::Manual) }
 }
 
 fn has(doc: &Value, rule: &str) -> bool {
@@ -125,14 +134,20 @@ fn has(doc: &Value, rule: &str) -> bool {
 /// Whether the rules are in the file right now. This is what the switch shows: the file, not
 /// something Clipframes remembers.
 pub fn state(file: &Path, rules: &[String]) -> State {
+    if rules.is_empty() {
+        return State::Unnamed;
+    }
     match read(file) {
-        Ok((_, doc)) => if !rules.is_empty() && rules.iter().all(|rule| has(&doc, rule)) { State::On } else { State::Off },
+        Ok((_, doc)) => if rules.iter().all(|rule| has(&doc, rule)) { State::On } else { State::Off },
         Err(state) => state,
     }
 }
 
 /// Adds the rules or takes them away, and says what the file holds afterwards.
 pub fn set(file: &Path, rules: &[String], on: bool) -> State {
+    if rules.is_empty() {
+        return State::Unnamed;
+    }
     let done = if on { change(file, &[], rules) } else { change(file, rules, &[]) };
     done.map_or_else(|state| state, |()| state(file, rules))
 }
@@ -152,14 +167,17 @@ fn change(file: &Path, drop: &[String], add: &[String]) -> Result<(), State> {
     let _one = CHANGING.lock().unwrap_or_else(|e| e.into_inner());
     // A few tries: Claude Code writes this file too, and may do so between our read and write.
     for _ in 0..3 {
-        // Rules out a missing file before anything is resolved or written.
-        read(file)?;
+        // Rules out a missing folder before anything is resolved or written.
+        let there = read(file)?.0.is_some();
         // A settings file that is a link to one kept elsewhere is changed where it is, so the
-        // link stays a link.
-        let real = fs::canonicalize(file).map_err(|_| State::Manual)?;
+        // link stays a link. One that does not exist yet is made in the folder as it is.
+        let real = if there { fs::canonicalize(file).map_err(|_| State::Manual)? } else { file.to_path_buf() };
         let (bytes, mut doc) = read(&real)?;
-        let permissions = fs::metadata(&real).map_err(|_| State::Manual)?.permissions();
-        if permissions.readonly() {
+        let permissions = match &bytes {
+            Some(_) => Some(fs::metadata(&real).map_err(|_| State::Manual)?.permissions()),
+            None => None,
+        };
+        if permissions.as_ref().is_some_and(|p| p.readonly()) {
             return Err(State::Manual);
         }
         let before = doc.clone();
@@ -175,15 +193,18 @@ fn change(file: &Path, drop: &[String], add: &[String]) -> Result<(), State> {
             return Ok(());
         }
         let mut text = serde_json::to_string_pretty(&doc).map_err(|_| State::Manual)?;
-        if bytes.ends_with(b"\n") {
+        if bytes.as_ref().is_none_or(|bytes| bytes.ends_with(b"\n")) {
             text.push('\n');
         }
         let dir = real.parent().ok_or(State::Manual)?;
         let part = dir.join(PART);
-        let written = fs::write(&part, text).and_then(|()| fs::set_permissions(&part, permissions));
-        // Still the file that was read? Then the new one takes its place in one step.
-        if written.is_ok() && fs::read(&real).is_ok_and(|now| now == bytes) {
-            back_up(&real, dir);
+        let written = fs::write(&part, text).and_then(|()| permissions.map_or(Ok(()), |p| fs::set_permissions(&part, p)));
+        // Still the file that was read, or still no file? Then the new one takes its place in
+        // one step.
+        if written.is_ok() && fs::read(&real).ok() == bytes && (bytes.is_some() || fs::symlink_metadata(&real).is_err()) {
+            if bytes.is_some() {
+                back_up(&real, dir);
+            }
             if fs::rename(&part, &real).is_ok() {
                 return Ok(());
             }
@@ -271,15 +292,49 @@ mod tests {
     }
 
     #[test]
-    fn without_a_settings_file_claude_code_is_not_there_and_nothing_is_made() {
+    fn without_its_folder_claude_code_is_not_there_and_nothing_is_made() {
         let file = scratch("missing", None);
         assert_eq!(state(&file, &ours()), State::Missing);
         assert_eq!(set(&file, &ours(), true), State::Missing);
+        assert_eq!(set(&file, &ours(), false), State::Missing);
         assert!(!file.parent().unwrap().exists(), "the folder must not be made");
-        // The folder without the file is the same.
+    }
+
+    #[test]
+    fn a_folder_without_a_settings_file_gets_one_holding_only_the_rule() {
+        let file = scratch("no-file", None);
         fs::create_dir_all(file.parent().unwrap()).unwrap();
-        assert_eq!(set(&file, &ours(), true), State::Missing);
-        assert_eq!(fs::read_dir(file.parent().unwrap()).unwrap().count(), 0);
+        assert_eq!(state(&file, &ours()), State::Off);
+        // Off when there is nothing makes nothing.
+        assert_eq!(set(&file, &ours(), false), State::Off);
+        assert!(!file.exists());
+        assert_eq!(set(&file, &ours(), true), State::On);
+        assert_eq!(text(&file), "{\n  \"permissions\": {\n    \"allow\": [\n      \"Read(~/Clipframes/**)\"\n    ]\n  }\n}\n");
+        assert_eq!(fs::read_dir(file.parent().unwrap()).unwrap().count(), 1, "nothing was there to copy, and nothing is left behind");
+        // Off takes the rule out and leaves the file.
+        assert_eq!(set(&file, &ours(), false), State::Off);
+        assert_eq!(text(&file), "{\n  \"permissions\": {\n    \"allow\": []\n  }\n}\n");
+        done(&file);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_settings_link_that_leads_nowhere_is_left_alone() {
+        let file = scratch("dangling", None);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(file.with_file_name("gone.json"), &file).unwrap();
+        assert_eq!(set(&file, &ours(), true), State::Manual);
+        assert!(fs::symlink_metadata(&file).unwrap().file_type().is_symlink());
+        assert!(!file.with_file_name("gone.json").exists());
+        done(&file);
+    }
+
+    #[test]
+    fn a_folder_no_rule_can_name_is_said_to_be_that() {
+        let file = scratch("unnamed", Some("{}"));
+        assert_eq!(state(&file, &[]), State::Unnamed);
+        assert_eq!(set(&file, &[], true), State::Unnamed);
+        assert_eq!(text(&file), "{}");
         done(&file);
     }
 

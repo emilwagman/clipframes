@@ -15,7 +15,7 @@ interface SettingsView {
   version: string;
   update: string;
   mac: boolean;
-  claudeRead: "on" | "off" | "missing" | "manual";
+  claudeRead: "on" | "off" | "missing" | "unnamed" | "manual";
   claudeRules: string[];
 }
 
@@ -76,10 +76,12 @@ export function Settings() {
     : message || (view.shortcutWorks ? "Click it to change." : `${view.shortcutLabel} is used by another app, so it does nothing here. Click it and choose another.`);
   const claudeHelp =
     view.claudeRead === "missing"
-      ? "Claude Code's settings file was not found on this computer."
-      : view.claudeRead === "manual"
+      ? "Claude Code's settings folder was not found on this computer."
+      : view.claudeRead === "unnamed"
+        ? "The Clipframes folder is on a network share, which a Claude Code rule cannot name."
+        : view.claudeRead === "manual"
         ? "Clipframes cannot change Claude Code's settings file safely. Add this to the allow list in it by hand:"
-        : "Adds a rule for the Clipframes folder to Claude Code's settings. Switching off removes it again.";
+          : "Adds a rule for the Clipframes folder to Claude Code's settings. Switching off removes it again.";
 
   return (
     <main className="settings">
@@ -108,7 +110,7 @@ export function Settings() {
             id="claude"
             type="checkbox"
             checked={view.claudeRead === "on"}
-            disabled={view.claudeRead === "missing" || view.claudeRead === "manual"}
+            disabled={view.claudeRead !== "on" && view.claudeRead !== "off"}
             onChange={(e) => void invoke<SettingsView>("claude_read_set", { on: e.target.checked }).then(setView)}
           />
         </label>
