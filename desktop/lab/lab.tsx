@@ -1,6 +1,6 @@
 // The real bar, comment box and overlay over the demo page, in one browser window, so the look
 // can be judged without running the app. ?state=empty|picked|area|recording picks the moment.
-// ?note=box|line|ghost|dock shows each way of writing a comment that is being tried (ghost
+// ?note=ghost|dock|box shows each way of writing a comment that is being tried (ghost
 // with &faint=1: the pointer over it), and ?said= puts words in it.
 // ?page=dark shows it over a dark page, and ?tab=1 adds the tab beside the bar.
 import { createRoot } from "react-dom/client";
@@ -21,7 +21,7 @@ const state = query.get("state") ?? "picked";
 if (query.get("look")) document.documentElement.dataset.look = query.get("look") as string;
 const BAR = { w: 404, h: 64 };
 const NOTE = { w: 316, h: 172 };
-const noteStyle = query.get("note") ?? "box";
+const noteStyle = query.get("note") ?? "ghost";
 
 // Example captures for the History window.
 const examples: HistoryApi = {
@@ -95,7 +95,7 @@ const start = () => {
   mount("bar", (innerWidth - BAR.w) / 2, innerHeight - BAR.h - 40, BAR.w, BAR.h, <Bar />);
   // Where the app's core puts it (`note_spot` in src-tauri/src/app.rs), for this pick on this page.
   const under = { x: Math.min(overdue.x, innerWidth - NOTE.w - 8), y: overdue.y + overdue.height + 8 };
-  const slim = noteStyle === "line" || noteStyle === "ghost";
+  const slim = noteStyle === "ghost";
   // The one-line box says how tall it needs to be, as it tells the core in the app.
   if (slim) platform.resizeNote = async (height) => void ((document.getElementById("note") as HTMLElement).style.height = `${height}px`);
   if (query.get("faint")) useStore.setState({ faint: true });

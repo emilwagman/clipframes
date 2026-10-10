@@ -64,7 +64,7 @@ button.quiet:hover { color: var(--text); }
 .bar.wide .grip { margin: 0 -6px 0 -16px; }
 .bar.wide.back .grip { margin: 0 -6px 0 -4px; }
 @keyframes pulse { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } button.round, .grip, .note.slim.ghost { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } button.round, .grip, .note.slim { transition: none; } }
 
 .note { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--radius); }
 .note .what { padding: 0 2px; color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -72,13 +72,12 @@ button.quiet:hover { color: var(--text); }
 .note textarea::placeholder { color: var(--text-2); }
 .note textarea:focus { border-color: var(--accent); }
 .note .foot { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-/* The one-line comment box: the pick's number, the words, and a way to take the pick back. */
-.note.slim { inset: 8px 8px auto 8px; flex-direction: row; align-items: flex-start; gap: 8px; padding: 9px 8px 9px 12px; border-radius: 22px; }
+/* The one-line comment box: the pick's number and the words. It lets the pointer through,
+   and goes faint under it to show what it covers. */
+.note.slim { inset: 8px 8px auto 8px; flex-direction: row; align-items: flex-start; gap: 8px; padding: 9px 14px 9px 12px; border-radius: 22px; transition: opacity 0.12s; }
+.note.slim.faint { opacity: 0.2; }
 .note.slim .num { margin-top: 3px; flex: none; }
 .note.slim textarea { flex: 1; height: 26px; padding: 3px 0; border: 0; background: none; border-radius: 0; }
-/* As "ghost" it lets the pointer through, and goes faint under it to show what it covers. */
-.note.slim.ghost { padding-right: 14px; transition: opacity 0.12s; }
-.note.slim.ghost.faint { opacity: 0.2; }
 /* The comment typed in the bar: the pick's number and name, then the words. */
 .bar > .num { flex: none; margin-left: 2px; }
 .bar .what { flex: 0 1 auto; max-width: 132px; margin: 0 6px; color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

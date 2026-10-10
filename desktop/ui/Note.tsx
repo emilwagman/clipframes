@@ -2,7 +2,6 @@
 // thing, or Enter on an empty box, moves on.
 
 import { useEffect, useRef, useState } from "react";
-import { Icon } from "./icons";
 import { usePlatform, useRound, useStore } from "./store";
 
 /**
@@ -68,9 +67,8 @@ export function Note() {
   const platform = usePlatform();
   const style = useRound().noteStyle;
   const faint = useStore((s) => s.faint);
-  // The one-line box: a third as tall, so it covers less of what is picked next. As "ghost"
-  // it has nothing to click: the pointer goes through it to what it covers.
-  const slim = style === "line" || style === "ghost";
+  // The one-line box: a third as tall, and with nothing to click. The pointer goes through
+  // it to what it covers, so the next thing can be picked while this comment is still open.
   const ghost = style === "ghost";
   const { index, pick, text, input, write, save, remove, onKeyDown } = useComment<HTMLTextAreaElement>(style !== "dock");
   const card = useRef<HTMLDivElement>(null);
@@ -79,28 +77,22 @@ export function Note() {
   // with it: 8px of room for the shadow on each side.
   useEffect(() => {
     const node = input.current;
-    if (!slim || !node || !card.current) return;
+    if (!ghost || !node || !card.current) return;
     node.style.height = "26px";
     node.style.height = `${Math.min(66, node.scrollHeight)}px`;
     void platform.resizeNote?.(card.current.offsetHeight + 16);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, index, slim]);
+  }, [text, index, ghost]);
 
   if (index === null || !pick) return null;
 
-  if (slim) {
-    // The pick's number instead of its name, and no Save: Enter saves, and so does picking the next thing.
+  if (ghost) {
+    // The pick's number instead of its name, and no buttons: Enter saves, and so does picking
+    // the next thing; Backspace in an empty comment takes the pick back.
     return (
-      <div className={ghost ? (faint ? "note slim ghost faint" : "note slim ghost") : "note slim"} ref={card}>
-        <b className="num" title={pick.headline}>
-          {index + 1}
-        </b>
-        <textarea ref={input} id="comment" rows={1} value={text} placeholder="What should change?" spellCheck={false} autoComplete="off" onChange={(e) => write(e.target.value)} onKeyDown={onKeyDown(ghost)} />
-        {!ghost && (
-          <button className="round small" aria-label="Remove this pick" title="Remove this pick" onClick={() => void remove()}>
-            <Icon name="trash" />
-          </button>
-        )}
+      <div className={faint ? "note slim faint" : "note slim"} ref={card}>
+        <b className="num">{index + 1}</b>
+        <textarea ref={input} id="comment" rows={1} value={text} placeholder="What should change?" spellCheck={false} autoComplete="off" onChange={(e) => write(e.target.value)} onKeyDown={onKeyDown(true)} />
       </div>
     );
   }

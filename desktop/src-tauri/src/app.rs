@@ -62,7 +62,7 @@ const BAR_SETTLE: Duration = Duration::from_millis(120);
 /// Sizes in CSS pixels.
 const BAR_SIZE: (f64, f64) = (404.0, 64.0);
 const NOTE_SIZE: (f64, f64) = (316.0, 172.0);
-/// The one-line comment box: its height with one line, and with as many as it grows to.
+/// The comment box: its height with one line, and with as many as it grows to.
 const LINE_HEIGHT: (f64, f64) = (60.0, 100.0);
 
 /// The bar with a comment being typed in it (the `dock` comment style) is this wide.
@@ -103,27 +103,26 @@ fn tab_at(place: TabPlace, area: &Rect, bar: &Rect, home: &Rect, side: f64) -> (
     }
 }
 
-/// How a comment is written. Ways being compared; chosen with CLIPFRAMES_NOTE_STYLE at start.
+/// How a comment is written. Ways still being compared; CLIPFRAMES_NOTE_STYLE=dock or =box
+/// at start chooses one of the others.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum NoteStyle {
-    /// A box under the pick, three lines and two buttons.
-    Box,
-    /// Under the pick, one line tall, growing as more is typed.
-    Line,
-    /// The one-line box, which takes the keyboard and nothing else: the pointer goes
-    /// through it, so what it covers can be pointed at and picked.
+    /// A box under the pick, one line tall and growing as more is typed, which takes the
+    /// keyboard and nothing else: the pointer goes through it, so what it covers can be
+    /// pointed at and picked.
     Ghost,
     /// No box at the pick: the comment is typed in the bar, which widens for it.
     Dock,
+    /// A box under the pick, three lines and two buttons, that clicks do not go through.
+    Box,
 }
 
 fn note_style_named(name: &str) -> NoteStyle {
     match name.trim().to_ascii_lowercase().as_str() {
-        "line" => NoteStyle::Line,
-        "ghost" => NoteStyle::Ghost,
         "dock" => NoteStyle::Dock,
-        _ => NoteStyle::Box,
+        "box" => NoteStyle::Box,
+        _ => NoteStyle::Ghost,
     }
 }
 
@@ -135,7 +134,7 @@ fn note_style() -> NoteStyle {
 impl NoteStyle {
     /// Whether the comment box is one line tall.
     fn slim(self) -> bool {
-        matches!(self, NoteStyle::Line | NoteStyle::Ghost)
+        self == NoteStyle::Ghost
     }
 
     /// Whether a click on the comment box is the box's own. The ghost box has nothing to
@@ -167,6 +166,13 @@ fn note_spot(screen: &Rect, pick: &Rect, size: (f64, f64), gap: f64) -> (f64, f6
 /// Whether a point is on a rectangle. One with no size, not placed yet, holds nothing.
 fn contains(r: &Rect, x: f64, y: f64) -> bool {
     r.width > 0.0 && x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height
+}
+
+/// Whether the ghost comment box is drawn faint: the pointer is on it, so it is in the way
+/// of what the user is looking at. Only where the pointer is counts, not whether it moved
+/// or what was read under it.
+fn faint_under(note: Option<&Rect>, pointer: Option<(f64, f64)>) -> bool {
+    matches!((note, pointer), (Some(note), Some((x, y))) if contains(note, x, y))
 }
 
 /// Where the left edge of the bar goes when it widens for a comment: where it is, so the
@@ -280,6 +286,8 @@ pub struct Core {
     noted: Mutex<Option<Noted>>,
     /// The pointer is over the ghost comment box, which has gone faint to show what is under it.
     faint: AtomicBool,
+    /// A thread is looking at where the pointer is for that (`watch_faint`).
+    faint_watch: AtomicBool,
     /// Where the bar's left edge was before it widened for a comment and had to move for it.
     docked_from: Mutex<Option<PhysicalPosition<i32>>>,
 }
@@ -1265,14 +1273,7 @@ fn later(app: &AppHandle, f: fn(&AppHandle)) {
 fn on_event(app: &AppHandle, event: Event) {
     let core = app.state::<Core>();
     match event {
-        Event::Hover { x, y, element, .. } => {
-            if note_style() == NoteStyle::Ghost {
-                // Over the box the pointer is on what the box covers: the box goes faint.
-                let over = core.noting.lock().unwrap().is_some() && core.noted.lock().unwrap().as_ref().is_some_and(|n| contains(&n.at, x, y));
-                if core.faint.swap(over, Ordering::SeqCst) != over {
-                    let _ = app.emit_to(NOTE, "faint", over);
-                }
-            }
+        Event::Hover { element, .. } => {
             let frame = element.as_ref().map(|e| e.frame).filter(|f| f.width > 0.0 && f.height > 0.0);
             {
                 let mut shown = core.shown.lock().unwrap();
@@ -1541,10 +1542,35 @@ fn show_note(app: &AppHandle, frame: &Rect) {
     let core = app.state::<Core>();
     let height = if note_style().slim() { LINE_HEIGHT.0 } else { NOTE_SIZE.1 };
     *core.noted.lock().unwrap() = Some(Noted { pick: *frame, at: Rect::default(), height });
-    if core.faint.swap(false, Ordering::SeqCst) {
-        let _ = app.emit_to(NOTE, "faint", false);
-    }
     place_note(app, true);
+    if note_style() == NoteStyle::Ghost && !core.faint_watch.swap(true, Ordering::SeqCst) {
+        let app = app.clone();
+        thread::spawn(move || watch_faint(&app));
+    }
+}
+
+/// While the ghost comment box is open: is the pointer on it? Asked of the system a dozen
+/// times a second, and not taken from the picker's readings: the box must go faint for a
+/// pointer that rests on it, however it got there and whatever the app under it answers.
+fn watch_faint(app: &AppHandle) {
+    let core = app.state::<Core>();
+    loop {
+        let open = core.noting.lock().unwrap().is_some() && core.picker.lock().unwrap().is_some();
+        let note = core.noted.lock().unwrap().as_ref().map(|n| n.at).filter(|_| open);
+        let faint = faint_under(note.as_ref(), element::pointer());
+        if core.faint.swap(faint, Ordering::SeqCst) != faint {
+            let _ = app.emit_to(NOTE, "faint", faint);
+        }
+        if !open {
+            core.faint_watch.store(false, Ordering::SeqCst);
+            // A box opened in this very moment found the watch still on and started none.
+            if core.noting.lock().unwrap().is_some() && !core.faint_watch.swap(true, Ordering::SeqCst) {
+                continue;
+            }
+            break;
+        }
+        thread::sleep(Duration::from_millis(80));
+    }
 }
 
 /// Puts the comment box where it belongs for the pick it is open for.
@@ -2603,7 +2629,7 @@ mod tests {
     #[test]
     fn the_tab_place_and_the_note_style_come_from_their_names() {
         assert_eq!(["", "under", "Edge", " edge ", "bar", "nearest"].map(tab_place_named), [TabPlace::Under, TabPlace::Under, TabPlace::Edge, TabPlace::Edge, TabPlace::Under, TabPlace::Under]);
-        assert_eq!(["", "box", "Line", " ghost ", "DOCK", "aside"].map(note_style_named), [NoteStyle::Box, NoteStyle::Box, NoteStyle::Line, NoteStyle::Ghost, NoteStyle::Dock, NoteStyle::Box]);
+        assert_eq!(["", "ghost", "Box", " dock ", "DOCK", "line"].map(note_style_named), [NoteStyle::Ghost, NoteStyle::Ghost, NoteStyle::Box, NoteStyle::Dock, NoteStyle::Dock, NoteStyle::Ghost]);
     }
 
     #[test]
@@ -2686,16 +2712,22 @@ mod tests {
 
     #[test]
     fn only_the_ghost_box_lets_clicks_through_and_only_the_dock_has_no_box() {
-        assert!(NoteStyle::Box.takes_clicks() && NoteStyle::Line.takes_clicks() && NoteStyle::Dock.takes_clicks());
+        assert!(NoteStyle::Box.takes_clicks() && NoteStyle::Dock.takes_clicks());
         assert!(!NoteStyle::Ghost.takes_clicks(), "a click on it is a pick of what it covers");
-        assert!(NoteStyle::Ghost.slim() && NoteStyle::Line.slim() && !NoteStyle::Box.slim());
-        assert!(NoteStyle::Ghost.at_the_pick() && !NoteStyle::Dock.at_the_pick());
-        // What the picker asks for a pointer position while the ghost box is open: is it on
-        // the box, so the box goes faint.
+        assert!(NoteStyle::Ghost.slim() && !NoteStyle::Box.slim());
+        assert!(NoteStyle::Ghost.at_the_pick() && NoteStyle::Box.at_the_pick() && !NoteStyle::Dock.at_the_pick());
+    }
+
+    #[test]
+    fn the_ghost_box_is_faint_exactly_while_the_pointer_is_on_it() {
         let ghost = Rect { x: 600.0, y: 348.0, width: 316.0, height: 60.0 };
-        assert!(contains(&ghost, 700.0, 380.0));
-        assert!(!contains(&ghost, 700.0, 420.0), "on the row under it");
-        assert!(!contains(&Rect::default(), 0.0, 0.0), "a box not placed yet is nowhere");
+        assert!(faint_under(Some(&ghost), Some((700.0, 380.0))), "resting on it is enough: no move, no reading");
+        assert!(faint_under(Some(&ghost), Some((600.0, 348.0))), "its own corner");
+        assert!(!faint_under(Some(&ghost), Some((700.0, 420.0))), "on the row under it");
+        assert!(!faint_under(Some(&ghost), Some((916.0, 380.0))), "just past its right edge");
+        assert!(!faint_under(None, Some((700.0, 380.0))), "no box open");
+        assert!(!faint_under(Some(&ghost), None), "the system does not say where the pointer is");
+        assert!(!faint_under(Some(&Rect::default()), Some((0.0, 0.0))), "a box not placed yet is nowhere");
     }
 
     #[test]

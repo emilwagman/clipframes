@@ -48,8 +48,8 @@ export interface RoundView {
   shortcut: string;
   place: PlaceView | null;
   /**
-   * How a comment is written, while several ways are being compared: "line" is a one-line box,
-   * "ghost" one the pointer goes through, "dock" a field in the bar; anything else today's box.
+   * How a comment is written, while the ways are being compared: "ghost" is a one-line box the
+   * pointer goes through, "dock" a field in the bar; anything else the box with its buttons.
    */
   noteStyle?: string;
 }
