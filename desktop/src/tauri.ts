@@ -30,6 +30,7 @@ export const platform: Platform = {
   stopRecording: () => invoke("recording_stop"),
   setNote: (index, note) => invoke("note_set", { index, note, seq: ++noteSeq }),
   closeNote: () => invoke("note_close"),
+  resizeNote: (height) => invoke("note_resize", { height }),
   removePick: (index) => invoke("pick_remove", { index }),
   setAuto: (on) => invoke("place_auto_set", { on }),
   moveBar: (home) => invoke(home ? "bar_home" : "bar_grip"),

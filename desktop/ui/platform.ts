@@ -47,6 +47,8 @@ export interface RoundView {
   /** The shortcut as people write it, e.g. "Ctrl+Shift+Space". */
   shortcut: string;
   place: PlaceView | null;
+  /** Which comment box to draw, while several are being compared: "line" is the one-line box, anything else today's. */
+  noteStyle?: string;
 }
 
 /** The highlight under the pointer, in the overlay's own pixels. */
@@ -81,6 +83,8 @@ export interface Platform {
   stopRecording(): Promise<void>;
   setNote(index: number, note: string): Promise<void>;
   closeNote(): Promise<void>;
+  /** The one-line comment box needs a window this tall (CSS pixels) for what is typed in it. */
+  resizeNote?(height: number): Promise<void>;
   removePick(index: number): Promise<void>;
   /** Turns the tab that appears by itself in this place on or off. */
   setAuto(on: boolean): Promise<void>;

@@ -1,5 +1,7 @@
 // The real bar, comment box and overlay over the demo page, in one browser window, so the look
 // can be judged without running the app. ?state=empty|picked|area|recording picks the moment.
+// ?note=box|line|aside|yield shows the comment box each way it is being tried (yield: after it
+// has stepped out of the way), and ?said= puts words in it.
 // ?page=dark shows it over a dark page, and ?tab=1 adds the tab beside the bar.
 import { createRoot } from "react-dom/client";
 import "../ui/style.css";
@@ -19,6 +21,7 @@ const state = query.get("state") ?? "picked";
 if (query.get("look")) document.documentElement.dataset.look = query.get("look") as string;
 const BAR = { w: 404, h: 64 };
 const NOTE = { w: 316, h: 172 };
+const noteStyle = query.get("note") ?? "box";
 
 // Example captures for the History window.
 const examples: HistoryApi = {
@@ -58,7 +61,7 @@ const start = () => {
     picks: picked
       ? [
           { kind: "element", headline: 'Button "New invoice"', selector: "#new-invoice .btn.btn-primary", note: "make this green" },
-          { kind: "element", headline: 'Text "$3,120"', selector: "#overdue-total .stat.overdue", note: "too alarming, use the normal text colour" },
+          { kind: "element", headline: 'Text "$3,120"', selector: "#overdue-total .stat.overdue", note: query.get("said") ?? "too alarming, use the normal text colour" },
         ]
       : [],
     noting: picked ? 1 : null,
@@ -67,6 +70,7 @@ const start = () => {
     trouble: state.startsWith("screen") ? state : null,
     shortcut: "Ctrl+Shift+Space",
     place: { name: "Google Chrome · localhost:3000", auto: true },
+    noteStyle,
   };
   const none = async () => {};
   const platform: Platform = {
@@ -89,8 +93,15 @@ const start = () => {
   };
   createRoot(document.getElementById("overlay") as HTMLElement).render(<Overlay />);
   mount("bar", (innerWidth - BAR.w) / 2, innerHeight - BAR.h - 40, BAR.w, BAR.h, <Bar />);
-  // Kept on screen, the way the app clamps it to the display.
-  mount("note", Math.min(overdue.x, innerWidth - NOTE.w - 8), overdue.y + overdue.height + 8, NOTE.w, NOTE.h, <Note />);
+  // Where the app's core puts each (`note_spot` in src-tauri/src/app.rs), for this pick on this page.
+  const under = { x: Math.min(overdue.x, innerWidth - NOTE.w - 8), y: overdue.y + overdue.height + 8 };
+  const right = overdue.x + overdue.width + 8;
+  const beside = { x: right + NOTE.w + 8 <= innerWidth ? right : overdue.x - NOTE.w - 8, y: overdue.y };
+  const over = { x: under.x, y: overdue.y - NOTE.h - 8 };
+  const at = noteStyle === "aside" ? beside : noteStyle === "yield" ? (over.y >= 8 ? over : beside) : under;
+  // The one-line box says how tall it needs to be, as it tells the core in the app.
+  if (noteStyle === "line") platform.resizeNote = async (height) => void ((document.getElementById("note") as HTMLElement).style.height = `${height}px`);
+  mount("note", at.x, at.y, NOTE.w, noteStyle === "line" ? 60 : NOTE.h, <Note />);
   if (query.get("tab")) {
     const host = document.body.appendChild(document.createElement("div"));
     host.id = "tab";

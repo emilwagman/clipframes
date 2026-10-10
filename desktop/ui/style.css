@@ -72,6 +72,12 @@ button.quiet:hover { color: var(--text); }
 .note textarea::placeholder { color: var(--text-2); }
 .note textarea:focus { border-color: var(--accent); }
 .note .foot { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+/* The one-line comment box: the pick's number, the words, and a way to take the pick back. */
+.note.slim { inset: 8px 8px auto 8px; flex-direction: row; align-items: flex-start; gap: 8px; padding: 9px 8px 9px 12px; border-radius: 22px; }
+.note.slim .num { margin-top: 3px; flex: none; }
+.note.slim textarea { flex: 1; height: 26px; padding: 3px 0; border: 0; background: none; border-radius: 0; }
+button.round.small { width: 26px; height: 26px; }
+button.round.small svg.icon { width: 14px; height: 14px; }
 
 /* The overlay. Only transform, width and height change while the pointer moves. */
 .highlight, .mark, .drag { position: absolute; left: 0; top: 0; pointer-events: none; }
