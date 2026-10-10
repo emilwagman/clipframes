@@ -95,7 +95,7 @@ const arrives = (t) => t.page.waitForFunction(() => document.querySelector('[dat
 for (const [width, height] of [[1440, 900], [1280, 720]]) {
   for (const hero of ["", "a", "b", "c"]) {
     await session(`desktop ${width}×${height}, hero ${hero || "as built"}: the demo, what to do with it and the agent's text are in the first screen`, { viewport: { width, height } }, async (t) => {
-      assert.equal(await t.page.evaluate(() => document.documentElement.dataset.hero ?? ""), hero);
+      assert.equal(await t.page.evaluate(() => document.documentElement.dataset.hero), hero || "b");
       const stage = await t.box('[data-demo="hero"] [role=group]');
       const hint = await t.box('[data-demo="hero"] [data-hint]');
       const text = await t.box('[data-copied="hero"]');
@@ -125,7 +125,7 @@ await session("desktop: the hero's three layouts are three layouts", desktop, as
   assert.deepEqual(places, { a: { beside: true, promptBeside: false, first: false }, b: { beside: false, promptBeside: true, first: false }, c: { beside: false, promptBeside: true, first: true } });
   // A choice that is not one of the three is no choice.
   await t.page.goto(`${url}?hero=zzz`, { waitUntil: "networkidle" });
-  assert.equal(await t.page.evaluate(() => document.documentElement.dataset.hero ?? ""), "");
+  assert.equal(await t.page.evaluate(() => document.documentElement.dataset.hero), "b");
 });
 
 await session("desktop: nothing on the page moves out of place while it loads and plays", desktop, async (t) => {

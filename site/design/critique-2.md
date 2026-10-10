@@ -236,3 +236,108 @@ one orange and the app's own outlines stay as they are.
 Kept as it is: the headline and its outlined words, the light ground and black type, the
 orange as the only accent, the real interface in every demo, the examples that play by
 themselves, the made-up invoicing app, touch handling, the privacy page, the footer.
+
+## 8. What was built, and the same walk again
+
+Iteration 2 is on branch `site-3`. Measured the same way, on the built site, 2026-10-10.
+Pictures in `critique-2/after/`.
+
+What changed, against the problems above:
+
+1. The hero holds the demo and, joined to it, a black prompt titled "Pasted into your agent".
+   The example picks the New invoice button and types "make this green", and the line appears
+   in the prompt as it is typed, about five seconds after the page loads. A visitor's own pick
+   lands in the same prompt and on their clipboard.
+2. The demo is whole in the first screen at 1440×900 (404 of 404 px) and at 1280×720 the part
+   the example uses is. On a phone the prompt comes first and 291 px of the demo follow it in
+   the first screen.
+3. One sentence above the stage says it is the real bar and to click anything in the window.
+4. A line by the first download says captures stay on the computer and links to the last
+   section, where nine short answers sit beside the second download.
+5. Every demo has its own prompt, which shows what that demo copied. Before a demo has copied
+   anything its prompt shows the example's text faintly, so it is never empty.
+6. The sections follow the questions: hero, why and what is in the text, which one of four
+   (with the test result), every app (with the real recording), area, clip, the tab, history,
+   how it differs, the answers and the download.
+7. "How it differs from what you may use today" answers the screenshot, Agentation and a
+   browser extension in a paragraph each.
+8. After the hero each stage is 500 to 600 px and shares its row with its words and prompt.
+9. On a phone the downloads are a button that copies the link to the page, with one sentence
+   saying where Clipframes runs. Nothing is sent anywhere.
+10. The test result is in the "which one" section, with its limits ("on small projects").
+11. The recording of the app on Windows, Chrome beside Claude Code, is in the "every app"
+    section. It is 462 kB and nothing of it is fetched until it is within 700 px of the screen.
+    A phone gets two close-ups from the same recording (118 kB and 68 kB).
+12. The subhead is two sentences.
+
+The page went from 10.66 to 8.76 screens at 1440, and from 11.53 to 13.46 at 390 (a phone now
+gets a prompt under every demo and the nine answers as a list).
+
+### The hero's three layouts
+
+A matter of taste, so all three are on the real page: `?hero=a`, `?hero=b`, `?hero=c`.
+Pictures: `after/hero-a-1440x900-played.jpg` and its two neighbours.
+
+| | a: demo beside the headline | b: headline above the demo | c: demo first |
+|---|---|---|---|
+| Headline size at 1440 | 59 px | 77 px | 69 px |
+| Demo width at 1440 | 667 px, the made-up app without its sidebar | 808 px, with its sidebar | 808 px |
+| Agent's prompt | under the demo | beside the demo, as tall as it | beside the demo |
+| In the first screen at 1440×900 | everything, with three numbered steps | everything | everything; the headline is at 660 px |
+| In the first screen at 1280×720 | the demo whole, the prompt whole | the demo down to under the comment box, the prompt whole | the same, and the headline is cut off |
+| Reads as | a page about an app | iteration 1, with the demo moved up into view | a demo with a caption |
+
+**b is the one the page is built with.** It keeps what was liked in iteration 1 (the large
+headline on the left edge, the demo nearly as wide as the page) and is the arrangement four of
+the six reference sites use. a is the safest on small laptops and says the most in words. c
+shows the product soonest and says what it is last, which is the wrong order for someone who
+arrived from a post and does not know the name yet.
+
+### Before and after
+
+Screens down to the answer, at 1440 and at 390. "Nowhere" means not on the page.
+
+| # | Question | Before 1440 | After 1440 | Before 390 | After 390 |
+|---|---|---|---|---|---|
+| 1 | What is this? | 0.22 | 0.16 | 0.17 | 0.12 |
+| 2 | Is it for me? (the agents named) | 0.47 | 0.13 | 0.25 | 0.25 |
+| 2 | Is it for me? (the problem named) | 1.9 | 1.10 | 1.3 | 1.70 |
+| 3 | What does it do on my screen? | 0.82, 27% of the demo in the first screen | 0.45, all of it in the first screen | 0.79, 33% in the first screen | 0.66, 73% in the first screen |
+| 4 | What does my agent receive? | 3.72 | 0.75 | 3.70 | 0.44 |
+| 5 | Does it work in my app, native apps too? | 2.0 | 2.73, with a recording at 3.14 | 1.7 | 1.21 ("in any app"), section at 4.71 |
+| 6 | Does it work with my agent? | 0.47 | 0.13, again at 7.84 | 0.25 | 0.25, again at 12.11 |
+| 7 | Which systems? | 0.70 | 0.13 and 0.28 | 0.49 | 0.25 and 1.48 |
+| 8 | What does it cost? | 0.70 (one word) | 0.13 (in the subhead) | 0.49 | 0.25 |
+| 9 | What leaves my computer? | 8.84 | 0.31 (one line and a link), in full at 8.21 | 9.17 | 1.54 (one line and a link), in full at 12.75 |
+| 10 | How do I install, what will it ask for? | 9.78 | 8.10, linked from 0.31 | 10.47 | 12.57, linked from 1.54 |
+| 11 | How heavy is it? | Nowhere | 7.90 | Nowhere | 12.24 |
+| 12 | Why not a screenshot? | Nowhere | 7.23 | Nowhere | 10.70 |
+| 13 | Why not Agentation or an extension? | 9.57 | 7.23 | 9.91 | 11.04 |
+| 14 | Who made it? | 10.6 | 8.46 | 11.4 | 13.16 |
+| | Is there proof it helps? (the agent test) | Nowhere | 2.10 | Nowhere | 3.27 |
+
+Read honestly:
+
+- Questions 1 to 4, 6, 7 and 8 are now answered in the first screen at 1440. On a phone the
+  agent's text is in the first screen and the demo is three quarters in it.
+- Questions 9 and 10 have a one-line answer and a link in the first screen at 1440 (and at 1.5
+  screens on a phone), and the full answer beside the second download. The full answer is
+  still at the end of the page. It was put there because that is where the second download
+  is; a visitor who wants it sooner has the link.
+- Questions 12 and 13 are after the product sections, as on the reference sites. They did not
+  move far at 1440 and are further down on a phone than before.
+- On a phone three rows got worse in screens (the problem named, 10 and 13), because the page
+  is longer there.
+
+### Rules the page now follows
+
+- The first screen shows the product working and the thing it produces, and says in one
+  sentence what a visitor can do with it.
+- A demo and what it proves are in view together: its words beside it, its text for the agent
+  beside or under it.
+- One question per section, in the order visitors ask them.
+- What someone checks before installing is said in one line by the first download and in
+  full beside the last one.
+- Nothing above the fold is a video. Recordings are fetched when they come near the screen.
+- A phone is not offered a download.
+- `node scripts/walk.mjs` prints where everything is; run it after any change to the order.

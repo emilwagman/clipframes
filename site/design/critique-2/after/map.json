@@ -1,0 +1,665 @@
+{
+ "390": {
+  "rows": [
+   {
+    "kind": "link",
+    "text": "Copy link → copy link",
+    "y": 14,
+    "bottom": 50,
+    "screens": 0.02,
+    "width": 96,
+    "height": 36,
+    "fixed": true
+   },
+   {
+    "kind": "hero",
+    "text": "Point at the thing Text \"the thing\" you want changed. Clipframes is a free app for Mac and",
+    "y": 65,
+    "bottom": 1345,
+    "screens": 0.08,
+    "width": 350,
+    "height": 1280
+   },
+   {
+    "kind": "h1",
+    "text": "Point at the thing Text \"the thing\" you want changed.",
+    "y": 102,
+    "bottom": 192,
+    "screens": 0.12,
+    "width": 350,
+    "height": 90
+   },
+   {
+    "kind": "copied text",
+    "text": "hero",
+    "y": 369,
+    "bottom": 479,
+    "screens": 0.44,
+    "width": 350,
+    "height": 110
+   },
+   {
+    "kind": "demo",
+    "text": "hero",
+    "y": 553,
+    "bottom": 953,
+    "screens": 0.66,
+    "width": 390,
+    "height": 400
+   },
+   {
+    "kind": "download",
+    "text": "Copy the link to this page Clipframes is free and runs on Mac and Windows. Open the link o",
+    "y": 1182,
+    "bottom": 1293,
+    "screens": 1.4,
+    "width": 350,
+    "height": 110
+   },
+   {
+    "kind": "link",
+    "text": "Copy the link to this page → copy link",
+    "y": 1182,
+    "bottom": 1232,
+    "screens": 1.4,
+    "width": 350,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "h2",
+    "text": "What is in the text",
+    "y": 1802,
+    "bottom": 1829,
+    "screens": 2.14,
+    "width": 350,
+    "height": 27
+   },
+   {
+    "kind": "anatomy",
+    "text": "What is in the text Text \"Paid\" What the thing is and what it says. (#invoice-table .badge",
+    "y": 1802,
+    "bottom": 2398,
+    "screens": 2.14,
+    "width": 350,
+    "height": 596
+   },
+   {
+    "kind": "h2",
+    "text": "It says which one you mean",
+    "y": 2486,
+    "bottom": 2551,
+    "screens": 2.95,
+    "width": 350,
+    "height": 65
+   },
+   {
+    "kind": "test result",
+    "text": "In a test on small projects, agents changed the right element in 24 of 24 tries when the l",
+    "y": 2760,
+    "bottom": 2875,
+    "screens": 3.27,
+    "width": 350,
+    "height": 115
+   },
+   {
+    "kind": "copied text",
+    "text": "picks",
+    "y": 2929,
+    "bottom": 3173,
+    "screens": 3.47,
+    "width": 350,
+    "height": 244
+   },
+   {
+    "kind": "demo",
+    "text": "picks",
+    "y": 3262,
+    "bottom": 3802,
+    "screens": 3.86,
+    "width": 390,
+    "height": 540
+   },
+   {
+    "kind": "h2",
+    "text": "It works in every app on your computer",
+    "y": 3978,
+    "bottom": 4043,
+    "screens": 4.71,
+    "width": 350,
+    "height": 65
+   },
+   {
+    "kind": "video",
+    "text": "video",
+    "y": 4399,
+    "bottom": 4595,
+    "screens": 5.21,
+    "width": 350,
+    "height": 197
+   },
+   {
+    "kind": "video",
+    "text": "video",
+    "y": 4732,
+    "bottom": 4863,
+    "screens": 5.61,
+    "width": 350,
+    "height": 131
+   },
+   {
+    "kind": "h2",
+    "text": "Drag over an area when it is easier to show",
+    "y": 5038,
+    "bottom": 5103,
+    "screens": 5.97,
+    "width": 350,
+    "height": 65
+   },
+   {
+    "kind": "copied text",
+    "text": "area",
+    "y": 5321,
+    "bottom": 5431,
+    "screens": 6.3,
+    "width": 350,
+    "height": 110
+   },
+   {
+    "kind": "demo",
+    "text": "area",
+    "y": 5520,
+    "bottom": 6020,
+    "screens": 6.54,
+    "width": 390,
+    "height": 500
+   },
+   {
+    "kind": "h2",
+    "text": "Record what happens when you click around",
+    "y": 6174,
+    "bottom": 6239,
+    "screens": 7.32,
+    "width": 350,
+    "height": 65
+   },
+   {
+    "kind": "copied text",
+    "text": "clip",
+    "y": 6486,
+    "bottom": 6596,
+    "screens": 7.68,
+    "width": 350,
+    "height": 110
+   },
+   {
+    "kind": "demo",
+    "text": "clip",
+    "y": 6684,
+    "bottom": 7184,
+    "screens": 7.92,
+    "width": 390,
+    "height": 500
+   },
+   {
+    "kind": "h2",
+    "text": "It is there when you come back",
+    "y": 7360,
+    "bottom": 7425,
+    "screens": 8.72,
+    "width": 350,
+    "height": 65
+   },
+   {
+    "kind": "demo",
+    "text": "tab",
+    "y": 7680,
+    "bottom": 8000,
+    "screens": 9.1,
+    "width": 390,
+    "height": 320
+   },
+   {
+    "kind": "h2",
+    "text": "Copy an earlier capture again",
+    "y": 8146,
+    "bottom": 8211,
+    "screens": 9.65,
+    "width": 350,
+    "height": 65
+   },
+   {
+    "kind": "h2",
+    "text": "How it differs from what you may use today",
+    "y": 8925,
+    "bottom": 8990,
+    "screens": 10.57,
+    "width": 350,
+    "height": 65
+   },
+   {
+    "kind": "h3",
+    "text": "A screenshot",
+    "y": 9030,
+    "bottom": 9057,
+    "screens": 10.7,
+    "width": 350,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "A toolbar in your project",
+    "y": 9319,
+    "bottom": 9346,
+    "screens": 11.04,
+    "width": 350,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "A browser extension",
+    "y": 9553,
+    "bottom": 9580,
+    "screens": 11.32,
+    "width": 350,
+    "height": 27
+   },
+   {
+    "kind": "h2",
+    "text": "Try it on your own app.",
+    "y": 9785,
+    "bottom": 9817,
+    "screens": 11.59,
+    "width": 350,
+    "height": 32
+   },
+   {
+    "kind": "download",
+    "text": "Copy the link to this page Clipframes is free and runs on Mac and Windows. Open the link o",
+    "y": 9847,
+    "bottom": 9958,
+    "screens": 11.67,
+    "width": 350,
+    "height": 110
+   },
+   {
+    "kind": "link",
+    "text": "Copy the link to this page → copy link",
+    "y": 9847,
+    "bottom": 9897,
+    "screens": 11.67,
+    "width": 350,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "facts",
+    "text": "Price Clipframes is free. Runs on A Mac with macOS 12 or later, on Apple Silicon or Intel,",
+    "y": 10002,
+    "bottom": 11146,
+    "screens": 11.85,
+    "width": 350,
+    "height": 1144
+   },
+   {
+    "kind": "link",
+    "text": "privacy page → /privacy",
+    "y": 11031,
+    "bottom": 11049,
+    "screens": 13.07,
+    "width": 93,
+    "height": 18,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Privacy → /privacy",
+    "y": 11294,
+    "bottom": 11317,
+    "screens": 13.38,
+    "width": 49,
+    "height": 23,
+    "fixed": false
+   }
+  ],
+  "total": 11357,
+  "screens": 13.46
+ },
+ "1440": {
+  "rows": [
+   {
+    "kind": "link",
+    "text": "Download → /download",
+    "y": 14,
+    "bottom": 50,
+    "screens": 0.02,
+    "width": 124,
+    "height": 36,
+    "fixed": true
+   },
+   {
+    "kind": "hero",
+    "text": "Point at the thing Text \"the thing\" you want changed. Clipframes is a free app for Mac and",
+    "y": 65,
+    "bottom": 845,
+    "screens": 0.07,
+    "width": 1200,
+    "height": 780
+   },
+   {
+    "kind": "h1",
+    "text": "Point at the thing Text \"the thing\" you want changed.",
+    "y": 143,
+    "bottom": 303,
+    "screens": 0.16,
+    "width": 624,
+    "height": 160
+   },
+   {
+    "kind": "download",
+    "text": "Download for Mac Download for Windows Free · Version 0.3 · macOS 12 or later · Windows 10 ",
+    "y": 189,
+    "bottom": 276,
+    "screens": 0.21,
+    "width": 520,
+    "height": 87
+   },
+   {
+    "kind": "link",
+    "text": "Download for Mac → /download/mac",
+    "y": 189,
+    "bottom": 239,
+    "screens": 0.21,
+    "width": 205,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Download for Windows → /download/windows",
+    "y": 189,
+    "bottom": 239,
+    "screens": 0.21,
+    "width": 244,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "demo",
+    "text": "hero",
+    "y": 404,
+    "bottom": 808,
+    "screens": 0.45,
+    "width": 806,
+    "height": 404
+   },
+   {
+    "kind": "copied text",
+    "text": "hero",
+    "y": 677,
+    "bottom": 790,
+    "screens": 0.75,
+    "width": 372,
+    "height": 113
+   },
+   {
+    "kind": "h2",
+    "text": "What is in the text",
+    "y": 999,
+    "bottom": 1027,
+    "screens": 1.11,
+    "width": 564,
+    "height": 27
+   },
+   {
+    "kind": "anatomy",
+    "text": "What is in the text Text \"Paid\" What the thing is and what it says. (#invoice-table .badge",
+    "y": 999,
+    "bottom": 1448,
+    "screens": 1.11,
+    "width": 564,
+    "height": 449
+   },
+   {
+    "kind": "h2",
+    "text": "It says which one you mean",
+    "y": 1596,
+    "bottom": 1700,
+    "screens": 1.77,
+    "width": 477,
+    "height": 104
+   },
+   {
+    "kind": "demo",
+    "text": "picks",
+    "y": 1639,
+    "bottom": 2239,
+    "screens": 1.82,
+    "width": 665,
+    "height": 600
+   },
+   {
+    "kind": "test result",
+    "text": "In a test on small projects, agents changed the right element in 24 of 24 tries when the l",
+    "y": 1892,
+    "bottom": 1985,
+    "screens": 2.1,
+    "width": 477,
+    "height": 94
+   },
+   {
+    "kind": "copied text",
+    "text": "picks",
+    "y": 2040,
+    "bottom": 2216,
+    "screens": 2.27,
+    "width": 477,
+    "height": 176
+   },
+   {
+    "kind": "h2",
+    "text": "It works in every app on your computer",
+    "y": 2454,
+    "bottom": 2557,
+    "screens": 2.73,
+    "width": 680,
+    "height": 104
+   },
+   {
+    "kind": "video",
+    "text": "video",
+    "y": 2829,
+    "bottom": 3481,
+    "screens": 3.14,
+    "width": 1200,
+    "height": 653
+   },
+   {
+    "kind": "h2",
+    "text": "Drag over an area when it is easier to show",
+    "y": 3687,
+    "bottom": 3842,
+    "screens": 4.1,
+    "width": 477,
+    "height": 155
+   },
+   {
+    "kind": "demo",
+    "text": "area",
+    "y": 3730,
+    "bottom": 4230,
+    "screens": 4.14,
+    "width": 665,
+    "height": 500
+   },
+   {
+    "kind": "copied text",
+    "text": "area",
+    "y": 4042,
+    "bottom": 4134,
+    "screens": 4.49,
+    "width": 477,
+    "height": 92
+   },
+   {
+    "kind": "h2",
+    "text": "Record what happens when you click around",
+    "y": 4414,
+    "bottom": 4518,
+    "screens": 4.9,
+    "width": 477,
+    "height": 104
+   },
+   {
+    "kind": "demo",
+    "text": "clip",
+    "y": 4457,
+    "bottom": 4957,
+    "screens": 4.95,
+    "width": 665,
+    "height": 500
+   },
+   {
+    "kind": "copied text",
+    "text": "clip",
+    "y": 4749,
+    "bottom": 4841,
+    "screens": 5.28,
+    "width": 477,
+    "height": 92
+   },
+   {
+    "kind": "h2",
+    "text": "It is there when you come back",
+    "y": 5172,
+    "bottom": 5275,
+    "screens": 5.75,
+    "width": 477,
+    "height": 104
+   },
+   {
+    "kind": "demo",
+    "text": "tab",
+    "y": 5215,
+    "bottom": 5555,
+    "screens": 5.79,
+    "width": 665,
+    "height": 340
+   },
+   {
+    "kind": "h2",
+    "text": "Copy an earlier capture again",
+    "y": 5740,
+    "bottom": 5843,
+    "screens": 6.38,
+    "width": 477,
+    "height": 104
+   },
+   {
+    "kind": "h2",
+    "text": "How it differs from what you may use today",
+    "y": 6359,
+    "bottom": 6463,
+    "screens": 7.07,
+    "width": 760,
+    "height": 104
+   },
+   {
+    "kind": "h3",
+    "text": "A screenshot",
+    "y": 6503,
+    "bottom": 6530,
+    "screens": 7.23,
+    "width": 363,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "A toolbar in your project",
+    "y": 6503,
+    "bottom": 6530,
+    "screens": 7.23,
+    "width": 363,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "A browser extension",
+    "y": 6503,
+    "bottom": 6530,
+    "screens": 7.23,
+    "width": 363,
+    "height": 27
+   },
+   {
+    "kind": "h2",
+    "text": "Try it on your own app.",
+    "y": 6904,
+    "bottom": 6956,
+    "screens": 7.67,
+    "width": 477,
+    "height": 52
+   },
+   {
+    "kind": "facts",
+    "text": "Price Clipframes is free. Runs on A Mac with macOS 12 or later, on Apple Silicon or Intel,",
+    "y": 6914,
+    "bottom": 7656,
+    "screens": 7.68,
+    "width": 667,
+    "height": 742
+   },
+   {
+    "kind": "download",
+    "text": "Download for Mac Download for Windows Free · Version 0.3 · macOS 12 or later · Windows 10 ",
+    "y": 6986,
+    "bottom": 7073,
+    "screens": 7.76,
+    "width": 477,
+    "height": 87
+   },
+   {
+    "kind": "link",
+    "text": "Download for Mac → /download/mac",
+    "y": 6986,
+    "bottom": 7036,
+    "screens": 7.76,
+    "width": 205,
+    "height": 50,
+    "fixed": true
+   },
+   {
+    "kind": "link",
+    "text": "Download for Windows → /download/windows",
+    "y": 6986,
+    "bottom": 7036,
+    "screens": 7.76,
+    "width": 244,
+    "height": 50,
+    "fixed": true
+   },
+   {
+    "kind": "link",
+    "text": "privacy page → /privacy",
+    "y": 7567,
+    "bottom": 7585,
+    "screens": 8.41,
+    "width": 93,
+    "height": 18,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Privacy → /privacy",
+    "y": 7821,
+    "bottom": 7844,
+    "screens": 8.69,
+    "width": 49,
+    "height": 23,
+    "fixed": false
+   }
+  ],
+  "total": 7884,
+  "screens": 8.76
+ }
+}

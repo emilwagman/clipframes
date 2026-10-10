@@ -44,7 +44,7 @@ for (const { name, options } of SIZES) {
     for (const el of document.querySelectorAll("[data-demo]")) rows.push(row("demo", el.querySelector("[role=group]") ?? el, el.dataset.demo));
     for (const el of document.querySelectorAll("[data-copied]")) rows.push(row("copied text", el, el.dataset.copied));
     for (const el of document.querySelectorAll("[data-walk]")) rows.push(row(el.dataset.walk, el, el.innerText || el.dataset.walk));
-    for (const el of document.querySelectorAll("video")) rows.push(row("video", el, el.currentSrc || el.getAttribute("src") || "video"));
+    for (const el of document.querySelectorAll("video")) if (el.getBoundingClientRect().width > 0) rows.push(row("video", el, el.currentSrc || el.getAttribute("src") || "video"));
     for (const el of document.querySelectorAll('a[href^="/download"], a[href="/privacy"], button[data-copy-link]')) {
       if (el.getBoundingClientRect().width === 0) continue;
       const fixed = (() => { for (let n = el; n && n !== document.body; n = n.parentElement) { const p = getComputedStyle(n).position; if (p === "fixed" || p === "sticky") return true; } return false; })();

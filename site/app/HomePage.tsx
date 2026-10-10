@@ -195,6 +195,7 @@ export function HomePage({ stars, preview = false }: { stars: number | null; pre
               Choose the area tool in the bar and drag over part of the screen. Clipframes saves a picture of the area
               with your comment. You can mix areas, elements and clips in one go.
             </p>
+            <Prompt id="area" example={COPIES.area} />
           </div>
           <div className={s.visual}>
             <Stage
@@ -204,7 +205,6 @@ export function HomePage({ stars, preview = false }: { stars: number | null; pre
               hint="Drag over any part of the page."
               touchHint="Drag sideways over any part of the page."
             />
-            <Prompt id="area" example={COPIES.area} />
           </div>
         </section>
 
@@ -216,6 +216,7 @@ export function HomePage({ stars, preview = false }: { stars: number | null; pre
               Choose the clip tool, drag over the area, do the thing and press Stop. The agent gets the frames in order
               and a list of every click you made.
             </p>
+            <Prompt id="clip" example={COPIES.clip} />
           </div>
           <div className={s.visual}>
             <Stage
@@ -225,7 +226,6 @@ export function HomePage({ stars, preview = false }: { stars: number | null; pre
               hint="Drag over an area to start recording, click around in the page, then press Stop."
               touchHint="Drag sideways over an area to start recording, tap around in the page, then press Stop."
             />
-            <Prompt id="clip" example={COPIES.clip} />
           </div>
         </section>
 

@@ -51,10 +51,10 @@
 .pointed { position: relative; display: inline-block; }
 .outline { position: absolute; inset: 0.07em -0.13em -0.07em; background: none; pointer-events: none; }
 
-/* The first screen: what it is, and beside it the app itself with the text it hands an agent.
+/* The first screen: what it is, and the app itself with the text it hands an agent.
    The hero has three layouts to compare, chosen with ?hero= (app/layout.tsx): the demo beside
-   the headline (a, and what a page with no choice gets), the headline above a demo as wide as
-   the page (b), and the demo first (c). The markup is the same for all three. */
+   the headline (a), the headline above a demo as wide as the page (b, which is what the page
+   has when nothing is chosen), and the demo first (c). The markup is the same for all three. */
 .hero { padding-top: clamp(28px, 4.4vw, 52px); display: flex; flex-direction: column; }
 .heroText, .pitch { display: contents; }
 .headline { container-type: inline-size; order: 1; padding-top: 0.5em; }
@@ -63,7 +63,7 @@
 /* Stacked, the prompt comes first: on a phone it is then still in view above the keyboard while a comment is typed. */
 .bench > figure:first-child { order: 2; margin-top: 10px; }
 .bench > figure:last-child { --lines: 4; }
-.heroGet .big { padding: 0 20px; }
+.heroGet .big, .endGet .big { padding: 0 20px; }
 @media (max-width: 640px) {
   /* A phone's first screen has room for the text or for a sentence about it. The window's own title says what it is. */
   .bench > figure:last-child figcaption { display: none; }
@@ -88,14 +88,14 @@
   .heroGet { margin-top: 34px; }
 
   /* b: the headline and the pitch side by side, above the demo and its prompt side by side. */
-  :global(html:is([data-hero="b"], [data-hero="c"])) .hero { --hero-stage: clamp(340px, calc(100vh - 470px), 470px); display: flex; gap: 0; align-items: stretch; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .hero { --hero-stage: clamp(340px, calc(100vh - 496px), 470px); display: flex; gap: 0; align-items: stretch; }
   :global(html:is([data-hero="b"], [data-hero="c"])) .heroText { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 56px; align-items: end; order: 1; }
   :global(html:is([data-hero="b"], [data-hero="c"])) .headline { padding-top: 0; }
   :global(html:is([data-hero="b"], [data-hero="c"])) .pitch { order: 2; }
   :global(html:is([data-hero="b"], [data-hero="c"])) .lede { margin-top: 0; font-size: 18.5px; }
   :global(html:is([data-hero="b"], [data-hero="c"])) .steps { display: none; }
   :global(html:is([data-hero="b"], [data-hero="c"])) .heroGet { margin-top: 18px; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .assure { display: none; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .assure { margin-top: 4px; }
   :global(html:is([data-hero="b"], [data-hero="c"])) .bench { order: 2; margin-top: 30px; display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 20px; align-items: stretch; }
   /* The prompt is as tall as the window beside it: its top is level with the window's, under the line above the stage. */
   :global(html:is([data-hero="b"], [data-hero="c"])) .bench > figure:last-child { display: flex; flex-direction: column; padding-top: 34px; }
@@ -133,7 +133,8 @@
   .split .visual { margin-top: 6px; }
   .anatomy { margin-top: 6px; }
   .anatomy dl > div { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; align-items: baseline; }
-  .split .text > figure { --lines: 9; }
+  .split .text > figure { --lines: 3; }
+  #which .text > figure { --lines: 9; }
 }
 
 /* A recording of the app: the picture, and under it what it is and a way to stop it. */

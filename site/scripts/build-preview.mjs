@@ -32,7 +32,6 @@ const result = await build({
   define: { "process.env.NODE_ENV": '"production"', "process.env.NEXT_PUBLIC_POSTHOG_KEY": '""' },
   alias: {
     "@/lib/analytics": at("preview/no-analytics.ts"),
-    "@/lib/media": "preview-media",
     "@": site,
     "@desktop": path.join(site, "../desktop"),
     "@tauri-apps/api/core": at("lib/no-core.ts"),
@@ -47,9 +46,8 @@ const result = await build({
       // The app's stylesheet, kept to the app's interface, as next.config.ts does it.
       b.onLoad({ filter: /desktop[\\/]ui[\\/]style\.css$/ }, (args) => ({ contents: transform(readFileSync(args.path, "utf8")), loader: "css" }));
       // The recordings are inside their addresses too: the same list as lib/media.ts, with each file in place of its path.
-      b.onResolve({ filter: /^preview-media$/ }, () => ({ path: "preview-media", namespace: "media" }));
-      b.onLoad({ filter: /.*/, namespace: "media" }, () => {
-        const source = readFileSync(at("lib/media.ts"), "utf8").replace(/"(\/recordings\/[^"]+)"/g, (_, file) => {
+      b.onLoad({ filter: /lib[\\/]media\.ts$/ }, (args) => {
+        const source = readFileSync(args.path, "utf8").replace(/"(\/recordings\/[^"]+)"/g, (_, file) => {
           const type = file.endsWith(".mp4") ? "video/mp4" : "image/jpeg";
           return JSON.stringify(`data:${type};base64,${readFileSync(at(`public${file}`)).toString("base64")}`);
         });
