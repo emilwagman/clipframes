@@ -47,7 +47,10 @@ export interface RoundView {
   /** The shortcut as people write it, e.g. "Ctrl+Shift+Space". */
   shortcut: string;
   place: PlaceView | null;
-  /** Which comment box to draw, while several are being compared: "line" is the one-line box, anything else today's. */
+  /**
+   * How a comment is written, while several ways are being compared: "line" is a one-line box,
+   * "ghost" one the pointer goes through, "dock" a field in the bar; anything else today's box.
+   */
   noteStyle?: string;
 }
 
@@ -79,6 +82,8 @@ export interface Platform {
   onHover(listener: (hover: HoverView) => void): void;
   onMarks(listener: (marks: MarkView[]) => void): void;
   onArea(listener: (area: AreaView) => void): void;
+  /** The pointer is over the comment box that lets it through, or has left it. */
+  onFaint?(listener: (faint: boolean) => void): void;
   setTool(tool: Tool): Promise<void>;
   stopRecording(): Promise<void>;
   setNote(index: number, note: string): Promise<void>;

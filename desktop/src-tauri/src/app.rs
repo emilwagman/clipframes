@@ -65,25 +65,23 @@ const NOTE_SIZE: (f64, f64) = (316.0, 172.0);
 /// The one-line comment box: its height with one line, and with as many as it grows to.
 const LINE_HEIGHT: (f64, f64) = (60.0, 100.0);
 
-/// Where the tab sits. Ways being compared; chosen with CLIPFRAMES_TAB_PLACE at start.
+/// The bar with a comment being typed in it (the `dock` comment style) is this wide.
+const DOCK_WIDTH: f64 = 644.0;
+
+/// Where the tab sits. Two ways still being compared; CLIPFRAMES_TAB_PLACE=edge at start
+/// chooses the other one.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TabPlace {
-    /// In the middle of where the bar would open.
-    Bar,
+    /// At the bottom of the display, straight under (or over) where the bar would open.
+    Under,
     /// Bottom centre of the display, where the bar opens when it was never moved.
     Edge,
-    /// At that height, straight under (or over) where the bar would open.
-    Under,
-    /// Against the edge of the display nearest to where the bar would open, half out of sight.
-    Nearest,
 }
 
 fn tab_place_named(name: &str) -> TabPlace {
     match name.trim().to_ascii_lowercase().as_str() {
         "edge" => TabPlace::Edge,
-        "under" => TabPlace::Under,
-        "nearest" => TabPlace::Nearest,
-        _ => TabPlace::Bar,
+        _ => TabPlace::Under,
     }
 }
 
@@ -92,54 +90,39 @@ fn tab_place() -> TabPlace {
     *PLACE.get_or_init(|| tab_place_named(&std::env::var("CLIPFRAMES_TAB_PLACE").unwrap_or_default()))
 }
 
-/// The tab's top-left corner. Everything is in the display's own pixels: the display, the
-/// part of it the system's bars leave free, where the bar would open, where it opens when it
-/// was never moved, and the tab's side.
-fn tab_at(place: TabPlace, display: &Rect, area: &Rect, bar: &Rect, home: &Rect, side: f64) -> (f64, f64) {
-    let middle = |r: &Rect| (r.x + r.width / 2.0, r.y + r.height / 2.0);
-    // Along an edge the tab stays whole inside the free part of the display.
-    let along = |at: f64, from: f64, length: f64| (at - side / 2.0).clamp(from, (from + length - side).max(from));
-    let (bar, home) = (middle(bar), middle(home));
+/// The tab's top-left corner. Everything is in the display's own pixels: the part of the
+/// display the system's bars leave free, where the bar would open, where it opens when it
+/// was never moved, and the tab's side. The tab is always at the height of a bar that was
+/// never moved, so a bar dragged up the screen does not leave a mark in the middle of a page.
+fn tab_at(place: TabPlace, area: &Rect, bar: &Rect, home: &Rect, side: f64) -> (f64, f64) {
+    let y = home.y + (home.height - side) / 2.0;
     match place {
-        TabPlace::Bar => (bar.0 - side / 2.0, bar.1 - side / 2.0),
-        TabPlace::Edge => (home.0 - side / 2.0, home.1 - side / 2.0),
-        TabPlace::Under => (along(bar.0, area.x, area.width), home.1 - side / 2.0),
-        TabPlace::Nearest => {
-            // Half of it past the edge of the display. Where one of the system's bars lies
-            // along that edge (menu bar, Dock, taskbar) it stays whole, against that bar.
-            let across = |edge: f64, end: f64, outward: f64| if (edge - end).abs() < 1.0 { edge - side / 2.0 } else { edge - side / 2.0 - outward * side / 2.0 };
-            let (right, bottom) = (area.x + area.width, area.y + area.height);
-            let edges = [
-                (bottom - bar.1, (along(bar.0, area.x, area.width), across(bottom, display.y + display.height, 1.0))),
-                (bar.1 - area.y, (along(bar.0, area.x, area.width), across(area.y, display.y, -1.0))),
-                (bar.0 - area.x, (across(area.x, display.x, -1.0), along(bar.1, area.y, area.height))),
-                (right - bar.0, (across(right, display.x + display.width, 1.0), along(bar.1, area.y, area.height))),
-            ];
-            // The bottom edge first, so a bar that was never moved keeps its tab below it.
-            edges.into_iter().reduce(|nearest, edge| if edge.0 < nearest.0 { edge } else { nearest }).map(|(_, at)| at).unwrap_or(home)
-        }
+        // Whole inside the free part of the display, also under a bar that hangs off its side.
+        TabPlace::Under => ((bar.x + (bar.width - side) / 2.0).clamp(area.x, (area.x + area.width - side).max(area.x)), y),
+        TabPlace::Edge => (home.x + (home.width - side) / 2.0, y),
     }
 }
 
-/// How the comment box behaves. Ways being compared; chosen with CLIPFRAMES_NOTE_STYLE at start.
+/// How a comment is written. Ways being compared; chosen with CLIPFRAMES_NOTE_STYLE at start.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum NoteStyle {
-    /// Under the pick, three lines and two buttons.
+    /// A box under the pick, three lines and two buttons.
     Box,
     /// Under the pick, one line tall, growing as more is typed.
     Line,
-    /// The box, beside the pick where there is room: right, left, below, above.
-    Aside,
-    /// The box under the pick, which steps to another side when the pointer comes for it.
-    Yield,
+    /// The one-line box, which takes the keyboard and nothing else: the pointer goes
+    /// through it, so what it covers can be pointed at and picked.
+    Ghost,
+    /// No box at the pick: the comment is typed in the bar, which widens for it.
+    Dock,
 }
 
 fn note_style_named(name: &str) -> NoteStyle {
     match name.trim().to_ascii_lowercase().as_str() {
         "line" => NoteStyle::Line,
-        "aside" => NoteStyle::Aside,
-        "yield" => NoteStyle::Yield,
+        "ghost" => NoteStyle::Ghost,
+        "dock" => NoteStyle::Dock,
         _ => NoteStyle::Box,
     }
 }
@@ -149,40 +132,47 @@ fn note_style() -> NoteStyle {
     *STYLE.get_or_init(|| note_style_named(&std::env::var("CLIPFRAMES_NOTE_STYLE").unwrap_or_default()))
 }
 
-/// The comment box's top-left corner for a pick, on the display `screen`, all in the same
-/// units. `gap` is kept between the box and the pick, and between the box and the display's
-/// edges. `stepped` is the yielding box after it has stepped out of the pointer's way.
-fn note_spot(style: NoteStyle, screen: &Rect, pick: &Rect, size: (f64, f64), gap: f64, stepped: bool) -> (f64, f64) {
-    let (w, h) = size;
-    let (left, top) = (screen.x + gap, screen.y + gap);
-    let (right, bottom) = ((screen.x + screen.width - w - gap).max(left), (screen.y + screen.height - h - gap).max(top));
-    let fits = |at: &(f64, f64)| at.0 >= left && at.0 <= right && at.1 >= top && at.1 <= bottom;
-    // Under or over the pick it lines up with the pick's left edge, beside it with its top.
-    let (x, y) = (pick.x.clamp(left, right), pick.y.clamp(top, bottom));
-    let below = (x, pick.y + pick.height + gap);
-    let above = (x, pick.y - h - gap);
-    let beside = [(pick.x + pick.width + gap, y), (pick.x - w - gap, y)];
-    // Under the pick, or over it when there is no room under. With room on neither side
-    // (a pick as tall as the display) it ends at the top of the display, on the pick itself.
-    let usual = if below.1 <= bottom { below } else { (x, above.1.clamp(top, bottom)) };
-    match style {
-        NoteStyle::Aside => beside.into_iter().chain([below, above]).find(fits).unwrap_or(usual),
-        NoteStyle::Yield if stepped => [above, beside[0], beside[1]].into_iter().find(|at| fits(at) && *at != usual).unwrap_or(usual),
-        _ => usual,
+impl NoteStyle {
+    /// Whether the comment box is one line tall.
+    fn slim(self) -> bool {
+        matches!(self, NoteStyle::Line | NoteStyle::Ghost)
+    }
+
+    /// Whether a click on the comment box is the box's own. The ghost box has nothing to
+    /// click: a click on it is a pick of what is under it.
+    fn takes_clicks(self) -> bool {
+        self != NoteStyle::Ghost
+    }
+
+    /// Whether there is a comment box at the pick at all.
+    fn at_the_pick(self) -> bool {
+        self != NoteStyle::Dock
     }
 }
 
-/// How far a point is from a rectangle: nothing when it is inside.
-fn away(r: &Rect, x: f64, y: f64) -> f64 {
-    let (dx, dy) = ((r.x - x).max(x - (r.x + r.width)).max(0.0), (r.y - y).max(y - (r.y + r.height)).max(0.0));
-    dx.hypot(dy)
+/// The comment box's top-left corner for a pick, on the display `screen`, all in the same
+/// units. `gap` is kept between the box and the pick, and between the box and the display's
+/// edges.
+fn note_spot(screen: &Rect, pick: &Rect, size: (f64, f64), gap: f64) -> (f64, f64) {
+    let (w, h) = size;
+    let (left, top) = (screen.x + gap, screen.y + gap);
+    let (right, bottom) = ((screen.x + screen.width - w - gap).max(left), (screen.y + screen.height - h - gap).max(top));
+    let x = pick.x.clamp(left, right);
+    // Under the pick, or over it when there is no room under. With room on neither side
+    // (a pick as tall as the display) it ends at the top of the display, on the pick itself.
+    let below = pick.y + pick.height + gap;
+    (x, if below <= bottom { below } else { (pick.y - h - gap).clamp(top, bottom) })
 }
 
-/// Whether the pointer has come for what the yielding comment box covers: it is close to
-/// the box now, and has come a good way closer than it was (`farthest`) since the box
-/// opened. A pointer that only wobbles on the pick it just clicked does not count.
-fn comes_for(farthest: f64, now: f64) -> bool {
-    now <= 24.0 && farthest - now >= 12.0
+/// Whether a point is on a rectangle. One with no size, not placed yet, holds nothing.
+fn contains(r: &Rect, x: f64, y: f64) -> bool {
+    r.width > 0.0 && x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height
+}
+
+/// Where the left edge of the bar goes when it widens for a comment: where it is, so the
+/// grip stays under the hand, unless the wider bar would then run off the display.
+fn docked_x(x: f64, width: f64, area: &Rect) -> f64 {
+    x.min(area.x + area.width - width).max(area.x)
 }
 
 /// A line on stderr with the time since start, when CLIPFRAMES_TRACE is set. For chasing
@@ -288,6 +278,10 @@ pub struct Core {
     bar_timer: AtomicBool,
     /// What the open comment box is for and where it is.
     noted: Mutex<Option<Noted>>,
+    /// The pointer is over the ghost comment box, which has gone faint to show what is under it.
+    faint: AtomicBool,
+    /// Where the bar's left edge was before it widened for a comment and had to move for it.
+    docked_from: Mutex<Option<PhysicalPosition<i32>>>,
 }
 
 /// The comment box on screen.
@@ -299,10 +293,6 @@ struct Noted {
     at: Rect,
     /// Its window's height in CSS pixels: the one-line box grows.
     height: f64,
-    /// The farthest the pointer has been from it since it opened, and whether it has
-    /// stepped out of the pointer's way: the yielding box does that once for a pick.
-    farthest: f64,
-    stepped: bool,
 }
 
 /// A clip in the making.
@@ -489,9 +479,8 @@ fn remember(app: &AppHandle, element: &ElementInfo) {
 fn tab_spot(app: &AppHandle, near: (f64, f64), side: impl Fn(f64) -> f64) -> Option<Spot> {
     let shown = display_near(app, Some(near))?;
     let m = &shown.monitor;
-    let (pos, size, scale) = (m.position(), m.size(), m.scale_factor());
-    let display = Rect { x: pos.x as f64, y: pos.y as f64, width: size.width as f64, height: size.height as f64 };
-    let (x, y) = tab_at(tab_place(), &display, &work_area(m), &bar_rect(app, &shown), &home_rect(m), side(scale));
+    let scale = m.scale_factor();
+    let (x, y) = tab_at(tab_place(), &work_area(m), &bar_rect(app, &shown), &home_rect(m), side(scale));
     Some(Spot { at: PhysicalPosition::new(x as i32, y as i32), scale })
 }
 
@@ -694,6 +683,9 @@ fn refresh_exempt(app: &AppHandle) {
     let core = app.state::<Core>();
     let mut rects = Vec::new();
     for label in [BAR, NOTE] {
+        if label == NOTE && !note_style().takes_clicks() {
+            continue;
+        }
         if let Some(w) = app.get_webview_window(label).filter(|w| w.is_visible().unwrap_or(false)) {
             rects.extend(window_rect(&w));
         }
@@ -926,7 +918,9 @@ fn bar_settle(app: &AppHandle) {
     let unit = if cfg!(target_os = "macos") { shown.monitor.scale_factor() } else { 1.0 };
     let area = work_area(&shown.monitor);
     let area = Rect { x: area.x / unit, y: area.y / unit, width: area.width / unit, height: area.height / unit };
-    let now = fraction(&area, (rect.width, rect.height), (rect.x, rect.y));
+    // By the bar's usual size: widened for a comment it is still the same bar in the same place.
+    let css = unit / shown.monitor.scale_factor();
+    let now = fraction(&area, (BAR_SIZE.0 / css, BAR_SIZE.1 / css), (rect.x, rect.y));
     {
         let mut settings = core.settings.lock().unwrap();
         let places = settings.bar_places.entry(gripped).or_default();
@@ -950,6 +944,11 @@ fn show_bar(app: &AppHandle) -> Option<WebviewWindow> {
     core.bar_dragged.store(false, Ordering::SeqCst);
     let spot = bar_spot(app, element::pointer());
     if let Some(bar) = app.get_webview_window(BAR) {
+        // A round that ended with a comment being typed in the bar left it wide.
+        if !note_style().at_the_pick() {
+            *core.docked_from.lock().unwrap() = None;
+            let _ = bar.set_size(LogicalSize::new(BAR_SIZE.0, BAR_SIZE.1));
+        }
         if let Some(spot) = &spot {
             spot.put(&bar);
         }
@@ -1171,7 +1170,12 @@ fn open_now(app: &AppHandle) {
     let screens = open_overlays(app);
     trace("open: overlays built");
     *core.screens.lock().unwrap() = screens;
-    let _ = small_window(app, NOTE, (NOTE_SIZE.0, if note_style() == NoteStyle::Line { LINE_HEIGHT.0 } else { NOTE_SIZE.1 })).build();
+    if note_style().at_the_pick() {
+        if let Ok(note) = small_window(app, NOTE, (NOTE_SIZE.0, if note_style().slim() { LINE_HEIGHT.0 } else { NOTE_SIZE.1 })).build() {
+            // The ghost box only shows and takes the keyboard. The pointer goes through it.
+            let _ = note.set_ignore_cursor_events(!note_style().takes_clicks());
+        }
+    }
     trace("open: comment box built");
     // The overlays were built after the bar, so they sit above it: put the bar back on top,
     // or a pick's outline would be drawn across it.
@@ -1262,8 +1266,12 @@ fn on_event(app: &AppHandle, event: Event) {
     let core = app.state::<Core>();
     match event {
         Event::Hover { x, y, element, .. } => {
-            if note_style() == NoteStyle::Yield {
-                yield_note(app, x, y);
+            if note_style() == NoteStyle::Ghost {
+                // Over the box the pointer is on what the box covers: the box goes faint.
+                let over = core.noting.lock().unwrap().is_some() && core.noted.lock().unwrap().as_ref().is_some_and(|n| contains(&n.at, x, y));
+                if core.faint.swap(over, Ordering::SeqCst) != over {
+                    let _ = app.emit_to(NOTE, "faint", over);
+                }
             }
             let frame = element.as_ref().map(|e| e.frame).filter(|f| f.width > 0.0 && f.height > 0.0);
             {
@@ -1450,6 +1458,7 @@ fn start_recording(app: &AppHandle, rect: Rect) {
         if let Some(note) = app.get_webview_window(NOTE) {
             let _ = note.hide();
         }
+        dock(app, false);
     }
     refresh_exempt(app);
     show_area(app, Some(rect), true);
@@ -1523,11 +1532,18 @@ fn stop_recording(app: &AppHandle) -> bool {
     }
 }
 
-/// Opens the comment box for a pick: under it, inside its display, or where the style being
-/// tried puts it (`note_spot`). It takes the keyboard.
+/// Opens the comment box for a pick, under it and inside its display, and gives it the
+/// keyboard. With the comment typed in the bar, the bar widens and gets the keyboard instead.
 fn show_note(app: &AppHandle, frame: &Rect) {
-    let height = if note_style() == NoteStyle::Line { LINE_HEIGHT.0 } else { NOTE_SIZE.1 };
-    *app.state::<Core>().noted.lock().unwrap() = Some(Noted { pick: *frame, at: Rect::default(), height, farthest: 0.0, stepped: false });
+    if !note_style().at_the_pick() {
+        return dock(app, true);
+    }
+    let core = app.state::<Core>();
+    let height = if note_style().slim() { LINE_HEIGHT.0 } else { NOTE_SIZE.1 };
+    *core.noted.lock().unwrap() = Some(Noted { pick: *frame, at: Rect::default(), height });
+    if core.faint.swap(false, Ordering::SeqCst) {
+        let _ = app.emit_to(NOTE, "faint", false);
+    }
     place_note(app, true);
 }
 
@@ -1540,12 +1556,12 @@ fn place_note(app: &AppHandle, focus: bool) {
     let screens = core.screens.lock().unwrap();
     let Some(screen) = screens.iter().find(|s| s.contains(frame.x + frame.width / 2.0, frame.y + frame.height / 2.0)).or(screens.first()) else { return };
     let (w, h, gap) = (NOTE_SIZE.0 / screen.css, noted.height / screen.css, 8.0 / screen.css);
-    let (x, y) = note_spot(note_style(), &screen.frame, frame, (w, h), gap, noted.stepped);
+    let (x, y) = note_spot(&screen.frame, frame, (w, h), gap);
     drop(screens);
     if let Some(noted) = core.noted.lock().unwrap().as_mut() {
         noted.at = Rect { x, y, width: w, height: h };
     }
-    if note_style() == NoteStyle::Line {
+    if note_style().slim() {
         let _ = note.set_size(LogicalSize::new(NOTE_SIZE.0, noted.height));
     }
     let _ = if cfg!(target_os = "macos") {
@@ -1560,24 +1576,41 @@ fn place_note(app: &AppHandle, focus: bool) {
     refresh_exempt(app);
 }
 
-/// The yielding comment box: the pointer is at this point, outside the box. When it has come
-/// for what the box covers, the box steps to another side of its pick, once.
-fn yield_note(app: &AppHandle, x: f64, y: f64) {
-    let core = app.state::<Core>();
-    if core.noting.lock().unwrap().is_none() {
+/// The comment typed in the bar: the bar widens for it and takes the keyboard, and goes back
+/// when the comment is done. Its left edge, with the grip, stays where it is unless the
+/// wider bar would run off the display.
+fn dock(app: &AppHandle, on: bool) {
+    if note_style().at_the_pick() {
         return;
     }
-    {
-        let mut noted = core.noted.lock().unwrap();
-        let Some(noted) = noted.as_mut().filter(|n| !n.stepped && n.at.width > 0.0) else { return };
-        let now = away(&noted.at, x, y);
-        noted.farthest = noted.farthest.max(now);
-        if !comes_for(noted.farthest, now) {
-            return;
+    let core = app.state::<Core>();
+    let Some(bar) = app.get_webview_window(BAR) else { return };
+    let before = core.docked_from.lock().unwrap().take();
+    if on {
+        let at = bar.outer_position().ok();
+        let shown = window_rect(&bar).and_then(|r| display_near(app, Some((r.x + r.width / 2.0, r.y + r.height / 2.0))));
+        if let (Some(at), Some(shown)) = (at.or(before), shown) {
+            let scale = shown.monitor.scale_factor();
+            let x = docked_x(at.x as f64, DOCK_WIDTH * scale, &work_area(&shown.monitor)) as i32;
+            if x != at.x {
+                // Clipframes moves the bar here, not the user's hand: not a place to remember.
+                *core.gripped.lock().unwrap() = None;
+                *core.docked_from.lock().unwrap() = Some(before.unwrap_or(at));
+                Spot { at: PhysicalPosition::new(x, at.y), scale }.put(&bar);
+            } else {
+                *core.docked_from.lock().unwrap() = before;
+            }
         }
-        noted.stepped = true;
+        let _ = bar.set_size(LogicalSize::new(DOCK_WIDTH, BAR_SIZE.1));
+        let _ = bar.set_focus();
+    } else {
+        let _ = bar.set_size(LogicalSize::new(BAR_SIZE.0, BAR_SIZE.1));
+        // Back to where it was, unless it was dragged since: then `gripped` is set again.
+        if let Some(at) = before.filter(|_| core.gripped.lock().unwrap().is_none()) {
+            Spot { at, scale: bar.scale_factor().unwrap_or(1.0) }.put(&bar);
+        }
     }
-    place_note(app, false);
+    refresh_exempt(app);
 }
 
 /// Esc stops a recording, or closes the comment box if one is open, or else ends the round.
@@ -1599,6 +1632,7 @@ fn hide_note(app: &AppHandle) -> bool {
         if let Some(note) = app.get_webview_window(NOTE) {
             let _ = note.hide();
         }
+        dock(app, false);
         refresh_exempt(app);
         publish(app);
         trace("note: closed");
@@ -1663,7 +1697,7 @@ fn note_close(app: AppHandle) {
 /// The one-line comment box needs this much height for what is typed in it.
 #[tauri::command]
 fn note_resize(app: AppHandle, height: f64) {
-    if note_style() != NoteStyle::Line || !height.is_finite() {
+    if !note_style().slim() || !height.is_finite() {
         return;
     }
     let height = height.clamp(LINE_HEIGHT.0, LINE_HEIGHT.1);
@@ -2562,126 +2596,70 @@ mod tests {
     }
 
     // A display twice as dense as a unit, with a taskbar along its bottom.
-    const SCREEN: Rect = Rect { x: 0.0, y: 0.0, width: 2560.0, height: 1440.0 };
     const FREE: Rect = Rect { x: 0.0, y: 0.0, width: 2560.0, height: 1380.0 };
     const HOME: Rect = Rect { x: 876.0, y: 1120.0, width: 808.0, height: 128.0 };
     const SIDE: f64 = 88.0;
 
     #[test]
-    fn the_tab_place_and_the_note_style_come_from_their_names_and_default_to_today() {
-        assert_eq!(["", "bar", "Edge", " under ", "NEAREST", "elsewhere"].map(tab_place_named), [TabPlace::Bar, TabPlace::Bar, TabPlace::Edge, TabPlace::Under, TabPlace::Nearest, TabPlace::Bar]);
-        assert_eq!(["", "box", "Line", " aside ", "YIELD", "other"].map(note_style_named), [NoteStyle::Box, NoteStyle::Box, NoteStyle::Line, NoteStyle::Aside, NoteStyle::Yield, NoteStyle::Box]);
+    fn the_tab_place_and_the_note_style_come_from_their_names() {
+        assert_eq!(["", "under", "Edge", " edge ", "bar", "nearest"].map(tab_place_named), [TabPlace::Under, TabPlace::Under, TabPlace::Edge, TabPlace::Edge, TabPlace::Under, TabPlace::Under]);
+        assert_eq!(["", "box", "Line", " ghost ", "DOCK", "aside"].map(note_style_named), [NoteStyle::Box, NoteStyle::Box, NoteStyle::Line, NoteStyle::Ghost, NoteStyle::Dock, NoteStyle::Box]);
     }
 
     #[test]
-    fn with_the_bar_never_moved_the_tab_is_at_bottom_centre_whatever_the_way() {
-        let middle = (1280.0 - 44.0, 1184.0 - 44.0);
-        for place in [TabPlace::Bar, TabPlace::Edge, TabPlace::Under] {
-            assert_eq!(tab_at(place, &SCREEN, &FREE, &HOME, &HOME, SIDE), middle, "{place:?}");
+    fn with_the_bar_never_moved_the_tab_is_at_bottom_centre() {
+        for place in [TabPlace::Under, TabPlace::Edge] {
+            assert_eq!(tab_at(place, &FREE, &HOME, &HOME, SIDE), (1280.0 - 44.0, 1184.0 - 44.0), "{place:?}");
         }
-        // The nearest edge is the bottom one, where the taskbar is: whole, against it.
-        assert_eq!(tab_at(TabPlace::Nearest, &SCREEN, &FREE, &HOME, &HOME, SIDE), (1236.0, 1380.0 - 88.0));
     }
 
     #[test]
-    fn with_the_bar_moved_each_way_puts_the_tab_somewhere_else() {
-        // The bar dragged to the upper left of the middle of the screen.
+    fn with_the_bar_moved_the_tab_stays_at_the_bottom_under_the_bar_or_in_the_middle() {
+        // The bar dragged to the upper left of the screen.
         let bar = Rect { x: 100.0, y: 500.0, ..HOME };
-        assert_eq!(tab_at(TabPlace::Bar, &SCREEN, &FREE, &bar, &HOME, SIDE), (504.0 - 44.0, 564.0 - 44.0), "in the middle of the bar");
-        assert_eq!(tab_at(TabPlace::Edge, &SCREEN, &FREE, &bar, &HOME, SIDE), (1236.0, 1140.0), "where it always was");
-        assert_eq!(tab_at(TabPlace::Under, &SCREEN, &FREE, &bar, &HOME, SIDE), (460.0, 1140.0), "at the bottom, under the bar");
-        assert_eq!(tab_at(TabPlace::Nearest, &SCREEN, &FREE, &bar, &HOME, SIDE), (-44.0, 520.0), "half past the left edge, level with the bar");
-    }
-
-    #[test]
-    fn the_tab_at_the_nearest_edge_is_half_hidden_only_where_the_display_ends() {
-        let near = |x: f64, y: f64| tab_at(TabPlace::Nearest, &SCREEN, &FREE, &Rect { x, y, ..HOME }, &HOME, SIDE);
-        assert_eq!(near(900.0, 10.0), (1260.0, -44.0), "the top edge of this display has no bar of the system's");
-        assert_eq!(near(1740.0, 600.0), (2560.0 - 44.0, 620.0), "the right edge");
-        assert_eq!(near(900.0, 1240.0), (1260.0, 1292.0), "at the taskbar it stays whole");
-        // In a corner it does not hang past the end of the edge it is on.
-        assert_eq!(near(0.0, 0.0), (360.0, -44.0));
-        assert_eq!(near(1752.0, 0.0).0, 2112.0);
-        // A menu bar along the top: whole, under it.
-        let under_menu = Rect { x: 0.0, y: 50.0, width: 2560.0, height: 1390.0 };
-        assert_eq!(tab_at(TabPlace::Nearest, &SCREEN, &under_menu, &Rect { x: 900.0, y: 60.0, ..HOME }, &HOME, SIDE), (1260.0, 50.0));
+        assert_eq!(tab_at(TabPlace::Under, &FREE, &bar, &HOME, SIDE), (460.0, 1140.0), "at the bottom, under the bar");
+        assert_eq!(tab_at(TabPlace::Edge, &FREE, &bar, &HOME, SIDE), (1236.0, 1140.0), "where it always was");
     }
 
     #[test]
     fn the_tab_under_a_bar_at_the_side_of_the_display_stays_on_it() {
         let hanging = Rect { x: -700.0, y: 400.0, ..HOME };
-        assert_eq!(tab_at(TabPlace::Under, &SCREEN, &FREE, &hanging, &HOME, SIDE).0, 0.0);
+        assert_eq!(tab_at(TabPlace::Under, &FREE, &hanging, &HOME, SIDE).0, 0.0);
         let hanging = Rect { x: 2400.0, y: 400.0, ..HOME };
-        assert_eq!(tab_at(TabPlace::Under, &SCREEN, &FREE, &hanging, &HOME, SIDE).0, 2560.0 - 88.0);
+        assert_eq!(tab_at(TabPlace::Under, &FREE, &hanging, &HOME, SIDE).0, 2560.0 - 88.0);
         // On a display left of the main one everything is counted from its own corner.
-        let (screen, free, home) = (Rect { x: -1920.0, ..MAIN }, Rect { x: -1920.0, height: 1040.0, ..MAIN }, Rect { x: -1162.0, y: 920.0, width: 404.0, height: 64.0 });
-        assert_eq!(tab_at(TabPlace::Edge, &screen, &free, &home, &home, 44.0), (-982.0, 930.0));
-        assert_eq!(tab_at(TabPlace::Nearest, &screen, &free, &Rect { x: -1900.0, y: 300.0, ..home }, &home, 44.0), (-1942.0, 310.0));
+        let (free, home) = (Rect { x: -1920.0, height: 1040.0, ..MAIN }, Rect { x: -1162.0, y: 920.0, width: 404.0, height: 64.0 });
+        assert_eq!(tab_at(TabPlace::Edge, &free, &home, &home, 44.0), (-982.0, 930.0));
+        assert_eq!(tab_at(TabPlace::Under, &free, &Rect { x: -1900.0, y: 300.0, ..home }, &home, 44.0), (-1720.0, 930.0));
+        // A display narrower than the tab: its left edge is what stays in sight.
+        assert_eq!(tab_at(TabPlace::Under, &Rect { x: 0.0, y: 0.0, width: 60.0, height: 400.0 }, &HOME, &HOME, SIDE).0, 0.0);
     }
 
     const NOTE: (f64, f64) = (316.0, 172.0);
     const BUTTON: Rect = Rect { x: 600.0, y: 300.0, width: 120.0, height: 40.0 };
 
-    fn spot(style: NoteStyle, pick: &Rect) -> (f64, f64) {
-        note_spot(style, &MAIN, pick, NOTE, 8.0, false)
-    }
-
-    fn on_screen(at: (f64, f64), size: (f64, f64), screen: &Rect) -> bool {
-        at.0 >= screen.x && at.1 >= screen.y && at.0 + size.0 <= screen.x + screen.width && at.1 + size.1 <= screen.y + screen.height
-    }
-
     #[test]
     fn the_comment_box_opens_under_the_pick_or_over_it_when_there_is_no_room() {
-        assert_eq!(spot(NoteStyle::Box, &BUTTON), (600.0, 348.0));
-        assert_eq!(spot(NoteStyle::Yield, &BUTTON), (600.0, 348.0), "the yielding box starts out the same");
-        assert_eq!(spot(NoteStyle::Box, &Rect { y: 1000.0, ..BUTTON }), (600.0, 1000.0 - 172.0 - 8.0), "at the bottom of the display: over it");
-        assert_eq!(spot(NoteStyle::Box, &Rect { x: 1850.0, ..BUTTON }).0, 1920.0 - 316.0 - 8.0, "at the right edge: pulled in");
-        assert_eq!(spot(NoteStyle::Box, &Rect { x: -40.0, ..BUTTON }).0, 8.0);
+        let spot = |pick: &Rect| note_spot(&MAIN, pick, NOTE, 8.0);
+        assert_eq!(spot(&BUTTON), (600.0, 348.0));
+        assert_eq!(spot(&Rect { y: 1000.0, ..BUTTON }), (600.0, 1000.0 - 172.0 - 8.0), "at the bottom of the display: over it");
+        assert_eq!(spot(&Rect { x: 1850.0, ..BUTTON }).0, 1920.0 - 316.0 - 8.0, "at the right edge: pulled in");
+        assert_eq!(spot(&Rect { x: -40.0, ..BUTTON }).0, 8.0);
         // A pick as tall as the display: on the pick, at the top, as it has always been.
-        assert_eq!(spot(NoteStyle::Box, &Rect { x: 200.0, y: 0.0, width: 900.0, height: 1080.0 }), (200.0, 8.0));
+        assert_eq!(spot(&Rect { x: 200.0, y: 0.0, width: 900.0, height: 1080.0 }), (200.0, 8.0));
     }
 
     #[test]
     fn the_one_line_box_fits_under_picks_the_tall_one_has_to_go_over() {
         let low = Rect { y: 960.0, ..BUTTON };
-        assert_eq!(note_spot(NoteStyle::Line, &MAIN, &low, (316.0, 60.0), 8.0, false), (600.0, 1008.0));
-        assert_eq!(spot(NoteStyle::Box, &low), (600.0, 780.0));
+        assert_eq!(note_spot(&MAIN, &low, (316.0, 60.0), 8.0), (600.0, 1008.0));
+        assert_eq!(note_spot(&MAIN, &low, NOTE, 8.0), (600.0, 780.0));
         // Grown to its three lines there it no longer fits under, and goes over.
-        assert_eq!(note_spot(NoteStyle::Line, &MAIN, &low, (316.0, 100.0), 8.0, false), (600.0, 852.0));
+        assert_eq!(note_spot(&MAIN, &low, (316.0, 100.0), 8.0), (600.0, 852.0));
     }
 
     #[test]
-    fn the_box_beside_the_pick_goes_right_then_left_then_under_then_over() {
-        assert_eq!(spot(NoteStyle::Aside, &BUTTON), (728.0, 300.0), "right of it, top to top");
-        assert_eq!(spot(NoteStyle::Aside, &Rect { x: 1700.0, ..BUTTON }), (1700.0 - 316.0 - 8.0, 300.0), "no room on the right: left");
-        // A row across the whole display: neither side, so under it.
-        let row = Rect { x: 0.0, y: 300.0, width: 1920.0, height: 40.0 };
-        assert_eq!(spot(NoteStyle::Aside, &row), (8.0, 348.0));
-        assert_eq!(spot(NoteStyle::Aside, &Rect { y: 1000.0, ..row }), (8.0, 820.0), "and over it at the bottom");
-        // A tall column in the middle: beside it, and kept on the display at the bottom.
-        let column = Rect { x: 800.0, y: 0.0, width: 300.0, height: 1080.0 };
-        assert_eq!(spot(NoteStyle::Aside, &column), (1108.0, 8.0));
-        assert_eq!(spot(NoteStyle::Aside, &Rect { y: 1000.0, ..BUTTON }), (728.0, 1080.0 - 172.0 - 8.0), "beside a pick at the bottom: pulled up");
-        // Something as large as the display: nowhere beside it, so as the plain box does.
-        assert_eq!(spot(NoteStyle::Aside, &MAIN), spot(NoteStyle::Box, &MAIN));
-    }
-
-    #[test]
-    fn the_yielding_box_steps_over_the_pick_or_beside_it() {
-        let stepped = |pick: &Rect| note_spot(NoteStyle::Yield, &MAIN, pick, NOTE, 8.0, true);
-        assert_eq!(stepped(&BUTTON), (600.0, 300.0 - 172.0 - 8.0), "from under the pick to over it");
-        assert_eq!(stepped(&Rect { y: 60.0, ..BUTTON }), (728.0, 60.0), "no room over it: to the right");
-        assert_eq!(stepped(&Rect { x: 1700.0, y: 60.0, ..BUTTON }), (1376.0, 60.0), "or the left");
-        // Already over the pick, at the bottom of the display: beside it.
-        assert_eq!(stepped(&Rect { y: 1000.0, ..BUTTON }), (728.0, 900.0));
-        // Nowhere else to go: it stays.
-        assert_eq!(stepped(&MAIN), spot(NoteStyle::Box, &MAIN));
-        // The other styles never step.
-        assert_eq!(note_spot(NoteStyle::Box, &MAIN, &BUTTON, NOTE, 8.0, true), spot(NoteStyle::Box, &BUTTON));
-    }
-
-    #[test]
-    fn the_comment_box_is_on_the_display_wherever_the_pick_is_and_whatever_the_style() {
+    fn the_comment_box_is_on_the_display_wherever_the_pick_is() {
         let small = Rect { x: -1280.0, y: 200.0, width: 1280.0, height: 720.0 };
         let picks = [
             BUTTON,
@@ -2694,34 +2672,42 @@ mod tests {
         for screen in [MAIN, small] {
             for pick in picks {
                 let pick = Rect { x: pick.x + screen.x, y: pick.y + screen.y, ..pick };
-                for (style, size) in [(NoteStyle::Box, NOTE), (NoteStyle::Line, (316.0, 60.0)), (NoteStyle::Line, (316.0, 100.0)), (NoteStyle::Aside, NOTE), (NoteStyle::Yield, NOTE)] {
-                    for stepped in [false, true] {
-                        let at = note_spot(style, &screen, &pick, size, 8.0, stepped);
-                        assert!(on_screen(at, size, &screen), "{style:?} (stepped {stepped}) for {pick:?} on {screen:?} came out at {at:?}");
-                    }
+                for size in [NOTE, (316.0, 60.0), (316.0, 100.0)] {
+                    let at = note_spot(&screen, &pick, size, 8.0);
+                    let inside = at.0 >= screen.x && at.1 >= screen.y && at.0 + size.0 <= screen.x + screen.width && at.1 + size.1 <= screen.y + screen.height;
+                    assert!(inside, "a box of {size:?} for {pick:?} on {screen:?} came out at {at:?}");
                 }
             }
         }
         // A display smaller than the box: its top-left corner is what stays in sight.
         let tiny = Rect { x: 0.0, y: 0.0, width: 300.0, height: 150.0 };
-        for style in [NoteStyle::Box, NoteStyle::Aside, NoteStyle::Yield] {
-            assert_eq!(note_spot(style, &tiny, &Rect { x: 100.0, y: 50.0, width: 40.0, height: 20.0 }, NOTE, 8.0, true), (8.0, 8.0), "{style:?}");
-        }
+        assert_eq!(note_spot(&tiny, &Rect { x: 100.0, y: 50.0, width: 40.0, height: 20.0 }, NOTE, 8.0), (8.0, 8.0));
     }
 
     #[test]
-    fn the_yielding_box_steps_aside_for_a_pointer_that_comes_for_it_not_one_that_wobbles() {
-        let note = Rect { x: 600.0, y: 348.0, width: 316.0, height: 172.0 };
-        assert_eq!(away(&note, 650.0, 320.0), 28.0);
-        assert_eq!(away(&note, 650.0, 400.0), 0.0, "inside");
-        assert_eq!(away(&note, 597.0, 344.0), 5.0, "off a corner");
-        // On the button it was opened for, 28 away. A few pixels of wobble is not coming for it.
-        assert!(!comes_for(28.0, 28.0));
-        assert!(!comes_for(28.0, 22.0));
-        assert!(comes_for(28.0, 14.0), "moved well towards it, and nearly there");
-        // From far away it counts once it is close.
-        assert!(!comes_for(400.0, 80.0));
-        assert!(comes_for(400.0, 20.0));
+    fn only_the_ghost_box_lets_clicks_through_and_only_the_dock_has_no_box() {
+        assert!(NoteStyle::Box.takes_clicks() && NoteStyle::Line.takes_clicks() && NoteStyle::Dock.takes_clicks());
+        assert!(!NoteStyle::Ghost.takes_clicks(), "a click on it is a pick of what it covers");
+        assert!(NoteStyle::Ghost.slim() && NoteStyle::Line.slim() && !NoteStyle::Box.slim());
+        assert!(NoteStyle::Ghost.at_the_pick() && !NoteStyle::Dock.at_the_pick());
+        // What the picker asks for a pointer position while the ghost box is open: is it on
+        // the box, so the box goes faint.
+        let ghost = Rect { x: 600.0, y: 348.0, width: 316.0, height: 60.0 };
+        assert!(contains(&ghost, 700.0, 380.0));
+        assert!(!contains(&ghost, 700.0, 420.0), "on the row under it");
+        assert!(!contains(&Rect::default(), 0.0, 0.0), "a box not placed yet is nowhere");
+    }
+
+    #[test]
+    fn the_bar_widens_for_a_comment_from_its_grip_and_stays_on_the_display() {
+        let (bar, wide) = (404.0, 644.0);
+        assert_eq!(docked_x(758.0, wide, &MAIN), 758.0, "from bottom centre it grows to the right");
+        assert_eq!(docked_x(40.0, wide, &MAIN), 40.0);
+        assert_eq!(docked_x(1920.0 - bar, wide, &MAIN), 1920.0 - wide, "against the right edge it grows to the left instead");
+        assert_eq!(docked_x(1400.0, wide, &MAIN), 1276.0);
+        assert_eq!(docked_x(-1700.0, wide, &LEFT), -1700.0, "on a display left of the main one");
+        assert_eq!(docked_x(-300.0, wide, &LEFT), -644.0);
+        assert_eq!(docked_x(100.0, wide, &Rect { x: 0.0, y: 0.0, width: 500.0, height: 400.0 }), 0.0, "a display narrower than the wide bar: from its left edge");
     }
 
     #[test]

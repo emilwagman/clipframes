@@ -26,6 +26,7 @@ export const platform: Platform = {
   onHover: (listener) => listen<HoverView>("hover", listener),
   onMarks: (listener) => listen<MarkView[]>("marks", listener),
   onArea: (listener) => listen<AreaView>("area", listener),
+  onFaint: (listener) => listen<boolean>("faint", listener),
   setTool: (tool) => invoke("tool_set", { tool }),
   stopRecording: () => invoke("recording_stop"),
   setNote: (index, note) => invoke("note_set", { index, note, seq: ++noteSeq }),

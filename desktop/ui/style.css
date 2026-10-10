@@ -64,7 +64,7 @@ button.quiet:hover { color: var(--text); }
 .bar.wide .grip { margin: 0 -6px 0 -16px; }
 .bar.wide.back .grip { margin: 0 -6px 0 -4px; }
 @keyframes pulse { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } button.round, .grip { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } button.round, .grip, .note.slim.ghost { transition: none; } }
 
 .note { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--radius); }
 .note .what { padding: 0 2px; color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -76,6 +76,15 @@ button.quiet:hover { color: var(--text); }
 .note.slim { inset: 8px 8px auto 8px; flex-direction: row; align-items: flex-start; gap: 8px; padding: 9px 8px 9px 12px; border-radius: 22px; }
 .note.slim .num { margin-top: 3px; flex: none; }
 .note.slim textarea { flex: 1; height: 26px; padding: 3px 0; border: 0; background: none; border-radius: 0; }
+/* As "ghost" it lets the pointer through, and goes faint under it to show what it covers. */
+.note.slim.ghost { padding-right: 14px; transition: opacity 0.12s; }
+.note.slim.ghost.faint { opacity: 0.2; }
+/* The comment typed in the bar: the pick's number and name, then the words. */
+.bar > .num { flex: none; margin-left: 2px; }
+.bar .what { flex: 0 1 auto; max-width: 132px; margin: 0 6px; color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .say { flex: 1; min-width: 0; height: 30px; padding: 0 11px; font: 14px/20px var(--sans); color: var(--text); caret-color: var(--accent-text); border-radius: 15px; border: 1px solid var(--border); background: var(--raised); outline: none; user-select: text; -webkit-user-select: text; }
+.bar .say::placeholder { color: var(--text-2); }
+.bar .say:focus { border-color: var(--accent); }
 button.round.small { width: 26px; height: 26px; }
 button.round.small svg.icon { width: 14px; height: 14px; }
 

@@ -11,6 +11,8 @@ interface State {
   hover: HoverView;
   marks: MarkView[];
   area: AreaView;
+  /** The pointer is over the comment box that lets it through: it is drawn faint. */
+  faint: boolean;
 }
 
 export const useStore = create<State>(() => ({
@@ -19,6 +21,7 @@ export const useStore = create<State>(() => ({
   hover: { rect: null, label: "" },
   marks: [],
   area: { rect: null, recording: false },
+  faint: false,
 }));
 
 /** Feeds the store from a platform. Call once per window, before rendering. */
@@ -28,6 +31,7 @@ export function connect(platform: Platform): void {
   platform.onHover((hover) => useStore.setState({ hover }));
   platform.onMarks((marks) => useStore.setState({ marks }));
   platform.onArea((area) => useStore.setState({ area }));
+  platform.onFaint?.((faint) => useStore.setState({ faint }));
   void platform.state().then((round) => useStore.setState({ round }));
 }
 

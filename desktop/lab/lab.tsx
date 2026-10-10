@@ -1,7 +1,7 @@
 // The real bar, comment box and overlay over the demo page, in one browser window, so the look
 // can be judged without running the app. ?state=empty|picked|area|recording picks the moment.
-// ?note=box|line|aside|yield shows the comment box each way it is being tried (yield: after it
-// has stepped out of the way), and ?said= puts words in it.
+// ?note=box|line|ghost|dock shows each way of writing a comment that is being tried (ghost
+// with &faint=1: the pointer over it), and ?said= puts words in it.
 // ?page=dark shows it over a dark page, and ?tab=1 adds the tab beside the bar.
 import { createRoot } from "react-dom/client";
 import "../ui/style.css";
@@ -93,15 +93,15 @@ const start = () => {
   };
   createRoot(document.getElementById("overlay") as HTMLElement).render(<Overlay />);
   mount("bar", (innerWidth - BAR.w) / 2, innerHeight - BAR.h - 40, BAR.w, BAR.h, <Bar />);
-  // Where the app's core puts each (`note_spot` in src-tauri/src/app.rs), for this pick on this page.
+  // Where the app's core puts it (`note_spot` in src-tauri/src/app.rs), for this pick on this page.
   const under = { x: Math.min(overdue.x, innerWidth - NOTE.w - 8), y: overdue.y + overdue.height + 8 };
-  const right = overdue.x + overdue.width + 8;
-  const beside = { x: right + NOTE.w + 8 <= innerWidth ? right : overdue.x - NOTE.w - 8, y: overdue.y };
-  const over = { x: under.x, y: overdue.y - NOTE.h - 8 };
-  const at = noteStyle === "aside" ? beside : noteStyle === "yield" ? (over.y >= 8 ? over : beside) : under;
+  const slim = noteStyle === "line" || noteStyle === "ghost";
   // The one-line box says how tall it needs to be, as it tells the core in the app.
-  if (noteStyle === "line") platform.resizeNote = async (height) => void ((document.getElementById("note") as HTMLElement).style.height = `${height}px`);
-  mount("note", at.x, at.y, NOTE.w, noteStyle === "line" ? 60 : NOTE.h, <Note />);
+  if (slim) platform.resizeNote = async (height) => void ((document.getElementById("note") as HTMLElement).style.height = `${height}px`);
+  if (query.get("faint")) useStore.setState({ faint: true });
+  // With the comment typed in the bar there is no box, and the bar is wider (DOCK_WIDTH), from its grip.
+  if (noteStyle === "dock") (document.getElementById("bar") as HTMLElement).style.width = "644px";
+  else mount("note", under.x, under.y, NOTE.w, slim ? 60 : NOTE.h, <Note />);
   if (query.get("tab")) {
     const host = document.body.appendChild(document.createElement("div"));
     host.id = "tab";

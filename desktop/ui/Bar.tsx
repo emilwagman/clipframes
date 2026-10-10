@@ -2,6 +2,7 @@
 // the words live in tooltips and in the label that follows the pointer.
 
 import { Icon } from "./icons";
+import { useComment } from "./Note";
 import type { Tool } from "./platform";
 import { usePlatform, useRound } from "./store";
 
@@ -41,6 +42,8 @@ export function Bar() {
   const platform = usePlatform();
   const round = useRound();
   const count = round.picks.length;
+  // The comment typed here instead of in a box at the pick ("dock"): nothing covers the page.
+  const comment = useComment<HTMLInputElement>(round.noteStyle === "dock");
 
   if (round.trouble !== null) {
     // "screen-asked": Screen Recording is still refused after a visit to System Settings.
@@ -100,7 +103,19 @@ export function Bar() {
         ))}
       </div>
       <i className="rule" />
-      <span className="status">
+      {comment.index !== null && comment.pick && (
+        <>
+          <b className="num">{comment.index + 1}</b>
+          <span className="what" title={comment.pick.headline}>
+            {comment.pick.headline}
+          </span>
+          <input ref={comment.input} className="say" value={comment.text} placeholder="What should change?" spellCheck={false} autoComplete="off" onChange={(e) => comment.write(e.target.value)} onKeyDown={comment.onKeyDown(false)} />
+          <button className="round small" aria-label="Remove this pick" title="Remove this pick" onClick={() => void comment.remove()}>
+            <Icon name="trash" />
+          </button>
+        </>
+      )}
+      <span className="status" hidden={comment.index !== null}>
         {count === 0 ? (
           HINTS[round.tool]
         ) : (
@@ -109,12 +124,12 @@ export function Bar() {
           </>
         )}
       </span>
-      {round.place && (
+      {round.place && comment.index === null && (
         <button className={round.place.auto ? "round lit" : "round"} aria-label="Appear here by itself" title={round.place.auto ? `Clipframes appears by itself in ${round.place.name}. Click to stop.` : `Show Clipframes by itself in ${round.place.name}`} onClick={() => void platform.setAuto(!round.place?.auto)}>
           <Icon name="pin" />
         </button>
       )}
-      {platform.history && (
+      {platform.history && comment.index === null && (
         <button className="round" aria-label="History" title="History" onClick={() => void platform.openHistory()}>
           <Icon name="history" />
         </button>
