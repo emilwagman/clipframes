@@ -177,3 +177,11 @@ macOS, without a screen (fleet-air, over ssh; Accessibility not granted, so noth
 - With the permission missing the round does not start and says so.
 - The whole flow with real pointer events is ready to run there: build with
   `--features selftest`, start with `--selftest`.
+
+Idle for ninety minutes on Windows (commit 3ac1e53, started hidden, the demo site in front
+so the tab was on screen, nobody touching the machine; one reading a minute, 02:40 to 04:09):
+
+- Memory: 22.1 to 25.8 MB working set, 7.0 to 7.2 MB private. It ended lower than it started.
+- CPU: 0.39 s of processor time in 89 minutes, which is 0.007% of one core.
+- Threads 5 to 10, handles 265 to 270, no web view at any reading.
+- Nothing grew over the run. The eight hour run is still to do.
