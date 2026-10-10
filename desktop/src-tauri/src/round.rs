@@ -119,18 +119,25 @@ impl Round {
                     s.push_str(&format!(": {}", one.note));
                 }
                 if let Some(p) = notes_path {
-                    s.push_str(&format!(". Read {p}"));
+                    s.push_str(&notes_clause(std::slice::from_ref(one), p));
                 }
                 s.push(']');
                 s
             }
             many => {
                 let shared = shared_place(many);
-                let mut s = format!("[Clipframes: {} things{}", many.len(), shared.as_deref().map(|p| format!(" in {p}")).unwrap_or_default());
+                let mut s = format!("[Clipframes: {} things{}", many.len(), shared.as_deref().map(|p| format!(" {p}")).unwrap_or_default());
                 if let Some(p) = notes_path {
-                    s.push_str(&format!(". Read {p}"));
+                    s.push_str(&notes_clause(many, p));
                 }
                 s.push_str("]\n");
+                // A comment belongs to the pick it was typed on. When only some picks have one,
+                // say so: agents otherwise read one comment as covering the picks after it
+                // about as often as not.
+                let some_silent = many.iter().any(|p| p.note.is_empty()) && many.iter().any(|p| !p.note.is_empty());
+                if some_silent {
+                    s.push_str("Each comment is about the thing on its own line.\n");
+                }
                 for (i, pick) in many.iter().enumerate() {
                     s.push_str(&format!("{}. {}", i + 1, describe(pick)));
                     if shared.is_none() {
@@ -138,6 +145,8 @@ impl Round {
                     }
                     if !pick.note.is_empty() {
                         s.push_str(&format!(": {}", pick.note));
+                    } else if some_silent {
+                        s.push_str(": no comment");
                     }
                     s.push('\n');
                 }
@@ -168,10 +177,39 @@ pub(crate) fn describe(pick: &Pick) -> String {
     }
 }
 
-/// `Google Chrome "Invoices"`, with a leading word when there is anything to say.
+/// How the first line points at the notes file. Pictures have to be opened, so a capture with
+/// one says "Read". Element picks are whole in the pasted text, and the notes file usually
+/// sits outside the project, where reading it costs the person a permission question: there
+/// the file is offered, not asked for.
+fn notes_clause(picks: &[Pick], path: &str) -> String {
+    if picks.iter().any(|p| p.kind != Kind::Element) {
+        format!(". Read {path}")
+    } else if picks.len() == 1 {
+        format!(". More detail, if you need it: {path}")
+    } else {
+        format!(". Everything is below; pictures and more detail, if you need them, are in {path}")
+    }
+}
+
+/// `in Google Chrome "Invoices"`, or `in Google Chrome "Invoices" at
+/// http://localhost:3000/invoices` when the page's address is known. Empty when there is nothing to say; `lead`
+/// goes in front of a place that has no address.
 fn place(e: &ElementInfo, lead: &str) -> String {
     let p = place_name(e);
-    if p.is_empty() { String::new() } else { format!("{lead}{p}") }
+    match (page(e), p.is_empty()) {
+        (Some(page), true) => format!(" at {page}"),
+        (Some(page), false) => format!("{lead}{p} at {page}"),
+        (None, true) => String::new(),
+        (None, false) => format!("{lead}{p}"),
+    }
+}
+
+/// The page's address without what follows `?` or `#`: those can be long and can hold tokens,
+/// and the agent needs the page, not the session.
+pub(crate) fn page(e: &ElementInfo) -> Option<String> {
+    let end = e.url.find(['?', '#']).unwrap_or(e.url.len());
+    let page = &e.url[..end];
+    (!page.is_empty()).then(|| page.to_string())
 }
 
 pub(crate) fn place_name(e: &ElementInfo) -> String {
@@ -183,10 +221,20 @@ pub(crate) fn place_name(e: &ElementInfo) -> String {
     }
 }
 
-/// The place all picks share, if they share one: then it is said once, in the first line.
+/// The app and window all picks share, if they share one.
+pub(crate) fn shared_name(picks: &[Pick]) -> Option<String> {
+    let name = place_name(&picks.first()?.element);
+    (!name.is_empty() && picks.iter().all(|p| place_name(&p.element) == name)).then_some(name)
+}
+
+/// The place all picks share, as it reads after "N things": then it is said once, in the
+/// first line. The page's address joins it when every pick is on that page.
 pub(crate) fn shared_place(picks: &[Pick]) -> Option<String> {
-    let first = place_name(&picks.first()?.element);
-    (!first.is_empty() && picks.iter().all(|p| place_name(&p.element) == first)).then_some(first)
+    let name = shared_name(picks)?;
+    match page(&picks[0].element) {
+        Some(page) if picks.iter().all(|p| self::page(&p.element).as_deref() == Some(page.as_str())) => Some(format!("in {name} at {page}")),
+        _ => Some(format!("in {name}")),
+    }
 }
 
 #[cfg(test)]
@@ -228,7 +276,7 @@ mod tests {
         r.set_note(i, "  make this secondary ");
         assert_eq!(
             r.reference(Some("/Users/sam/Clipframes/2026-10-09_11-42-30/notes.md")),
-            "[Button \"New invoice\" (#new-invoice .btn.btn-primary) in Google Chrome \"Invoices\": make this secondary. Read /Users/sam/Clipframes/2026-10-09_11-42-30/notes.md]"
+            "[Button \"New invoice\" (#new-invoice .btn.btn-primary) in Google Chrome \"Invoices\": make this secondary. More detail, if you need it: /Users/sam/Clipframes/2026-10-09_11-42-30/notes.md]"
         );
     }
 
@@ -254,7 +302,7 @@ mod tests {
         r.set_note(i, "change this to say Download for PC");
         assert_eq!(
             r.reference(Some("/Users/sam/Clipframes/2026-10-10_09-21-47/notes.md")),
-            "[Link \"Download for Windows\" (.home_pill__qnvOg.home_big__1QvCE), 2nd of 2 on the page, under heading \"Try it on your own app.\" in Google Chrome \"Clipframes\": change this to say Download for PC. Read /Users/sam/Clipframes/2026-10-10_09-21-47/notes.md]"
+            "[Link \"Download for Windows\" (.home_pill__qnvOg.home_big__1QvCE), 2nd of 2 on the page, under heading \"Try it on your own app.\" in Google Chrome \"Clipframes\" at https://clipframes.com/: change this to say Download for PC. More detail, if you need it: /Users/sam/Clipframes/2026-10-10_09-21-47/notes.md]"
         );
     }
 
@@ -285,7 +333,7 @@ mod tests {
         r.add(stat());
         assert_eq!(
             r.reference(None),
-            "[Clipframes: 2 things in Google Chrome \"Invoices\"]\n1. Button \"New invoice\" (#new-invoice .btn.btn-primary): make this secondary\n2. Group \"Overdue\" (#overdue-total .stat)"
+            "[Clipframes: 2 things in Google Chrome \"Invoices\"]\nEach comment is about the thing on its own line.\n1. Button \"New invoice\" (#new-invoice .btn.btn-primary): make this secondary\n2. Group \"Overdue\" (#overdue-total .stat): no comment"
         );
     }
 
@@ -314,8 +362,39 @@ mod tests {
         r.push(Pick { kind: Kind::Clip, element: chrome(), image: "3".into(), frames: 24, seconds: 6.2, ..Default::default() });
         assert_eq!(
             r.reference(None),
-            "[Clipframes: 3 things in Google Chrome \"Invoices\"]\n1. Button \"New invoice\" (#new-invoice .btn.btn-primary): make this green\n2. Screenshot (2.png): the table is cramped\n3. Screen clip, 6 s, 24 frames (3/)"
+            "[Clipframes: 3 things in Google Chrome \"Invoices\"]\nEach comment is about the thing on its own line.\n1. Button \"New invoice\" (#new-invoice .btn.btn-primary): make this green\n2. Screenshot (2.png): the table is cramped\n3. Screen clip, 6 s, 24 frames (3/): no comment"
         );
+    }
+
+    #[test]
+    fn element_picks_offer_the_notes_file_and_a_picture_asks_for_it() {
+        let mut r = Round::default();
+        r.add(paid(0).element);
+        r.add(paid(0).element);
+        assert!(r.reference(Some("/n.md")).starts_with("[Clipframes: 2 things in Google Chrome \"Invoices\" at http://localhost:3000/. Everything is below; pictures and more detail, if you need them, are in /n.md]\n"), "{}", r.reference(Some("/n.md")));
+        r.push(Pick { kind: Kind::Area, element: paid(0).element, image: "3.png".into(), ..Default::default() });
+        assert!(r.reference(Some("/n.md")).starts_with("[Clipframes: 3 things in Google Chrome \"Invoices\" at http://localhost:3000/. Read /n.md]\n"), "{}", r.reference(Some("/n.md")));
+    }
+
+    #[test]
+    fn the_page_is_named_without_what_follows_a_question_mark_or_a_hash() {
+        let mut r = Round::default();
+        r.add(ElementInfo { url: "https://app.example/invoices?token=abc#row-3".into(), ..chrome_site() });
+        let text = r.reference(None);
+        assert!(text.ends_with(" at https://app.example/invoices]") && !text.contains("token"), "{text}");
+    }
+
+    #[test]
+    fn picks_without_a_comment_say_so_only_beside_picks_that_have_one() {
+        let mut r = Round::default();
+        r.add(chrome_site());
+        r.add(chrome_site());
+        assert!(!r.reference(None).contains("no comment") && !r.reference(None).contains("Each comment"), "none has a comment");
+        r.set_note(0, "make this green");
+        let text = r.reference(None);
+        assert!(text.contains("]\nEach comment is about the thing on its own line.\n1. ") && text.ends_with(": no comment"), "{text}");
+        r.set_note(1, "and this one");
+        assert!(!r.reference(None).contains("no comment") && !r.reference(None).contains("Each comment"), "all have one");
     }
 
     #[test]
@@ -345,9 +424,9 @@ mod tests {
         r.push(paid(8));
         // The second pick's answer comes back first.
         assert!(r.locate(8, Some((3, 4)), Some(Heading { text: "Invoices".into(), inside: false })));
-        assert_eq!(r.reference(None), "[Clipframes: 2 things in Google Chrome \"Invoices\"]\n1. Text \"Paid\"\n2. Text \"Paid\", 3rd of 4 on the page, under heading \"Invoices\"");
+        assert_eq!(r.reference(None), "[Clipframes: 2 things in Google Chrome \"Invoices\" at http://localhost:3000/]\n1. Text \"Paid\"\n2. Text \"Paid\", 3rd of 4 on the page, under heading \"Invoices\"");
         assert!(r.locate(7, Some((1, 4)), None));
-        assert_eq!(r.reference(None), "[Clipframes: 2 things in Google Chrome \"Invoices\"]\n1. Text \"Paid\", 1st of 4 on the page\n2. Text \"Paid\", 3rd of 4 on the page, under heading \"Invoices\"");
+        assert_eq!(r.reference(None), "[Clipframes: 2 things in Google Chrome \"Invoices\" at http://localhost:3000/]\n1. Text \"Paid\", 1st of 4 on the page\n2. Text \"Paid\", 3rd of 4 on the page, under heading \"Invoices\"");
     }
 
     #[test]
@@ -357,10 +436,10 @@ mod tests {
         r.push(paid(8));
         r.remove(0);
         assert!(!r.locate(7, Some((1, 4)), None), "the pick is gone");
-        assert_eq!(r.reference(None), "[Text \"Paid\" in Google Chrome \"Invoices\"]", "and the one that moved into its place is not touched");
+        assert_eq!(r.reference(None), "[Text \"Paid\" in Google Chrome \"Invoices\" at http://localhost:3000/]", "and the one that moved into its place is not touched");
         // The one that moved up is still found, by what it is known by and not by where it is.
         assert!(r.locate(8, Some((2, 4)), None));
-        assert_eq!(r.reference(None), "[Text \"Paid\", 2nd of 4 on the page in Google Chrome \"Invoices\"]");
+        assert_eq!(r.reference(None), "[Text \"Paid\", 2nd of 4 on the page in Google Chrome \"Invoices\" at http://localhost:3000/]");
     }
 
     #[test]

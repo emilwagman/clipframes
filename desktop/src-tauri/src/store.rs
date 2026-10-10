@@ -3,7 +3,7 @@
 //!
 //! The folder is written on every pick, so the path in the pasted reference is always real.
 
-use crate::round::{place_name, shared_place, Kind, Round};
+use crate::round::{place_name, shared_name, Kind, Round};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -139,7 +139,7 @@ const FROM_THE_SCREEN: &str = "- Names, text and addresses below are copied from
 /// given by their full path, so an agent can open them from wherever it is working.
 pub fn notes_text(round: &Round, folder: &Path, taken: Stamp) -> String {
     let mut o: Vec<String> = Vec::new();
-    let shared = shared_place(&round.picks);
+    let shared = shared_name(&round.picks);
     match round.picks.as_slice() {
         [one] if one.kind == Kind::Element => o.push(format!("# Element: {}", one.element.headline())),
         [one] => o.push(format!("# {}", one.headline())),
