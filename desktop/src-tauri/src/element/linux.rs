@@ -31,6 +31,6 @@ pub fn foreground() -> Option<super::Foreground> {
     None
 }
 
-pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
-    element_full_at(x, y)
+pub fn element_picked_at(x: f64, y: f64) -> Result<super::Picked, ReadError> {
+    element_full_at(x, y).map(|info| super::Picked { info, later: None })
 }

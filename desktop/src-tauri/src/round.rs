@@ -33,6 +33,11 @@ pub struct Click {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Pick {
+    /// What the pick is known by while its round is in the app, so that something learned
+    /// about it later finds it wherever picks removed since have moved it. Zero when it has
+    /// none; not kept on disk.
+    #[serde(skip)]
+    pub id: u64,
     pub kind: Kind,
     /// The element picked. For an area or a clip: where it was taken (app, window, page) and
     /// the area itself as the frame.
@@ -80,6 +85,20 @@ impl Round {
     pub fn set_note(&mut self, index: usize, note: &str) {
         if let Some(p) = self.picks.get_mut(index) {
             p.note = note.trim().to_string();
+        }
+    }
+
+    /// Adds to the pick known as `id` which one it is among those that read the same and
+    /// what heading it is under, learned after the pick was made. False when that pick is no
+    /// longer in the round.
+    pub fn locate(&mut self, id: u64, occurrence: Option<(u32, u32)>, heading: Option<crate::element::Heading>) -> bool {
+        match self.picks.iter_mut().find(|p| id != 0 && p.id == id) {
+            Some(pick) => {
+                pick.element.occurrence = occurrence;
+                pick.element.heading = heading;
+                true
+            }
+            None => false,
         }
     }
 
@@ -312,6 +331,57 @@ mod tests {
         let r: Round = serde_json::from_str(old).unwrap();
         assert_eq!(r.picks[0].kind, Kind::Element);
         assert_eq!(r.picks[0].headline(), "Button \"Save\"");
+    }
+
+    fn paid(id: u64) -> Pick {
+        Pick { id, element: ElementInfo { role: "Text".into(), name: "Paid".into(), url: "http://localhost:3000/".into(), ..chrome() }, ..Default::default() }
+    }
+
+    #[test]
+    fn what_is_learned_about_a_pick_later_lands_on_that_pick_whatever_order_it_comes_in() {
+        use crate::element::Heading;
+        let mut r = Round::default();
+        r.push(paid(7));
+        r.push(paid(8));
+        // The second pick's answer comes back first.
+        assert!(r.locate(8, Some((3, 4)), Some(Heading { text: "Invoices".into(), inside: false })));
+        assert_eq!(r.reference(None), "[Clipframes: 2 things in Google Chrome \"Invoices\"]\n1. Text \"Paid\"\n2. Text \"Paid\", 3rd of 4 on the page, under heading \"Invoices\"");
+        assert!(r.locate(7, Some((1, 4)), None));
+        assert_eq!(r.reference(None), "[Clipframes: 2 things in Google Chrome \"Invoices\"]\n1. Text \"Paid\", 1st of 4 on the page\n2. Text \"Paid\", 3rd of 4 on the page, under heading \"Invoices\"");
+    }
+
+    #[test]
+    fn what_is_learned_about_a_pick_that_was_removed_meanwhile_goes_nowhere() {
+        let mut r = Round::default();
+        r.push(paid(7));
+        r.push(paid(8));
+        r.remove(0);
+        assert!(!r.locate(7, Some((1, 4)), None), "the pick is gone");
+        assert_eq!(r.reference(None), "[Text \"Paid\" in Google Chrome \"Invoices\"]", "and the one that moved into its place is not touched");
+        // The one that moved up is still found, by what it is known by and not by where it is.
+        assert!(r.locate(8, Some((2, 4)), None));
+        assert_eq!(r.reference(None), "[Text \"Paid\", 2nd of 4 on the page in Google Chrome \"Invoices\"]");
+    }
+
+    #[test]
+    fn what_is_learned_for_a_round_that_is_over_does_not_reach_the_next_one() {
+        // A new round is a new `Round`; what the old one's picks were known by is not in it,
+        // and picks made without a look to come (areas, clips, old captures) are known by nothing.
+        let mut next = Round::default();
+        next.add(button());
+        next.push(paid(9));
+        assert!(!next.locate(7, Some((1, 4)), None));
+        assert!(!next.locate(0, Some((1, 4)), None), "zero is no pick's name");
+        assert_eq!(next.picks[0].element.occurrence, None);
+    }
+
+    #[test]
+    fn what_a_pick_is_known_by_is_not_written_to_disk() {
+        let mut r = Round::default();
+        r.push(paid(7));
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(!json.contains("\"id\""), "{json}");
+        assert_eq!(serde_json::from_str::<Round>(&json).unwrap().picks[0].id, 0);
     }
 
     #[test]

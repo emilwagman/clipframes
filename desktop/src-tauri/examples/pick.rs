@@ -22,11 +22,12 @@ fn main() {
                 let what = element.map(|e| e.headline()).unwrap_or_else(|| "nothing".into());
                 println!("hover ({x:.0}, {y:.0})  {:.1} ms  {}", read_ms, what.chars().take(90).collect::<String>());
             }
-            Event::Pick { x, y, element } => {
+            Event::Pick { x, y, element, .. } => {
                 picks.fetch_add(1, Ordering::Relaxed);
                 let selector = element.selector();
                 println!("PICK  ({x:.0}, {y:.0})  {}{}", element.headline(), if selector.is_empty() { String::new() } else { format!("  ({selector})") });
             }
+            Event::Located { occurrence, heading, took_ms, .. } => println!("      which one {occurrence:?}, heading {heading:?}  ({took_ms:.1} ms)"),
             Event::Drag { .. } | Event::Area { .. } | Event::Click { .. } => {}
             Event::Cancel => {
                 println!("cancelled with Esc");

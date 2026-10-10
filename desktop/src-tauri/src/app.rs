@@ -251,11 +251,36 @@ fn copy_text(app: &AppHandle, text: &str) {
 /// Empties the clipboard if what is on it is still what Clipframes put there. Anything the
 /// user has copied since is theirs and stays.
 fn uncopy(app: &AppHandle) {
+    if clipboard_is_ours(app) {
+        copy_text(app, "");
+    }
+}
+
+/// Whether the clipboard still holds what Clipframes last put there.
+fn clipboard_is_ours(app: &AppHandle) -> bool {
     let core = app.state::<Core>();
     let ours = core.copied.lock().unwrap().clone();
     let now = core.clipboard.lock().unwrap().as_mut().and_then(|c| c.get_text().ok());
-    if now.is_some_and(|now| same_text(&now, &ours)) {
-        copy_text(app, "");
+    now.is_some_and(|now| same_text(&now, &ours))
+}
+
+/// What to do with something learned about a pick after it was made.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Late {
+    /// The round is open: everything is told and copied again, as after any change.
+    Publish,
+    /// The round is over and the clipboard still holds its text: the files and the clipboard
+    /// get the fuller text.
+    SaveAndCopy,
+    /// The round is over and the user has copied something else since: only the files.
+    Save,
+}
+
+fn late(round_open: bool, clipboard_ours: bool) -> Late {
+    match (round_open, clipboard_ours) {
+        (true, _) => Late::Publish,
+        (false, true) => Late::SaveAndCopy,
+        (false, false) => Late::Save,
     }
 }
 
@@ -861,22 +886,58 @@ fn on_event(app: &AppHandle, event: Event) {
                 let _ = app.emit_to(screen.label.as_str(), "hover", HoverView { rect: frame.map(|f| screen.local(&f)), label: label.clone() });
             }
         }
-        Event::Pick { element, .. } => {
-            trace("pick");
+        Event::Pick { element, token, read_ms, .. } => {
+            // With CLIPFRAMES_TRACE these lines say where the time from click to comment box
+            // goes: each is stamped, and says how long after the pick arrived it was.
+            let arrived = Instant::now();
+            let after = |what: &str| trace(&format!("pick {token}: {what} (+{:.0} ms)", arrived.elapsed().as_secs_f64() * 1000.0));
+            trace(&format!("pick {token}: element read, {read_ms:.0} ms after the click"));
             let frame = element.frame;
             // A picture of the element with a little space around it. Not having one is fine.
+            // Taken before anything of Clipframes' own appears near the element.
             let pad = if cfg!(windows) { 18.0 } else { 12.0 };
             let around = Rect { x: frame.x - pad, y: frame.y - pad, width: frame.width + pad * 2.0, height: frame.height + pad * 2.0 };
             // Where the system says Clipframes may not take pictures (macOS without Screen
             // Recording) none is tried: trying is what makes the system ask, and its question
             // would come up while every click is being taken as a pick.
             let (image, pixels) = on_display(&around, &displays(app)).filter(|_| shot::permitted()).and_then(|seen| snap(&core, &seen, ELEMENT_WIDTH)).unwrap_or_default();
-            telemetry::event("pick_added", json!({ "kind": "element", "picture": !image.is_empty(), "selector": !element.selector().is_empty(), "named": !element.name.is_empty(), "web": !element.url.is_empty() }));
-            remember(app, &element);
-            let index = core.round.lock().unwrap().push(Pick { element, image, pixels, ..Default::default() });
+            after("picture done");
+            let report = json!({ "kind": "element", "picture": !image.is_empty(), "selector": !element.selector().is_empty(), "named": !element.name.is_empty(), "web": !element.url.is_empty() });
+            let place = element.clone();
+            let index = core.round.lock().unwrap().push(Pick { id: token, element, image, pixels, ..Default::default() });
             *core.noting.lock().unwrap() = Some(index);
+            after("pick added");
+            // The comment box first: it is what the user is waiting for. What touches the
+            // disk and the clipboard comes after it.
             show_note(app, &frame);
+            after("comment box shown");
+            remember(app, &place);
+            telemetry::event("pick_added", report);
             publish(app);
+            after("published");
+        }
+        // Which one it is and under what heading, found after the pick was shown.
+        Event::Located { token, occurrence, heading, took_ms } => {
+            trace(&format!("pick {token}: which one read in {took_ms:.0} ms: {occurrence:?}, heading {}", heading.is_some()));
+            if occurrence.is_none() && heading.is_none() {
+                return;
+            }
+            // By what the pick is known by, not where it is: picks removed since have moved
+            // it, and it may be gone, or its round over and another begun.
+            if !core.round.lock().unwrap().locate(token, occurrence, heading) {
+                return trace(&format!("pick {token}: no longer there"));
+            }
+            let open = core.picker.lock().unwrap().is_some();
+            match late(open, !open && clipboard_is_ours(app)) {
+                Late::Publish => publish(app),
+                Late::SaveAndCopy => {
+                    save(&core);
+                    let reference = view(app).reference;
+                    copy_text(app, &reference);
+                }
+                Late::Save => save(&core),
+            }
+            trace(&format!("pick {token}: which one published"));
         }
         Event::Drag { rect } => show_area(app, rect, false),
         // These arrive on the input thread, which must not wait for a screenshot.
@@ -1866,6 +1927,14 @@ mod tests {
         assert!(!newer(&newest, 1_760_000_000_002), "the keystroke before, arriving after");
         assert!(!newer(&newest, 1_760_000_000_003), "the same one twice");
         assert!(newer(&newest, 1_760_000_000_004));
+    }
+
+    #[test]
+    fn what_is_learned_after_a_round_closed_reaches_the_clipboard_only_if_it_is_still_ours() {
+        assert_eq!(late(true, false), Late::Publish);
+        assert_eq!(late(true, true), Late::Publish);
+        assert_eq!(late(false, true), Late::SaveAndCopy);
+        assert_eq!(late(false, false), Late::Save, "the user has copied something else since");
     }
 
     #[test]

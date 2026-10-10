@@ -10,7 +10,10 @@ export interface Walked {
   getAttribute(name: string): string | null;
 }
 
-/** How far the look may go before it gives up and says nothing. */
+/**
+ * How far the look may go before it gives up and says nothing. Smaller than the app's own
+ * budget: there the look is taken after the pick is on screen, here the click waits for it.
+ */
 export const BUDGET = { nodes: 3000, ms: 80 };
 
 /** "1st", "2nd", "3rd", "4th", "11th", "21st". */

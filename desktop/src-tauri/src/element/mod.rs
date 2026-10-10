@@ -202,10 +202,40 @@ pub fn page_at(x: f64, y: f64, may_wake: bool) -> String {
     platform::page_at(x, y, may_wake)
 }
 
-/// The full reading of an element the user just clicked: everything `element_full_at` says,
-/// and which one it is among those that read the same and what heading it is under. That
-/// means going through the page or window, within `locate::BUDGET`. Never for a hover.
-pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+/// What a click reads: the element at once, and a second, slower look to take afterwards.
+pub struct Picked {
+    /// Everything `element_full_at` says. Ready to be shown.
+    pub info: ElementInfo,
+    /// Which one it is among those that read the same, and what heading it is under: a look
+    /// through the whole page or window. Kept apart because nothing the user sees may wait
+    /// for it. Has to be taken on the thread that made the reading.
+    later: Option<Box<dyn FnOnce() -> Option<locate::Located>>>,
+}
+
+impl Picked {
+    fn new(info: ElementInfo, later: impl FnOnce() -> Option<locate::Located> + 'static) -> Picked {
+        Picked { info, later: Some(Box::new(later)) }
+    }
+
+    #[cfg(test)]
+    pub fn for_test(info: ElementInfo, later: impl FnOnce() -> Option<locate::Located> + 'static) -> Picked {
+        Picked::new(info, later)
+    }
+
+    /// Whether there is a second look to take.
+    pub fn has_more(&self) -> bool {
+        self.later.is_some()
+    }
+
+    /// Takes the second look, within `locate::BUDGET`. `None` when there is nothing to say,
+    /// the budget ran out, or it was taken already.
+    pub fn whereabouts(&mut self) -> Option<locate::Located> {
+        self.later.take().and_then(|look| look())
+    }
+}
+
+/// The reading for an element the user just clicked. Never for a hover.
+pub fn element_picked_at(x: f64, y: f64) -> Result<Picked, ReadError> {
     platform::element_picked_at(x, y)
 }
 

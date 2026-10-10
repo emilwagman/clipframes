@@ -6,7 +6,7 @@
 //! round is running.
 
 use crate::element::{self, ElementInfo, Rect};
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -69,8 +69,13 @@ pub fn span(a: (f64, f64), b: (f64, f64)) -> Rect {
 pub enum Event {
     /// The pointer is over this element now (`None`: nothing readable there).
     Hover { x: f64, y: f64, element: Option<ElementInfo>, read_ms: f64 },
-    /// The user clicked this element.
-    Pick { x: f64, y: f64, element: ElementInfo },
+    /// The user clicked this element. `token` is what the pick is known by for `Located`;
+    /// `read_ms` is how long ago the click was: the time reading the element took.
+    Pick { x: f64, y: f64, element: ElementInfo, token: u64, read_ms: f64 },
+    /// Sent after `Pick`, once the look through the page or window has been taken: which one
+    /// of several that read the same the element is, and the heading it is under. Both may
+    /// be nothing. `took_ms` is how long the look took.
+    Located { token: u64, occurrence: Option<(u32, u32)>, heading: Option<element::Heading>, took_ms: f64 },
     /// An area is being dragged (`None`: the drag was dropped).
     Drag { rect: Option<Rect> },
     /// The user finished dragging this area.
@@ -219,8 +224,22 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             let known = shared.last.lock().unwrap().clone().filter(|(_, _, e)| contains(&e.frame, x, y)).map(|(_, _, e)| e);
             let emit = emit.clone();
             thread::spawn(move || {
-                if let Some(element) = full(x, y).or(known) {
-                    emit(Event::Pick { x, y, element });
+                static TOKENS: AtomicU64 = AtomicU64::new(0);
+                let clicked = Instant::now();
+                let (read, mut more) = match full(x, y) {
+                    Some(picked) => (Some(picked.info.clone()), Some(picked)),
+                    None => (None, None),
+                };
+                let Some(element) = read.or(known) else { return };
+                let token = TOKENS.fetch_add(1, Ordering::SeqCst) + 1;
+                emit(Event::Pick { x, y, element, token, read_ms: clicked.elapsed().as_secs_f64() * 1000.0 });
+                // The pick is shown and copied by now: `emit` returns when that is done. Only
+                // then the slower look, on this thread, which is neither the input thread nor
+                // the interface's.
+                if let Some(picked) = more.as_mut().filter(|picked| picked.has_more()) {
+                    let looking = Instant::now();
+                    let located = picked.whereabouts().unwrap_or_default();
+                    emit(Event::Located { token, occurrence: located.occurrence, heading: located.heading, took_ms: looking.elapsed().as_secs_f64() * 1000.0 });
                 }
             });
             true
@@ -244,14 +263,18 @@ fn quick(_x: f64, _y: f64) -> Option<ElementInfo> {
 }
 
 #[cfg(not(test))]
-fn full(x: f64, y: f64) -> Option<ElementInfo> {
+fn full(x: f64, y: f64) -> Option<element::Picked> {
     element::element_picked_at(x, y).ok()
 }
 
-/// Tests never read the real screen.
+/// Tests never read the real screen. One point stands for an element with a second look to
+/// take, which says so loudly if it is taken before the pick has been handed over.
 #[cfg(test)]
-fn full(_x: f64, _y: f64) -> Option<ElementInfo> {
-    None
+fn full(x: f64, _y: f64) -> Option<element::Picked> {
+    (x == tests::TWICE).then(|| element::Picked::for_test(ElementInfo { role: "Text".into(), name: "Paid".into(), ..Default::default() }, || {
+        thread::sleep(Duration::from_millis(60));
+        Some(element::locate::Located { occurrence: Some((2, 4)), heading: None })
+    }))
 }
 
 fn contains(r: &Rect, x: f64, y: f64) -> bool {
@@ -289,6 +312,31 @@ fn read_loop(shared: Arc<Shared>, emit: Arc<dyn Fn(Event) + Send + Sync>) {
 mod tests {
     use super::*;
     use std::sync::mpsc;
+
+    /// Where the element with a second look is (see `full`).
+    pub const TWICE: f64 = 777.0;
+
+    #[test]
+    fn the_pick_is_handed_over_before_the_look_through_the_page_begins() {
+        let (shared, emit, rx) = round();
+        let clicked = Instant::now();
+        assert!(handle(&shared, &emit, Input::Up(TWICE, 300.0)));
+        let token = match rx.recv_timeout(Duration::from_secs(1)).expect("a pick") {
+            Event::Pick { element, token, .. } => {
+                assert_eq!((element.name.as_str(), element.occurrence), ("Paid", None), "as it was read, without the later facts");
+                token
+            }
+            other => panic!("expected a pick, got {other:?}"),
+        };
+        assert!(clicked.elapsed() < Duration::from_millis(50), "the pick did not wait for the look: {:?}", clicked.elapsed());
+        match rx.recv_timeout(Duration::from_secs(1)).expect("the later facts") {
+            Event::Located { token: of, occurrence, took_ms, .. } => {
+                assert_eq!((of, occurrence), (token, Some((2, 4))), "for the same pick");
+                assert!(took_ms >= 60.0);
+            }
+            other => panic!("expected the later facts, got {other:?}"),
+        }
+    }
 
     fn round() -> (Arc<Shared>, Arc<dyn Fn(Event) + Send + Sync>, mpsc::Receiver<Event>) {
         let (tx, rx) = mpsc::channel();

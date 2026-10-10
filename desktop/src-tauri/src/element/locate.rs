@@ -16,10 +16,12 @@ pub struct Budget {
     pub time: Duration,
 }
 
-/// What a click may spend. The comment box waits for this, so it stays well under the time a
-/// pause is noticed. The time is also the longest any one question to the app may take: each
-/// is asked with what is left of it (`Node::open`).
-pub const BUDGET: Budget = Budget { nodes: 3000, time: Duration::from_millis(80) };
+/// What the look after a click may spend. Nothing the user sees waits for it: the pick is on
+/// screen and on the clipboard first, and these two facts are added when they arrive. So the
+/// budget is about not keeping another app busy, not about a pause. The time is also the
+/// longest any one question to the app may take: each is asked with what is left of it
+/// (`Node::open`).
+pub const BUDGET: Budget = Budget { nodes: 6000, time: Duration::from_millis(400) };
 
 /// Headings are cut to about this many characters.
 const HEADING_LENGTH: usize = 60;
@@ -317,10 +319,11 @@ mod tests {
     #[test]
     fn one_slow_answer_is_not_waited_for_past_the_budget() {
         let started = Instant::now();
-        assert_eq!(walk(Slow, &Slow, "Button", "Save", &BUDGET), None);
+        let budget = Budget { nodes: 1000, time: Duration::from_millis(80) };
+        assert_eq!(walk(Slow, &Slow, "Button", "Save", &budget), None);
         let took = started.elapsed();
-        assert!(took >= BUDGET.time, "it did wait for what it was allowed: {took:?}");
-        assert!(took < BUDGET.time * 2, "and not for the quarter second a question may take otherwise: {took:?}");
+        assert!(took >= budget.time, "it did wait for what it was allowed: {took:?}");
+        assert!(took < budget.time * 2, "and not for the quarter second a question may take otherwise: {took:?}");
     }
 
     #[test]

@@ -52,15 +52,14 @@ pub fn element_full_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
 }
 
 /// The reading for a click: the element, and which one it is and under what heading.
-pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
+pub fn element_picked_at(x: f64, y: f64) -> Result<super::Picked, ReadError> {
     AUTOMATION.with(|automation| {
         let automation = automation.as_ref().ok_or(ReadError::Other("UI Automation is not available.".into()))?;
-        let mut read = full(automation, x, y)?;
-        if let Some(found) = read.around.as_ref().and_then(|around| locate_in(automation, around, &read.element, &read.info)) {
-            read.info.occurrence = found.occurrence;
-            read.info.heading = found.heading;
-        }
-        Ok(read.info)
+        let Read { info, element, around } = full(automation, x, y)?;
+        let Some(around) = around else { return Ok(super::Picked { info, later: None }) };
+        let known = info.clone();
+        // Taken later, on this same thread, whose connection to UI Automation it uses.
+        Ok(super::Picked::new(info, move || AUTOMATION.with(|automation| locate_in(automation.as_ref()?, &around, &element, &known))))
     })
 }
 

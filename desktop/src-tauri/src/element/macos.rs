@@ -110,19 +110,19 @@ fn window_at(x: f64, y: f64) -> Option<ScreenWindow> {
 }
 
 pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
-    read(x, y, Wake::Keep, false)
+    read(x, y, Wake::Keep).map(|(info, _)| info)
 }
 
 /// The address of the page at a point, or nothing when there is no page there. With
 /// `may_wake` off, a Chromium or Electron app whose page structure is not switched on is
 /// left as it is, and has no address to give.
 pub fn page_at(x: f64, y: f64, may_wake: bool) -> String {
-    read(x, y, if may_wake { Wake::Once } else { Wake::No }, false).map(|e| e.url).unwrap_or_default()
+    read(x, y, if may_wake { Wake::Once } else { Wake::No }).map(|(info, _)| info.url).unwrap_or_default()
 }
 
-/// `locate` adds which one it is and what heading it is under: a look through the whole page
-/// or window, for a click only.
-fn read(x: f64, y: f64, wake_how: Wake, locate: bool) -> Result<ElementInfo, ReadError> {
+/// The element, and with it the element itself and what it is in (its page, or failing that
+/// its window) for the look a click takes afterwards.
+fn read(x: f64, y: f64, wake_how: Wake) -> Result<(ElementInfo, Option<(Element, Element)>), ReadError> {
     let win = window_at(x, y).ok_or(ReadError::Nothing)?;
     wake(win.pid, wake_how);
 
@@ -137,7 +137,7 @@ fn read(x: f64, y: f64, wake_how: Wake, locate: bool) -> Result<ElementInfo, Rea
         AXUIElementSetMessagingTimeout(app.0, TIMEOUT_SECONDS);
         let mut hit: AXUIElementRef = ptr::null_mut();
         if AXUIElementCopyElementAtPosition(app.0, x as f32, y as f32, &mut hit) != kAXErrorSuccess || hit.is_null() {
-            return Ok(base);
+            return Ok((base, None));
         }
         let target = best_target(Element(hit));
         let mut around = None;
@@ -145,16 +145,7 @@ fn read(x: f64, y: f64, wake_how: Wake, locate: bool) -> Result<ElementInfo, Rea
         if info.frame.width < 1.0 {
             info.frame = win.frame;
         }
-        if let Some(around) = around.filter(|_| locate) {
-            // A page was found on the way up exactly when the element has an address.
-            let in_page = !info.url.is_empty() || around.role() == "WebArea";
-            let target = AxNode { element: target, in_page };
-            if let Some(found) = locate::walk(AxNode { element: around, in_page }, &target, &info.role, info.label(), &locate::BUDGET) {
-                info.occurrence = found.occurrence;
-                info.heading = found.heading;
-            }
-        }
-        Ok(info)
+        Ok((info, around.map(|around| (target, around))))
     }
 }
 
@@ -617,6 +608,14 @@ fn focused_title(pid: i32) -> String {
 }
 
 /// The reading for a click: the element, and which one it is and under what heading.
-pub fn element_picked_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
-    read(x, y, Wake::Keep, true)
+pub fn element_picked_at(x: f64, y: f64) -> Result<super::Picked, ReadError> {
+    let (info, parts) = read(x, y, Wake::Keep)?;
+    let Some((target, around)) = parts else { return Ok(super::Picked { info, later: None }) };
+    let (role, label, on_page) = (info.role.clone(), info.label().to_string(), !info.url.is_empty());
+    Ok(super::Picked::new(info, move || unsafe {
+        // A page was found on the way up exactly when the element has an address.
+        let in_page = on_page || around.role() == "WebArea";
+        let target = AxNode { element: target, in_page };
+        locate::walk(AxNode { element: around, in_page }, &target, &role, &label, &locate::BUDGET)
+    }))
 }
