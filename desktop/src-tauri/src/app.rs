@@ -1555,7 +1555,9 @@ fn show_note(app: &AppHandle, frame: &Rect) {
 fn watch_faint(app: &AppHandle) {
     let core = app.state::<Core>();
     loop {
-        let open = core.noting.lock().unwrap().is_some() && core.picker.lock().unwrap().is_some();
+        // One lock at a time: nothing here may wait for one while holding another.
+        let noting = core.noting.lock().unwrap().is_some();
+        let open = noting && core.picker.lock().unwrap().is_some();
         let note = core.noted.lock().unwrap().as_ref().map(|n| n.at).filter(|_| open);
         let faint = faint_under(note.as_ref(), element::pointer());
         if core.faint.swap(faint, Ordering::SeqCst) != faint {
