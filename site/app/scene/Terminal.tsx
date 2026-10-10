@@ -23,7 +23,7 @@ export default function Terminal({ look, folder, lines, typed, working, promptRe
         <p className={s.hello}><b>{name}</b> <span>{folder}</span></p>
         <div className={s.lines} aria-live="polite">
           {lines.map((line, i) => (
-            <p key={i} className={s[line.who]}>
+            <p key={i} className={s[line.who]} data-line={line.who}>
               <i aria-hidden="true">{line.who === "you" ? prompt : bullet}</i>
               <span>{line.text}</span>
             </p>

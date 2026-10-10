@@ -30,7 +30,7 @@ async function session(name, options, body, path = "") {
     page,
     box: (selector) => page.locator(selector).first().boundingBox(),
     /// The example for the kind of work on show has played to its end.
-    played: (which) => page.waitForFunction((which) => { const scene = document.querySelector("[data-scene]"); return scene.dataset.scene === which && scene.dataset.playing === undefined && document.querySelector("[data-scene] p[class*=says]") !== null; }, which, { timeout: 20000 }),
+    played: (which) => page.waitForFunction((which) => { const scene = document.querySelector("[data-scene]"); return scene.dataset.scene === which && scene.dataset.playing === undefined && document.querySelector("[data-scene] [data-line=says]") !== null; }, which, { timeout: 20000 }),
     said: () => page.locator("[data-scene] [aria-live] p").allInnerTexts(),
     typed: () => page.locator("[data-agent-prompt] span").innerText(),
     at: async (selector, fx = 0.5, fy = 0.5) => { const box = await page.locator(`[data-scene] ${selector}`).boundingBox(); return { x: box.x + box.width * fx, y: box.y + box.height * fy }; },
