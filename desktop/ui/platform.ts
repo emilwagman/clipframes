@@ -84,6 +84,12 @@ export interface Platform {
   removePick(index: number): Promise<void>;
   /** Turns the tab that appears by itself in this place on or off. */
   setAuto(on: boolean): Promise<void>;
+  /**
+   * The bar's grip was pressed: the bar follows the pointer until the button comes up. With
+   * `home`, a double click: back to where it opens by default. Only where the bar is a window
+   * that can be moved; without this the bar has no grip.
+   */
+  moveBar?(home: boolean): Promise<void>;
   openHistory(): Promise<void>;
   done(): Promise<void>;
   /** Esc, pressed while one of Clipframes' own windows has the keyboard. */

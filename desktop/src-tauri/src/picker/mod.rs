@@ -176,7 +176,10 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
         Input::Move(x, y) => {
             // A drag keeps following the pointer even across Clipframes' own windows.
             let dragging = shared.drag.lock().unwrap().is_some();
-            if mode != Mode::Watch && (dragging || !exempt(shared, x, y)) {
+            // A press the bar got is the bar's until the button comes up: while the bar is
+            // being moved by its grip, nothing it passes over is read or outlined.
+            let own = shared.own_press.load(Ordering::SeqCst);
+            if mode != Mode::Watch && !own && (dragging || !exempt(shared, x, y)) {
                 *shared.pending.lock().unwrap() = Some((x, y));
                 shared.wake.notify_one();
             }
@@ -387,6 +390,19 @@ mod tests {
         assert!(handle(&shared, &emit, Input::Down(300.0, 300.0)));
         assert!(handle(&shared, &emit, Input::Up(300.0, 300.0)));
         assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Pick { .. })));
+    }
+
+    #[test]
+    fn while_the_bar_is_dragged_nothing_under_the_pointer_is_read() {
+        let (shared, emit, _rx) = round();
+        *shared.exempt.lock().unwrap() = vec![Rect { x: 100.0, y: 800.0, width: 400.0, height: 60.0 }];
+        assert!(!handle(&shared, &emit, Input::Down(110.0, 820.0)), "the grip gets the press");
+        // The bar follows the pointer; its old place is all the picker knows until it rests.
+        handle(&shared, &emit, Input::Move(300.0, 300.0));
+        assert_eq!(*shared.pending.lock().unwrap(), None, "nothing is outlined on the way");
+        assert!(!handle(&shared, &emit, Input::Up(300.0, 300.0)), "and letting go is not a pick");
+        handle(&shared, &emit, Input::Move(310.0, 300.0));
+        assert_eq!(*shared.pending.lock().unwrap(), Some((310.0, 300.0)), "afterwards pointing works as before");
     }
 
     #[test]

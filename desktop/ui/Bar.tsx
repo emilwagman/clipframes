@@ -12,6 +12,31 @@ function clock(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
+/** Six dots at the start of the bar to move it by, so what is under it can be picked. */
+function Grip() {
+  const platform = usePlatform();
+  if (!platform.moveBar) return null;
+  return (
+    <span
+      className="grip"
+      title="Drag to move. Double click to put it back."
+      // Decided on the press: the system takes the pointer for the drag, so no click follows it.
+      onMouseDown={(event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        void platform.moveBar?.(event.detail > 1);
+      }}
+    >
+      <i />
+      <i />
+      <i />
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
 export function Bar() {
   const platform = usePlatform();
   const round = useRound();
@@ -25,6 +50,7 @@ export function Bar() {
     const more = screen ? "Screenshots and clips need Screen Recording access. After you turn it on, Clipframes may need to be quit and opened again." : message;
     return (
       <div className={round.picking ? "bar wide back" : "bar wide"}>
+        <Grip />
         {/* The round is still on when only pictures are the trouble: pointing at elements works. */}
         {round.picking && (
           <button className="round" aria-label={NAMES.element} title="Back to pointing at elements" onClick={() => void platform.setTool("element")}>
@@ -51,6 +77,7 @@ export function Bar() {
   if (round.recording !== null) {
     return (
       <div className="bar wide">
+        <Grip />
         <span className="dot" />
         <span className="status">
           <b className="time">{clock(round.recording)}</b> Recording, use the app as usual
@@ -64,6 +91,7 @@ export function Bar() {
 
   return (
     <div className="bar">
+      <Grip />
       <div className="tools" role="tablist">
         {platform.tools.map((tool) => (
           <button key={tool} role="tab" aria-selected={round.tool === tool} aria-label={NAMES[tool]} title={NAMES[tool]} className={round.tool === tool ? "round on" : "round"} onClick={() => void platform.setTool(tool)}>

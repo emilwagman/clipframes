@@ -32,6 +32,7 @@ export const platform: Platform = {
   closeNote: () => invoke("note_close"),
   removePick: (index) => invoke("pick_remove", { index }),
   setAuto: (on) => invoke("place_auto_set", { on }),
+  moveBar: (home) => invoke(home ? "bar_home" : "bar_grip"),
   openHistory: () => invoke("history_open"),
   done: () => invoke("round_done"),
   escape: () => invoke("escape_key"),

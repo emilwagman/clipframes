@@ -1,4 +1,4 @@
-// Settings: the shortcut, starting at login, what Claude Code may read, and the version. Only the desktop app has this
+// Settings: the shortcut, starting at login, the tab, what Claude Code may read, and the version. Only the desktop app has this
 // window, so it talks to the core directly instead of through the shared Platform.
 
 import { invoke } from "@tauri-apps/api/core";
@@ -17,6 +17,9 @@ interface SettingsView {
   mac: boolean;
   claudeRead: "on" | "off" | "missing" | "unnamed" | "manual";
   claudeRules: string[];
+  showTab: boolean;
+  /** The apps and sites the tab appears in now. */
+  tabPlaces: { app: string; host: string; name: string }[];
 }
 
 /** "ctrl+shift+Space" from a key press, or null while only modifiers are down. */
@@ -102,6 +105,25 @@ export function Settings() {
           <input id="login" type="checkbox" checked={view.launchAtLogin} onChange={(e) => void invoke<SettingsView>("launch_set", { on: e.target.checked }).then(setView)} />
         </label>
         <p className="help">Starts with nothing on screen, ready for the shortcut.</p>
+      </section>
+      <section>
+        <label className="row" htmlFor="tab">
+          <span>Show the tab where I used Clipframes before</span>
+          <input id="tab" type="checkbox" checked={view.showTab} onChange={(e) => void invoke<SettingsView>("tab_set", { on: e.target.checked }).then(setView)} />
+        </label>
+        <p className="help">A small mark that opens the bar. It shows when you come back to an app or site you used Clipframes in.</p>
+        {view.showTab && view.tabPlaces.length > 0 && (
+          <ul className="places">
+            {view.tabPlaces.map((place) => (
+              <li className="row" key={`${place.app}|${place.host}`}>
+                <span>{place.name}</span>
+                <button className="quiet" title="Stop showing the tab here. The pin in the bar turns it on again." onClick={() => void invoke<SettingsView>("tab_place_remove", { place: place.app, host: place.host }).then(setView)}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
       <section>
         <label className="row" htmlFor="claude">

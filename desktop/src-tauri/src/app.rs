@@ -56,9 +56,11 @@ const AREA_WIDTH: u32 = 2560;
 const KEEP_WARM: Duration = Duration::from_secs(90);
 /// How far the clipboard and the files on disk may trail behind typing in the comment box.
 const NOTE_SETTLE: Duration = Duration::from_millis(200);
+/// The bar has come to rest when it has not moved for this long.
+const BAR_SETTLE: Duration = Duration::from_millis(120);
 
 /// Sizes in CSS pixels.
-const BAR_SIZE: (f64, f64) = (376.0, 64.0);
+const BAR_SIZE: (f64, f64) = (404.0, 64.0);
 const NOTE_SIZE: (f64, f64) = (316.0, 172.0);
 
 /// A line on stderr with the time since start, when CLIPFRAMES_TRACE is set. For chasing
@@ -150,6 +152,16 @@ pub struct Core {
     /// The number that came with the newest comment text, so an older one arriving late is
     /// not put over it.
     note_seq: AtomicU64,
+    /// The place watcher's thread is running (`watch`).
+    watching: AtomicBool,
+    /// Set while the bar is where the user's hand may move it: from a press on its grip until
+    /// the bar is next opened, closed or sent home. Holds which displays were connected at the
+    /// press. Without it, Clipframes putting the bar somewhere would look like a drag.
+    gripped: Mutex<Option<String>>,
+    /// The bar has moved since it was last looked at.
+    bar_moved: AtomicBool,
+    /// A thread is waiting for the bar to come to rest.
+    bar_timer: AtomicBool,
 }
 
 /// A clip in the making.
@@ -226,7 +238,8 @@ fn view(app: &AppHandle) -> RoundView {
         picking,
         tool: *core.tool.lock().unwrap(),
         recording,
-        place: core.over.lock().unwrap().as_ref().filter(|p| p.known()).map(|p| PlaceView { name: p.name(), auto: core.places.lock().unwrap().auto(p) }),
+        // With the tab switched off everywhere there is nothing for the pin to turn on.
+        place: core.over.lock().unwrap().as_ref().filter(|p| p.known() && core.settings.lock().unwrap().show_tab).map(|p| PlaceView { name: p.name(), auto: core.places.lock().unwrap().auto(p) }),
         picks: round.picks.iter().map(|p| PickView { kind: p.kind, headline: p.headline(), selector: if p.kind == Kind::Element { p.element.selector() } else { String::new() }, note: p.note.clone() }).collect(),
         noting,
         reference: round.reference(core.notes.lock().unwrap().as_deref().and_then(|p| p.to_str())),
@@ -382,32 +395,69 @@ fn hide_tab(app: &AppHandle) {
     }
 }
 
+/// What the place watcher does with its turn.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Watch {
+    /// The tab is switched off everywhere: nothing is left to watch for.
+    Stop,
+    /// A round is on: the tab is out of the way and no other app is asked anything.
+    Wait,
+    Look,
+}
+
+fn watch_turn(show_tab: bool, picking: bool) -> Watch {
+    match (show_tab, picking) {
+        (false, _) => Watch::Stop,
+        (true, true) => Watch::Wait,
+        (true, false) => Watch::Look,
+    }
+}
+
+/// Starts the place watcher if the tab is switched on and it is not running already.
+fn start_watch(app: &AppHandle) {
+    let core = app.state::<Core>();
+    if core.settings.lock().unwrap().show_tab && !core.watching.swap(true, Ordering::SeqCst) {
+        let watcher = app.clone();
+        if thread::Builder::new().name("clipframes-watch".into()).spawn(move || watch(watcher)).is_err() {
+            core.watching.store(false, Ordering::SeqCst);
+        }
+    }
+}
+
 /// Once a second: which app or site is in front, and whether the tab belongs there. Reading
 /// the page address is the only part that costs anything, and it happens only when the
-/// window in front has changed.
+/// window in front has changed. Runs for as long as the tab is switched on in Settings, and
+/// ends within a second of it being switched off.
 fn watch(app: AppHandle) {
     let mut seen: Option<(i32, String)> = None;
     let mut read_at = Instant::now();
     let mut showing = false;
     // The middle of the window the tab was last placed for.
     let mut placed = (f64::NAN, f64::NAN);
-    let mut tidied = Instant::now();
     loop {
         thread::sleep(Duration::from_secs(1));
         let core = app.state::<Core>();
-        // Once a minute: apps that were asked for their page structure and have not been
-        // looked at for five minutes get to switch it off again. Done here and not during a
-        // round, because a round is over long before this would ever come up.
-        if tidied.elapsed() >= Duration::from_secs(60) {
-            element::sleep_idle(Duration::from_secs(300));
-            tidied = Instant::now();
-        }
-        if core.picker.lock().unwrap().is_some() {
-            if showing {
-                hide_tab(&app);
-                showing = false;
+        let picking = core.picker.lock().unwrap().is_some();
+        let turn = {
+            let settings = core.settings.lock().unwrap();
+            let turn = watch_turn(settings.show_tab, picking);
+            // Said while the setting is held, so switching the tab back on in this very
+            // moment either finds the watcher still running or starts a new one.
+            if turn == Watch::Stop {
+                core.watching.store(false, Ordering::SeqCst);
             }
-            continue;
+            turn
+        };
+        match turn {
+            Watch::Stop => break,
+            Watch::Wait => {
+                if showing {
+                    hide_tab(&app);
+                    showing = false;
+                }
+                continue;
+            }
+            Watch::Look => {}
         }
         let Some(front) = element::foreground() else { continue };
         // One of Clipframes' own windows in front (Settings, History, the tab itself) says
@@ -441,6 +491,22 @@ fn watch(app: AppHandle) {
             }
             showing = wanted;
         }
+    }
+    hide_tab(&app);
+    // Nothing knows what is in front any more: the next bar does not open over a guess.
+    *app.state::<Core>().front.lock().unwrap() = None;
+}
+
+/// Once a minute: apps that were asked for their page structure and have not been looked at
+/// for five minutes get to switch it off again. A thread of its own and not part of the
+/// place watcher, which does not run while the tab is switched off: a round asks apps for
+/// their structure too, and they must be let go either way. Not done during a round either,
+/// because a round is over long before this would ever come up.
+#[cfg(target_os = "macos")]
+fn tidy() {
+    loop {
+        thread::sleep(Duration::from_secs(60));
+        element::sleep_idle(Duration::from_secs(300));
     }
 }
 
@@ -541,31 +607,168 @@ fn monitor_at(monitors: &[Rect], x: f64, y: f64) -> Option<usize> {
     monitors.iter().position(|m| x >= m.x && x < m.x + m.width && y >= m.y && y < m.y + m.height)
 }
 
-/// The display that shows `near` (a point in picker units), or the main one when there is no
-/// point or it is on none.
-fn monitor_near(app: &AppHandle, near: Option<(f64, f64)>) -> Option<tauri::Monitor> {
-    let found = near.and_then(|(x, y)| {
-        let mut monitors = app.available_monitors().ok()?;
-        let frames: Vec<Rect> = monitors.iter().map(|m| display(m).0).collect();
-        Some(monitors.swap_remove(monitor_at(&frames, x, y)?))
-    });
-    found.or_else(|| app.primary_monitor().ok()?)
+/// A display, and what the bar's place on it is remembered under.
+struct Display {
+    monitor: tauri::Monitor,
+    /// The display's own name: its model, and a number when two of them are connected.
+    id: String,
+    /// Every connected display's name. A place is remembered for the display in the company
+    /// it was in, so a desk with two screens and the laptop alone each keep their own.
+    arrangement: String,
 }
 
-/// Where the bar goes: bottom centre of the display that shows `near`.
+/// A name for each display that no other one has. The system names a display by its model,
+/// so two of the same kind are told apart by where they are, left to right and top to bottom.
+fn display_ids(displays: &[(String, Rect)]) -> Vec<String> {
+    let mut order: Vec<usize> = (0..displays.len()).collect();
+    order.sort_by(|&a, &b| displays[a].1.x.total_cmp(&displays[b].1.x).then(displays[a].1.y.total_cmp(&displays[b].1.y)));
+    let mut ids = vec![String::new(); displays.len()];
+    for (at, &i) in order.iter().enumerate() {
+        let name = if displays[i].0.is_empty() { "Display" } else { displays[i].0.as_str() };
+        let before = order[..at].iter().filter(|&&j| displays[j].0 == displays[i].0).count();
+        ids[i] = if before == 0 { name.to_string() } else { format!("{name} ({})", before + 1) };
+    }
+    ids
+}
+
+/// The connected displays as one name, the same whatever order the system lists them in.
+fn arrangement(ids: &[String]) -> String {
+    let mut ids = ids.to_vec();
+    ids.sort();
+    ids.join(" + ")
+}
+
+/// Every display there is.
+fn all_displays(app: &AppHandle) -> Vec<Display> {
+    let monitors = app.available_monitors().unwrap_or_default();
+    let named: Vec<(String, Rect)> = monitors.iter().map(|m| (m.name().cloned().unwrap_or_default(), display(m).0)).collect();
+    let ids = display_ids(&named);
+    let arrangement = arrangement(&ids);
+    monitors.into_iter().zip(ids).map(|(monitor, id)| Display { monitor, id, arrangement: arrangement.clone() }).collect()
+}
+
+/// The display that shows `near` (a point in picker units), or the main one when there is no
+/// point or it is on none.
+fn display_near(app: &AppHandle, near: Option<(f64, f64)>) -> Option<Display> {
+    let mut all = all_displays(app);
+    let frames: Vec<Rect> = all.iter().map(|d| display(&d.monitor).0).collect();
+    let main = app.primary_monitor().ok().flatten();
+    let found = near.and_then(|(x, y)| monitor_at(&frames, x, y)).or_else(|| all.iter().position(|d| Some(d.monitor.position()) == main.as_ref().map(|m| m.position())));
+    match found {
+        Some(index) => Some(all.swap_remove(index)),
+        // The main display is not among the listed ones: it has no remembered place.
+        None => main.map(|monitor| Display { monitor, id: String::new(), arrangement: String::new() }),
+    }
+}
+
+/// Which display shows the most of `rect`, if any shows it at all.
+fn display_showing(rect: &Rect, displays: &[Rect]) -> Option<usize> {
+    let shared = |d: &Rect| ((rect.x + rect.width).min(d.x + d.width) - rect.x.max(d.x)).max(0.0) * ((rect.y + rect.height).min(d.y + d.height) - rect.y.max(d.y)).max(0.0);
+    displays.iter().map(shared).enumerate().filter(|(_, area)| *area > 0.0).max_by(|a, b| a.1.total_cmp(&b.1)).map(|(i, _)| i)
+}
+
+/// How far along its free room a window of `size` with its corner at `at` sits inside
+/// `area`: 0 is against the left or top edge, 1 against the right or bottom one. Kept instead
+/// of a position, so the place holds when the display's resolution or scale changes, and a
+/// window partly off the display is remembered as fully on it.
+fn fraction(area: &Rect, size: (f64, f64), at: (f64, f64)) -> (f64, f64) {
+    let along = |at: f64, from: f64, room: f64| if room > 0.0 && at.is_finite() { ((at - from) / room).clamp(0.0, 1.0) } else { 0.5 };
+    (along(at.0, area.x, area.width - size.0), along(at.1, area.y, area.height - size.1))
+}
+
+/// Where that puts the window's corner: always with the whole window inside `area`, or in
+/// the middle of it when the window is the larger one.
+fn placed(area: &Rect, size: (f64, f64), fraction: (f64, f64)) -> (f64, f64) {
+    let at = |fraction: f64, from: f64, room: f64| from + room * if room > 0.0 && fraction.is_finite() { fraction.clamp(0.0, 1.0) } else { 0.5 };
+    (at(fraction.0, area.x, area.width - size.0), at(fraction.1, area.y, area.height - size.1))
+}
+
+/// The part of a display that the system's own bars leave free, in the display's pixels.
+fn work_area(m: &tauri::Monitor) -> Rect {
+    let area = m.work_area();
+    Rect { x: area.position.x as f64, y: area.position.y as f64, width: area.size.width as f64, height: area.size.height as f64 }
+}
+
+/// Where the bar goes on the display that shows `near`: where it was last dragged to on that
+/// display, or else bottom centre.
 fn bar_spot(app: &AppHandle, near: Option<(f64, f64)>) -> Option<Spot> {
-    let m = monitor_near(app, near)?;
+    let shown = display_near(app, near)?;
+    let m = &shown.monitor;
     let (pos, size, scale) = (m.position(), m.size(), m.scale_factor());
     let (w, h) = (BAR_SIZE.0 * scale, BAR_SIZE.1 * scale);
-    let x = pos.x as f64 + (size.width as f64 - w) / 2.0;
-    let y = pos.y as f64 + size.height as f64 - h - 96.0 * scale;
+    let remembered = app.state::<Core>().settings.lock().unwrap().bar_places.get(&shown.arrangement).and_then(|places| places.get(&shown.id)).copied();
+    let (x, y) = match remembered {
+        Some(fraction) => placed(&work_area(m), (w, h), fraction),
+        None => (pos.x as f64 + (size.width as f64 - w) / 2.0, pos.y as f64 + size.height as f64 - h - 96.0 * scale),
+    };
     Some(Spot { at: PhysicalPosition::new(x as i32, y as i32), scale })
+}
+
+/// The bar moved. When that was the user's hand on the grip, it is followed up once the bar
+/// has come to rest (`bar_settle`). Called on the main thread for every step of a drag, so it
+/// only leaves a note.
+fn bar_moved(app: &AppHandle) {
+    let core = app.state::<Core>();
+    if core.gripped.lock().unwrap().is_none() {
+        return;
+    }
+    core.bar_moved.store(true, Ordering::SeqCst);
+    if !core.bar_timer.swap(true, Ordering::SeqCst) {
+        let app = app.clone();
+        thread::spawn(move || {
+            let core = app.state::<Core>();
+            loop {
+                thread::sleep(BAR_SETTLE);
+                if !core.bar_moved.swap(false, Ordering::SeqCst) {
+                    break;
+                }
+            }
+            core.bar_timer.store(false, Ordering::SeqCst);
+            bar_settle(&app);
+        });
+    }
+}
+
+/// The bar has come to rest where the user dragged it. Clicks on it are its own where it is
+/// now, and what was under it before can be picked. The place is remembered for the display
+/// it is on; the bar itself stays where it was let go, also when part of it is off the screen.
+fn bar_settle(app: &AppHandle) {
+    let core = app.state::<Core>();
+    refresh_exempt(app);
+    let Some(gripped) = core.gripped.lock().unwrap().clone() else { return };
+    let Some(rect) = app.get_webview_window(BAR).filter(|w| w.is_visible().unwrap_or(false)).and_then(|w| window_rect(&w)) else { return };
+    let all = all_displays(app);
+    let frames: Vec<Rect> = all.iter().map(|d| display(&d.monitor).0).collect();
+    let Some(shown) = display_showing(&rect, &frames).map(|i| &all[i]) else { return };
+    // A display was plugged in or taken away since the press: where the system then put the
+    // bar is not a place the user chose.
+    if shown.arrangement != gripped || gripped.is_empty() {
+        return;
+    }
+    // Picker units, like the window's own rectangle.
+    let unit = if cfg!(target_os = "macos") { shown.monitor.scale_factor() } else { 1.0 };
+    let area = work_area(&shown.monitor);
+    let area = Rect { x: area.x / unit, y: area.y / unit, width: area.width / unit, height: area.height / unit };
+    let now = fraction(&area, (rect.width, rect.height), (rect.x, rect.y));
+    {
+        let mut settings = core.settings.lock().unwrap();
+        let places = settings.bar_places.entry(gripped).or_default();
+        // A pause in the middle of a drag, or the same place again: nothing new to keep.
+        if places.get(&shown.id).is_some_and(|old| (old.0 - now.0).abs() < 0.002 && (old.1 - now.1).abs() < 0.002) {
+            return;
+        }
+        places.insert(shown.id.clone(), now);
+    }
+    save_settings(app);
+    telemetry::event("bar_moved", json!({ "home": false }));
 }
 
 /// The bar, on screen, on the display the pointer is on: that is where the user is working.
 /// A kept one is moved and shown; a new one is built where it belongs and already visible,
 /// so nothing waits for a second step once the web view is up.
 fn show_bar(app: &AppHandle) -> Option<WebviewWindow> {
+    // From here until the grip is pressed, the bar only moves because Clipframes puts it.
+    *app.state::<Core>().gripped.lock().unwrap() = None;
     let spot = bar_spot(app, element::pointer());
     if let Some(bar) = app.get_webview_window(BAR) {
         if let Some(spot) = &spot {
@@ -839,6 +1042,11 @@ fn close_now(app: &AppHandle) {
     }
     close_round_windows(app);
     trace("close: windows closed");
+    // A bar let go a moment ago may not have had its place remembered yet.
+    if core.bar_moved.swap(false, Ordering::SeqCst) {
+        bar_settle(app);
+    }
+    *core.gripped.lock().unwrap() = None;
     if let Some(bar) = app.get_webview_window(BAR) {
         let _ = bar.hide();
     }
@@ -1422,6 +1630,39 @@ fn tab_open(app: AppHandle) {
     later(&app, open);
 }
 
+/// The bar's grip was pressed: the system moves the bar with the pointer until the button
+/// comes up. The press went to the bar, so the picker takes nothing until then.
+#[tauri::command]
+fn bar_grip(app: AppHandle, window: WebviewWindow) {
+    let arrangement = all_displays(&app).first().map(|d| d.arrangement.clone()).unwrap_or_default();
+    *app.state::<Core>().gripped.lock().unwrap() = Some(arrangement);
+    let _ = window.start_dragging();
+}
+
+/// The grip was double-clicked: the bar goes back to bottom centre of the display it is on,
+/// and opens there from now on.
+#[tauri::command]
+fn bar_home(app: AppHandle, window: WebviewWindow) {
+    let core = app.state::<Core>();
+    // The first of the two clicks was a press on the grip. What follows is not a drag.
+    *core.gripped.lock().unwrap() = None;
+    core.bar_moved.store(false, Ordering::SeqCst);
+    let Some(rect) = window_rect(&window) else { return };
+    let all = all_displays(&app);
+    let frames: Vec<Rect> = all.iter().map(|d| display(&d.monitor).0).collect();
+    let Some(index) = display_showing(&rect, &frames) else { return };
+    let forgotten = core.settings.lock().unwrap().bar_places.get_mut(&all[index].arrangement).is_some_and(|places| places.remove(&all[index].id).is_some());
+    if forgotten {
+        save_settings(&app);
+        telemetry::event("bar_moved", json!({ "home": true }));
+    }
+    let middle = (frames[index].x + frames[index].width / 2.0, frames[index].y + frames[index].height / 2.0);
+    if let Some(spot) = bar_spot(&app, Some(middle)) {
+        spot.put(&window);
+    }
+    refresh_exempt(&app);
+}
+
 /// What the settings window draws.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1440,6 +1681,18 @@ struct SettingsView {
     claude_read: claude::State,
     /// What that takes: shown for adding by hand when Clipframes will not change the file.
     claude_rules: Vec<String>,
+    /// Whether the tab appears at all.
+    show_tab: bool,
+    /// The apps and sites it appears in now.
+    tab_places: Vec<TabPlace>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TabPlace {
+    app: String,
+    host: String,
+    /// "Google Chrome · localhost:3000", "Slack".
+    name: String,
 }
 
 /// Claude Code's settings file, and the rules in it that cover the captures folder.
@@ -1456,6 +1709,7 @@ fn settings_view(app: &AppHandle) -> SettingsView {
     // Read from Claude Code's file every time: it is the file that decides, and it can change
     // while this window is open.
     let (claude_read, claude_rules) = claude_read(app).map(|(file, rules)| (claude::state(&file, &rules), rules)).unwrap_or((claude::State::Missing, Vec::new()));
+    let tab_places = core.places.lock().unwrap().shown(places::now()).into_iter().map(|p| TabPlace { name: p.name(), app: p.app, host: p.host }).collect();
     SettingsView {
         shortcut_label: settings::label(&settings.shortcut, cfg!(target_os = "macos")),
         shortcut: settings.shortcut,
@@ -1468,6 +1722,8 @@ fn settings_view(app: &AppHandle) -> SettingsView {
         mac: cfg!(target_os = "macos"),
         claude_read,
         claude_rules,
+        show_tab: settings.show_tab,
+        tab_places,
     }
 }
 
@@ -1627,10 +1883,16 @@ fn open_settings(app: &AppHandle) {
         let _ = window.set_focus();
         return;
     }
+    // As tall as what it shows: the list of places the tab appears in has room for three,
+    // and scrolls after that. On a small screen the whole page scrolls instead.
+    let core = app.state::<Core>();
+    let listed = if core.settings.lock().unwrap().show_tab { core.places.lock().unwrap().shown(places::now()).len().min(3) } else { 0 };
+    let wanted = if telemetry::available() { 734.0 } else { 629.0 } + if listed > 0 { 12.0 + 32.0 * listed as f64 } else { 0.0 };
+    let room = app.primary_monitor().ok().flatten().map(|m| m.work_area().size.height as f64 / m.scale_factor() - 64.0);
     // An ordinary window, built when asked for and gone when closed.
     let built = WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("index.html".into()))
         .title("Clipframes")
-        .inner_size(440.0, if telemetry::available() { 630.0 } else { 525.0 })
+        .inner_size(440.0, room.map_or(wanted, |room| wanted.min(room)))
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
@@ -1687,6 +1949,40 @@ fn usage_set(app: AppHandle, on: bool) -> SettingsView {
     app.state::<Core>().settings.lock().unwrap().share_usage = on;
     save_settings(&app);
     telemetry::set_enabled(on);
+    settings_view(&app)
+}
+
+/// The switch for the tab everywhere. Off: the tab goes, and so does the watcher that looks
+/// at which app is in front (`watch` ends by itself). On: it is started again.
+#[tauri::command]
+fn tab_set(app: AppHandle, on: bool) -> SettingsView {
+    app.state::<Core>().settings.lock().unwrap().show_tab = on;
+    save_settings(&app);
+    telemetry::event("tab_set", json!({ "on": on }));
+    if on {
+        start_watch(&app);
+    } else {
+        hide_tab(&app);
+    }
+    // The pin in an open bar comes and goes with it.
+    let _ = app.emit("round", view(&app));
+    settings_view(&app)
+}
+
+/// Remove in the list of places: the tab is turned off there, as with the pin in the bar,
+/// and stays off until the pin turns it on again.
+#[tauri::command]
+fn tab_place_remove(app: AppHandle, place: String, host: String) -> SettingsView {
+    {
+        let core = app.state::<Core>();
+        let mut places = core.places.lock().unwrap();
+        places.set_auto(&Place { app: place, host }, false, places::now());
+        telemetry::event("place_auto_set", json!({ "on": false }));
+        if let Some(dir) = config_dir(&app) {
+            let _ = places.save(&dir);
+        }
+    }
+    let _ = app.emit("round", view(&app));
     settings_view(&app)
 }
 
@@ -1760,6 +2056,9 @@ pub fn run() {
                     later(window.app_handle(), close);
                 }
             }
+            if matches!(event, tauri::WindowEvent::Moved(_)) && window.label() == BAR {
+                bar_moved(window.app_handle());
+            }
         })
         .invoke_handler(tauri::generate_handler![
             round_state,
@@ -1779,6 +2078,10 @@ pub fn run() {
             history_delete,
             place_auto_set,
             tab_open,
+            bar_grip,
+            bar_home,
+            tab_set,
+            tab_place_remove,
             settings_get,
             shortcut_set,
             launch_set,
@@ -1855,8 +2158,9 @@ pub fn run() {
             if let Some(dir) = config_dir(&handle) {
                 *core.places.lock().unwrap() = Places::load(&dir);
             }
-            let watcher = handle.clone();
-            thread::Builder::new().name("clipframes-watch".into()).spawn(move || watch(watcher))?;
+            start_watch(&handle);
+            #[cfg(target_os = "macos")]
+            thread::Builder::new().name("clipframes-tidy".into()).spawn(tidy)?;
 
             if installed() || std::env::var_os("CLIPFRAMES_UPDATES").is_some() {
                 updates::start(&handle);
@@ -1937,6 +2241,94 @@ mod tests {
         assert_eq!(monitor_at(&all, -100.0, -100.0), None, "in the corner between two displays");
         assert_eq!(monitor_at(&[], 0.0, 0.0), None);
         assert_eq!(monitor_at(&all, f64::NAN, 0.0), None);
+    }
+
+    /// The bar on a display with a 25-unit menu bar and a 70-unit Dock.
+    const WORK: Rect = Rect { x: 0.0, y: 25.0, width: 1920.0, height: 985.0 };
+    const BAR_ON_IT: (f64, f64) = (396.0, 64.0);
+
+    #[test]
+    fn a_dragged_bar_comes_back_to_the_same_place() {
+        let at = (40.0, 300.0);
+        let kept = fraction(&WORK, BAR_ON_IT, at);
+        let back = placed(&WORK, BAR_ON_IT, kept);
+        assert!((back.0 - at.0).abs() < 0.001 && (back.1 - at.1).abs() < 0.001, "{back:?}");
+        assert_eq!(fraction(&WORK, BAR_ON_IT, (WORK.x, WORK.y)), (0.0, 0.0), "the top-left corner of the free room");
+        assert_eq!(fraction(&WORK, BAR_ON_IT, (1920.0 - 396.0, 1010.0 - 64.0)), (1.0, 1.0), "and the bottom-right one");
+    }
+
+    #[test]
+    fn the_bars_place_holds_when_the_display_changes_size_or_scale() {
+        // Against the right edge, a third of the way down.
+        let kept = fraction(&WORK, BAR_ON_IT, (1524.0, 340.0));
+        // The same display at a lower resolution.
+        let small = Rect { x: 0.0, y: 25.0, width: 1280.0, height: 625.0 };
+        let (x, y) = placed(&small, BAR_ON_IT, kept);
+        assert_eq!(x, 1280.0 - 396.0, "still against the right edge");
+        assert!(y > 200.0 && y < 230.0, "still a third of the way down: {y}");
+        // And where one unit is two pixels: the bar is twice as large, like the room it is in.
+        let dense = Rect { x: 3840.0, y: 50.0, width: 3840.0, height: 1970.0 };
+        let (x, y) = placed(&dense, (792.0, 128.0), kept);
+        assert_eq!((x, y), (3840.0 + 3048.0, 680.0));
+    }
+
+    #[test]
+    fn a_bar_let_go_partly_off_the_display_is_remembered_fully_on_it() {
+        for at in [(-200.0, 500.0), (1800.0, 500.0), (700.0, -30.0), (700.0, 1060.0), (5000.0, 5000.0)] {
+            let (x, y) = placed(&WORK, BAR_ON_IT, fraction(&WORK, BAR_ON_IT, at));
+            assert!(x >= WORK.x && x + BAR_ON_IT.0 <= WORK.x + WORK.width, "{at:?} came back at x {x}");
+            assert!(y >= WORK.y && y + BAR_ON_IT.1 <= WORK.y + WORK.height, "{at:?} came back at y {y}");
+        }
+        // Under the menu bar is not free room either.
+        assert_eq!(placed(&WORK, BAR_ON_IT, fraction(&WORK, BAR_ON_IT, (700.0, 0.0))).1, 25.0);
+    }
+
+    #[test]
+    fn a_place_that_makes_no_sense_still_puts_the_bar_on_the_display() {
+        // A settings file edited by hand, or written by something else.
+        for kept in [(7.0, -3.0), (f64::NAN, f64::INFINITY)] {
+            let (x, y) = placed(&WORK, BAR_ON_IT, kept);
+            assert!(x >= WORK.x && x + BAR_ON_IT.0 <= WORK.x + WORK.width && y >= WORK.y && y + BAR_ON_IT.1 <= WORK.y + WORK.height, "{kept:?} gave {x}, {y}");
+        }
+        // No room at all: the middle, and a number that can be written to the file.
+        let tiny = Rect { x: 0.0, y: 0.0, width: 300.0, height: 40.0 };
+        assert_eq!(fraction(&tiny, BAR_ON_IT, (10.0, 10.0)), (0.5, 0.5));
+        assert_eq!(placed(&tiny, BAR_ON_IT, (0.0, 1.0)), (-48.0, -12.0));
+        assert_eq!(fraction(&WORK, BAR_ON_IT, (f64::NAN, 300.0)).0, 0.5);
+    }
+
+    #[test]
+    fn a_dragged_bar_belongs_to_the_display_showing_most_of_it() {
+        let all = [MAIN, LEFT, ABOVE];
+        assert_eq!(display_showing(&Rect { x: 700.0, y: 900.0, width: 396.0, height: 64.0 }, &all), Some(0));
+        assert_eq!(display_showing(&Rect { x: -100.0, y: 900.0, width: 396.0, height: 64.0 }, &all), Some(0), "296 of its 396 are on the main one");
+        assert_eq!(display_showing(&Rect { x: -300.0, y: 900.0, width: 396.0, height: 64.0 }, &all), Some(1));
+        assert_eq!(display_showing(&Rect { x: 1800.0, y: 1050.0, width: 396.0, height: 64.0 }, &all), Some(0), "hanging off the corner, but only this one shows it");
+        assert_eq!(display_showing(&Rect { x: 5000.0, y: 900.0, width: 396.0, height: 64.0 }, &all), None);
+    }
+
+    #[test]
+    fn two_displays_of_the_same_model_are_told_apart_by_where_they_are() {
+        let named = |name: &str, frame: Rect| (name.to_string(), frame);
+        let desk = [named("Monitor #1", MAIN), named("Monitor #7", LEFT), named("Monitor #7", ABOVE)];
+        let ids = display_ids(&desk);
+        assert_eq!(ids, ["Monitor #1", "Monitor #7", "Monitor #7 (2)"], "the left one first");
+        // Listed in another order, each is still called the same.
+        let again = display_ids(&[desk[2].clone(), desk[0].clone(), desk[1].clone()]);
+        assert_eq!(again, ["Monitor #7 (2)", "Monitor #1", "Monitor #7"]);
+        assert_eq!(arrangement(&ids), arrangement(&again));
+        assert_eq!(arrangement(&ids), "Monitor #1 + Monitor #7 + Monitor #7 (2)");
+        // The laptop alone is another arrangement, with its own place for the bar.
+        assert_ne!(arrangement(&display_ids(&desk[..1])), arrangement(&ids));
+        assert_eq!(display_ids(&[named("", MAIN)]), ["Display"], "a display the system has no name for");
+    }
+
+    #[test]
+    fn the_switch_in_settings_stops_the_place_watcher() {
+        assert_eq!(watch_turn(true, false), Watch::Look);
+        assert_eq!(watch_turn(true, true), Watch::Wait, "during a round no other app is asked anything");
+        assert_eq!(watch_turn(false, false), Watch::Stop);
+        assert_eq!(watch_turn(false, true), Watch::Stop, "also in the middle of a round");
     }
 
     #[test]

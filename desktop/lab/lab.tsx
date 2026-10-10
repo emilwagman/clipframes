@@ -17,7 +17,7 @@ const query = new URLSearchParams(location.search);
 const state = query.get("state") ?? "picked";
 // ?look= tries the interface in another colour.
 if (query.get("look")) document.documentElement.dataset.look = query.get("look") as string;
-const BAR = { w: 376, h: 64 };
+const BAR = { w: 404, h: 64 };
 const NOTE = { w: 316, h: 172 };
 
 // Example captures for the History window.
@@ -72,7 +72,7 @@ const start = () => {
   const platform: Platform = {
     tools: ["element", "area", "clip"], history: true,
     state: async () => round, onRound: none, onHover: none, onMarks: none, onArea: none,
-    setTool: none, stopRecording: none, setNote: none, closeNote: none, removePick: none, setAuto: none, openHistory: none, done: none, escape: none, openPermission: none, quit: none,
+    setTool: none, stopRecording: none, setNote: none, closeNote: none, removePick: none, setAuto: none, moveBar: none, openHistory: none, done: none, escape: none, openPermission: none, quit: none,
   };
   connect(platform);
   useStore.setState({

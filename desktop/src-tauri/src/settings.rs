@@ -1,6 +1,7 @@
 //! What the user has chosen, kept as one small JSON file in the app's config folder.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -18,11 +19,17 @@ pub struct Settings {
     pub share_usage: bool,
     /// A random number made on first run, sent with those counts. Empty until then.
     pub install_id: String,
+    /// Show the tab where Clipframes was used before. Off: no tab anywhere, and nothing looks
+    /// at which app is in front.
+    pub show_tab: bool,
+    /// Where the bar was dragged to. By the displays that were connected, then by the display
+    /// it was on: how far along that display's free room it sat, 0 to 1 each way.
+    pub bar_places: BTreeMap<String, BTreeMap<String, (f64, f64)>>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { shortcut: DEFAULT_SHORTCUT.into(), launch_at_login: true, share_usage: true, install_id: String::new() }
+        Settings { shortcut: DEFAULT_SHORTCUT.into(), launch_at_login: true, share_usage: true, install_id: String::new(), show_tab: true, bar_places: BTreeMap::new() }
     }
 }
 
@@ -97,7 +104,8 @@ mod tests {
     #[test]
     fn what_is_saved_comes_back() {
         let dir = scratch("roundtrip");
-        let mine = Settings { shortcut: "super+alt+KeyK".into(), launch_at_login: false, share_usage: false, install_id: "abc".into() };
+        let on_the_left = BTreeMap::from([("Monitor #1".to_string(), (0.0, 0.25))]);
+        let mine = Settings { shortcut: "super+alt+KeyK".into(), launch_at_login: false, share_usage: false, install_id: "abc".into(), show_tab: false, bar_places: BTreeMap::from([("Monitor #1 + Monitor #2".to_string(), on_the_left)]) };
         save(&dir, &mine).unwrap();
         assert_eq!(load(&dir), (mine, true));
         fs::remove_dir_all(&dir).unwrap();
@@ -109,6 +117,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(FILE), br#"{"shortcut":"ctrl+alt+KeyP"}"#).unwrap();
         assert_eq!(load(&dir).0, Settings { shortcut: "ctrl+alt+KeyP".into(), ..Default::default() });
+        assert!(load(&dir).0.show_tab, "a file from before the switch existed has the tab on");
         fs::write(dir.join(FILE), b"not json").unwrap();
         assert_eq!(load(&dir).0, Settings::default());
         fs::remove_dir_all(&dir).unwrap();

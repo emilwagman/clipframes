@@ -24,7 +24,9 @@ the ones still waiting.
 | `round_closed` | The bar closes | number of picks of each kind, how many had a comment, seconds the bar was open |
 | `history_copied` | Copy is pressed in History | number of picks copied |
 | `history_deleted` | A capture is deleted in History | nothing |
-| `place_auto_set` | The pin in the bar is pressed | on or off |
+| `place_auto_set` | The pin in the bar is pressed, or a place is removed from the tab's list in Settings | on or off |
+| `tab_set` | "Show the tab where I used Clipframes before" is switched | on or off |
+| `bar_moved` | The bar is dragged to a new place, or sent back with a double click on its grip | which of the two; never where it was put |
 | `shortcut_changed` | A new shortcut is saved | nothing |
 | `claude_read_set` | "Let Claude Code read captures without asking" is switched, and Claude Code's settings file was changed | on or off |
 | `update_found` | A new version is found | its version number |

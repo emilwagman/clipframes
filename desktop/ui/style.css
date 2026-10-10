@@ -55,8 +55,16 @@ button.quiet:hover { color: var(--text); }
 .bar .time { font-weight: 600; font-variant-numeric: tabular-nums; }
 .bar .dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--record); animation: pulse 1.4s ease-in-out infinite; }
 .bar .dot ~ .pill { background: var(--record); }
+/* The grip to move the bar by: quiet until the pointer is on it. It sits in the bar's own
+   padding, so the bar is no longer than it needs to be. */
+.grip { display: grid; grid-template-columns: 3px 3px; gap: 3px; flex: none; margin-left: -4px; padding: 12px 7px; cursor: grab; opacity: 0.55; transition: opacity 0.12s; }
+.grip:hover { opacity: 1; }
+.grip:active { cursor: grabbing; }
+.grip i { width: 3px; height: 3px; border-radius: 50%; background: var(--text-2); }
+.bar.wide .grip { margin: 0 -6px 0 -16px; }
+.bar.wide.back .grip { margin: 0 -6px 0 -4px; }
 @keyframes pulse { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } button.round { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .bar .dot { animation: none; } button.round, .grip { transition: none; } }
 
 .note { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: var(--radius); }
 .note .what { padding: 0 2px; color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -116,6 +124,11 @@ html.window, html.window body { background: var(--surface); overflow: auto; }
 .settings input[type="checkbox"]:disabled { opacity: 0.4; }
 /* A line to copy into another program's file. */
 .settings .byhand { margin-top: 8px; }
+/* Where the tab appears: room for three, the rest scrolls. */
+.settings .places { list-style: none; margin: 8px 0 0; padding: 0; max-height: 104px; overflow-y: auto; }
+.settings .places .row { min-height: 32px; }
+.settings .places span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings .places .quiet { flex: none; }
 .settings .byhand code { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; background: var(--raised); font: 12px/1.4 var(--mono); white-space: pre; overflow: hidden; text-overflow: ellipsis; user-select: text; -webkit-user-select: text; cursor: text; }
 
 /* History: a list to scan, newest first. */
