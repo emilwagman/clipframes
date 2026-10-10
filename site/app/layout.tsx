@@ -6,7 +6,7 @@ import "./globals.css";
 import Analytics from "./Analytics";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
-const description = "Point at the thing you want changed, and Clipframes tells your agent exactly what it is. For Mac and Windows, for building with Claude Code and Codex.";
+const description = "Point at the thing you want changed, and Clipframes tells Claude Code or Codex exactly which thing you mean. A free app for Mac and Windows.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

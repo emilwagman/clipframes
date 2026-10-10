@@ -133,6 +133,13 @@ export class Actor {
     await this.press();
   }
 
+  /// Goes to something that is not the picker's and presses there: the agent's prompt.
+  async tap(target: Element): Promise<void> {
+    await this.move(target, false);
+    await this.wait(160);
+    await this.press();
+  }
+
   /// Drags from one point to another: an area.
   async drag(from: Point, to: Point): Promise<void> {
     await this.move(from, false);

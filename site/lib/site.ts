@@ -18,3 +18,12 @@ export const DOWNLOAD_WINDOWS = "/download/windows";
 /// Shown beside the download buttons. Bump with each release.
 export const VERSION = "0.3";
 export const REQUIREMENTS = "macOS 12 or later · Windows 10 or 11";
+
+/// The pages that answer what a visitor asks, in the order they ask. One without an address is
+/// not built yet and is shown as a word only.
+export const PAGES: { name: string; href?: string }[] = [
+  { name: "How it works" },
+  { name: "Compare", href: "/compare" },
+  { name: "Install" },
+  { name: "Privacy", href: "/privacy" },
+];

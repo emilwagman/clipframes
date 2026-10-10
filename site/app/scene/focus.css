@@ -1,0 +1,34 @@
+/* Focus, the made-up desktop app. The look is the real app's (demo/native/Focus.cs): its
+   ground, its ink, its one blue. Styled by id, because its parts carry no class names. */
+.focusapp { --ink: #17181c; position: absolute; inset: 0;
+  background: #fafaf8; color: var(--ink); font: 14px/1.4 "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif; text-align: left; letter-spacing: normal;
+  user-select: none; -webkit-user-select: none; cursor: default; container-type: size; }
+.focusapp * { box-sizing: border-box; }
+.focusapp #Layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: start; height: 100%; padding: clamp(18px, 7cqh, 48px) 36px 24px; }
+.focusapp #Timer { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.focusapp #SessionLabel { font-size: 14px; color: #6b6e78; }
+.focusapp #TimeLeft { margin: 2px 0 14px; font-size: clamp(64px, 17cqw, 118px); line-height: 1.05; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.focusapp #Buttons { display: flex; gap: 9px; }
+.focusapp button { font: inherit; font-size: 13px; font-weight: 600; padding: 9px 20px; border-radius: 9px; border: 1px solid #dadbe0; background: #fff; color: var(--ink); white-space: nowrap; cursor: default; }
+.focusapp #StartButton { background: #3b3fd8; border-color: #3b3fd8; color: #fff; transition: background-color 0.5s, border-color 0.5s; }
+.focusapp[data-changed] #StartButton { background: #1f9d55; border-color: #1f9d55; }
+.focusapp #SoundCheck { display: flex; align-items: center; gap: 8px; margin-top: 26px; font-size: 12.5px; color: #4a4d57; white-space: nowrap; }
+.focusapp #SoundCheck i { width: 14px; height: 14px; border-radius: 3px; background: #3b3fd8 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.2 7.3l2.5 2.4 5-5.2' fill='none' stroke='%23fff' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); pointer-events: none; }
+.focusapp #Today { display: flex; flex-direction: column; padding: 20px 22px; border-radius: 14px; background: #fff; border: 1px solid #e6e7eb; min-width: 0; }
+.focusapp #TodayHeading { font-size: 16px; font-weight: 600; }
+.focusapp #TodayTotal { margin-bottom: 12px; font-size: 12px; color: #8a8d97; }
+.focusapp ul { margin: 0; padding: 0; list-style: none; }
+.focusapp li { padding: 5px 0; font-size: 12.5px; color: #2a2c33; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.focusapp #ClearButton { align-self: flex-start; margin-top: 14px; font-size: 12px; padding: 7px 14px; }
+/* Narrow, as on a phone: the timer alone, with the day's list under it out of view. */
+@container (max-width: 470px) {
+  .focusapp #Layout { grid-template-columns: 1fr; align-content: start; padding: 8px 16px; }
+  .focusapp #TimeLeft { margin: 0 0 8px; font-size: 50px; }
+  .focusapp #SoundCheck { margin-top: 16px; }
+  .focusapp #Today { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* The change is marked for a moment, so it is seen while the eye is on the agent. */
+  .focusapp[data-changed] #StartButton { animation: focus-changed 1.6s cubic-bezier(0.4, 0, 0.2, 1); }
+  @keyframes focus-changed { 0%, 35% { box-shadow: 0 0 0 7px rgba(247, 104, 8, 0.24); } 100% { box-shadow: 0 0 0 7px transparent; } }
+}

@@ -5,7 +5,7 @@
 // starts up or down scrolls the page as usual (touch-action: pan-y on the stage).
 
 import type { Demo } from "./engine";
-import { liveDemo } from "./engine";
+import { fresh, liveDemo } from "./engine";
 
 export function send(glass: HTMLElement, type: "pointermove" | "pointerdown" | "pointerup", x: number, y: number): void {
   glass.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true, button: 0, buttons: type === "pointerup" ? 0 : 1, pointerId: 1, pointerType: "mouse", isPrimary: true }));
@@ -35,6 +35,7 @@ export function direct(d: Demo, take: () => void): void {
       if (Math.hypot(event.clientX - down.x, event.clientY - down.y) < 10) return;
       dragging = true;
       take();
+      fresh(d);
       send(glass, "pointerdown", down.x, down.y);
     }
     send(glass, "pointermove", event.clientX, event.clientY);
@@ -65,6 +66,7 @@ export function direct(d: Demo, take: () => void): void {
     take();
     // The first tap on a demo that was showing its still copy only wakes it.
     if (!wasLive || !onGlass(event) || !d.round.picking || d.round.tool !== "element") return;
+    fresh(d);
     send(glass, "pointerdown", event.clientX, event.clientY);
     send(glass, "pointerup", event.clientX, event.clientY);
   }, true);

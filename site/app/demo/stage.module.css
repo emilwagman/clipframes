@@ -5,8 +5,15 @@
 .address { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
 .address i { width: 9px; height: 9px; border-radius: 50%; background: #d9d8d4; }
 .address span { margin: 0 auto; padding-right: 39px; font: 12px var(--sans); color: var(--text-3); }
-.view { position: relative; height: 620px; overflow: hidden; touch-action: pan-y; }
-.short .view { height: 420px; }
+.view { position: relative; height: 500px; overflow: hidden; touch-action: pan-y; }
+.hero .view { height: var(--hero-stage, 420px); }
+.tall .view { height: 600px; }
+.short .view { height: 340px; }
+/* The first screen's window: a bare top bar, with the way to play the example again at its end. */
+.bare { height: 32px; }
+.bare button { margin-left: auto; font: 12px var(--sans); color: var(--text-3); background: none; border: 0; padding: 0; cursor: pointer; }
+.bare button:hover { color: var(--text); }
+.bare button[data-off] { visibility: hidden; }
 .glass { position: absolute; inset: 0; }
 /* The still copy a demo keeps while another one is live. */
 .glass :global([data-still]) { pointer-events: none; }
@@ -41,6 +48,8 @@
 @media (max-width: 640px) {
   .frame { margin: 0 calc(-1 * var(--gutter)); border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
   .address { display: none; }
-  .view { height: 540px; }
-  .short .view { height: 400px; }
+  .view { height: 500px; }
+  .hero .view { height: 380px; }
+  .tall .view { height: 540px; }
+  .short .view { height: 320px; }
 }

@@ -7,14 +7,14 @@
 
 type Props = Record<string, string>;
 
-export type SiteEvent = "$pageview" | "download_clicked" | "demo_started" | "demo_finished" | "reference_copied";
+export type SiteEvent = "$pageview" | "download_clicked" | "link_copied" | "demo_started" | "demo_finished" | "reference_shown" | "reference_copied" | "recording_played" | "case_chosen";
 
 export const HOST = "https://eu.i.posthog.com";
 
-/// Everything an event is allowed to carry: the site's own three words, and the few things
+/// Everything an event is allowed to carry: the site's own four words, and the few things
 /// the privacy page names. The library adds more by itself (the page's title and full address,
 /// screen size, referrer, language, time zone); those are taken off again.
-const KEPT = new Set(["os", "place", "demo", "token", "distinct_id", "$pathname", "$os", "$browser", "$device_type", "$lib", "$lib_version", "$geoip_disable", "$process_person_profile"]);
+const KEPT = new Set(["os", "place", "demo", "by", "token", "distinct_id", "$pathname", "$os", "$browser", "$device_type", "$lib", "$lib_version", "$geoip_disable", "$process_person_profile"]);
 
 interface Client {
   capture(event: string, props?: Props): unknown;

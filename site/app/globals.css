@@ -17,7 +17,7 @@
   --mono: var(--app-mono);
   --shadow-window: 0 0 0 1px rgba(18, 18, 19, 0.02), 0 2px 4px rgba(18, 18, 19, 0.04), 0 32px 64px -32px rgba(18, 18, 19, 0.22);
   --gutter: 24px;
-  --page: 1120px;
+  --page: 1200px;
   --col: 660px;
 }
 @media (max-width: 640px) {

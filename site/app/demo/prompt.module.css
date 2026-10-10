@@ -1,0 +1,28 @@
+/* An agent's prompt, in the app's own black: what a demo copied, as it reads pasted in. */
+.prompt { margin: 0; min-width: 0; }
+.window { border-radius: 14px; background: var(--app-surface); box-shadow: var(--shadow-window); overflow: hidden; }
+.title { padding: 11px 18px 0; font: 500 12px/16px var(--sans); color: var(--app-text-2); }
+.text { margin: 0; min-height: calc(var(--lines, 4) * 1.6em + 30px); padding: 10px 18px 20px; font: 13px/1.6 var(--mono); color: #f2f2f3; white-space: pre-wrap; overflow-wrap: anywhere; }
+.caret { color: var(--app-accent-text); user-select: none; -webkit-user-select: none; }
+.ghost { color: #77787f; }
+.prompt figcaption { min-height: 3em; margin-top: 12px; font-size: 14.5px; line-height: 1.5; color: var(--text-3); }
+
+/* A new pick's text arrives lit and settles. */
+@media (prefers-reduced-motion: no-preference) {
+  .line { animation: land 0.9s cubic-bezier(0.4, 0, 0.2, 1) both; }
+  @keyframes land { from { color: var(--app-accent-text); } }
+}
+
+@media (max-width: 640px) {
+  .text { font-size: 12.5px; padding: 8px 14px 16px; }
+  .title { padding: 10px 14px 0; }
+}
+
+/* The prompt as the foot of a demo's window: closed until something is picked. */
+.foot { display: grid; grid-template-rows: 0fr; background: var(--app-surface); }
+.foot[data-open] { grid-template-rows: 1fr; }
+.footIn { min-height: 0; overflow: hidden; }
+.foot .text { min-height: 0; padding-bottom: 16px; }
+@media (prefers-reduced-motion: no-preference) {
+  .foot { transition: grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1); }
+}

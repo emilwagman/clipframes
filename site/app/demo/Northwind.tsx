@@ -18,9 +18,10 @@ const STATUS = { overdue: "Overdue", due: "Due", paid: "Paid" } as const;
 
 /// Nothing in here takes the keyboard: the page is something to point at. `menu` is the Export
 /// menu, which opens in the wrong place: the fault the screen clip demo records.
-export default function Northwind({ menu, onExport }: { menu: boolean; onExport: () => void }) {
+/// `simple` is the page with less on it, for the first screen: no sidebar and four invoices.
+export default function Northwind({ menu, onExport, simple = false }: { menu: boolean; onExport: () => void; simple?: boolean }) {
   return (
-    <div className="app" id="app">
+    <div className={simple ? "app simple" : "app"} id="app">
       <aside>
         <div className="logo"><i />Northwind</div>
         <nav>
@@ -55,7 +56,7 @@ export default function Northwind({ menu, onExport }: { menu: boolean; onExport:
         <table id="invoice-table">
           <thead><tr><th>Invoice</th><th className="customer">Customer</th><th>Status</th><th className="due">Due</th><th className="amount">Amount</th></tr></thead>
           <tbody>
-            {INVOICES.map(([id, customer, status, due, amount]) => (
+            {(simple ? INVOICES.slice(0, 4) : INVOICES).map(([id, customer, status, due, amount]) => (
               // The space after each value keeps a row's text readable when Clipframes names it.
               <tr key={id}>
                 <td>{id} </td>

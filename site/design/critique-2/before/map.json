@@ -1,0 +1,532 @@
+{
+ "390": {
+  "rows": [
+   {
+    "kind": "link",
+    "text": "Download → /download",
+    "y": 14,
+    "bottom": 50,
+    "screens": 0.02,
+    "width": 124,
+    "height": 36,
+    "fixed": true
+   },
+   {
+    "kind": "h1",
+    "text": "Point at the thing Text \"the thing\" you want changed.",
+    "y": 141,
+    "bottom": 217,
+    "screens": 0.17,
+    "width": 350,
+    "height": 76
+   },
+   {
+    "kind": "link",
+    "text": "Download for Mac → /download/mac",
+    "y": 452,
+    "bottom": 502,
+    "screens": 0.54,
+    "width": 350,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Download for Windows → /download/windows",
+    "y": 514,
+    "bottom": 564,
+    "screens": 0.61,
+    "width": 350,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "demo",
+    "text": "hero",
+    "y": 664,
+    "bottom": 1204,
+    "screens": 0.79,
+    "width": 390,
+    "height": 540
+   },
+   {
+    "kind": "h2",
+    "text": "Point at things and say what you want",
+    "y": 1970,
+    "bottom": 2035,
+    "screens": 2.33,
+    "width": 350,
+    "height": 64
+   },
+   {
+    "kind": "demo",
+    "text": "picks",
+    "y": 2322,
+    "bottom": 2862,
+    "screens": 2.75,
+    "width": 390,
+    "height": 540
+   },
+   {
+    "kind": "copied text",
+    "text": "picks",
+    "y": 3122,
+    "bottom": 3377,
+    "screens": 3.7,
+    "width": 350,
+    "height": 255
+   },
+   {
+    "kind": "h2",
+    "text": "Show an area",
+    "y": 3539,
+    "bottom": 3571,
+    "screens": 4.19,
+    "width": 350,
+    "height": 32
+   },
+   {
+    "kind": "demo",
+    "text": "area",
+    "y": 3772,
+    "bottom": 4312,
+    "screens": 4.47,
+    "width": 390,
+    "height": 540
+   },
+   {
+    "kind": "h2",
+    "text": "Show what happens",
+    "y": 4482,
+    "bottom": 4515,
+    "screens": 5.31,
+    "width": 350,
+    "height": 32
+   },
+   {
+    "kind": "demo",
+    "text": "clip",
+    "y": 4773,
+    "bottom": 5313,
+    "screens": 5.66,
+    "width": 390,
+    "height": 540
+   },
+   {
+    "kind": "h2",
+    "text": "Then paste it",
+    "y": 5505,
+    "bottom": 5537,
+    "screens": 6.52,
+    "width": 350,
+    "height": 32
+   },
+   {
+    "kind": "copied text",
+    "text": "latest",
+    "y": 5726,
+    "bottom": 5891,
+    "screens": 6.78,
+    "width": 316,
+    "height": 165
+   },
+   {
+    "kind": "h2",
+    "text": "Copy an earlier capture again",
+    "y": 6091,
+    "bottom": 6155,
+    "screens": 7.22,
+    "width": 350,
+    "height": 64
+   },
+   {
+    "kind": "h2",
+    "text": "It is there when you need it",
+    "y": 6889,
+    "bottom": 6921,
+    "screens": 8.16,
+    "width": 350,
+    "height": 32
+   },
+   {
+    "kind": "demo",
+    "text": "tab",
+    "y": 7180,
+    "bottom": 7580,
+    "screens": 8.51,
+    "width": 390,
+    "height": 400
+   },
+   {
+    "kind": "h2",
+    "text": "Your captures stay on your computer",
+    "y": 7742,
+    "bottom": 7806,
+    "screens": 9.17,
+    "width": 350,
+    "height": 64
+   },
+   {
+    "kind": "link",
+    "text": "privacy page → /privacy",
+    "y": 8133,
+    "bottom": 8154,
+    "screens": 9.64,
+    "width": 103,
+    "height": 21,
+    "fixed": false
+   },
+   {
+    "kind": "h2",
+    "text": "Questions",
+    "y": 8292,
+    "bottom": 8324,
+    "screens": 9.82,
+    "width": 350,
+    "height": 32
+   },
+   {
+    "kind": "h3",
+    "text": "How is this different from Agentation?",
+    "y": 8368,
+    "bottom": 8423,
+    "screens": 9.91,
+    "width": 350,
+    "height": 55
+   },
+   {
+    "kind": "h3",
+    "text": "Which apps does it read?",
+    "y": 8615,
+    "bottom": 8642,
+    "screens": 10.21,
+    "width": 350,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "What does it need?",
+    "y": 8834,
+    "bottom": 8861,
+    "screens": 10.47,
+    "width": 350,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "Can I see the code?",
+    "y": 9082,
+    "bottom": 9109,
+    "screens": 10.76,
+    "width": 350,
+    "height": 27
+   },
+   {
+    "kind": "h2",
+    "text": "Try it on your own app.",
+    "y": 9266,
+    "bottom": 9298,
+    "screens": 10.98,
+    "width": 350,
+    "height": 32
+   },
+   {
+    "kind": "link",
+    "text": "Download for Mac → /download/mac",
+    "y": 9334,
+    "bottom": 9384,
+    "screens": 11.06,
+    "width": 350,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Download for Windows → /download/windows",
+    "y": 9396,
+    "bottom": 9446,
+    "screens": 11.13,
+    "width": 350,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Privacy → /privacy",
+    "y": 9665,
+    "bottom": 9688,
+    "screens": 11.45,
+    "width": 49,
+    "height": 23,
+    "fixed": false
+   }
+  ],
+  "total": 9728,
+  "screens": 11.53
+ },
+ "1440": {
+  "rows": [
+   {
+    "kind": "link",
+    "text": "Download → /download",
+    "y": 14,
+    "bottom": 50,
+    "screens": 0.02,
+    "width": 124,
+    "height": 36,
+    "fixed": true
+   },
+   {
+    "kind": "h1",
+    "text": "Point at the thing Text \"the thing\" you want changed.",
+    "y": 197,
+    "bottom": 380,
+    "screens": 0.22,
+    "width": 1120,
+    "height": 183
+   },
+   {
+    "kind": "link",
+    "text": "Download for Mac → /download/mac",
+    "y": 548,
+    "bottom": 598,
+    "screens": 0.61,
+    "width": 213,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Download for Windows → /download/windows",
+    "y": 548,
+    "bottom": 598,
+    "screens": 0.61,
+    "width": 252,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "demo",
+    "text": "hero",
+    "y": 734,
+    "bottom": 1354,
+    "screens": 0.82,
+    "width": 1118,
+    "height": 620
+   },
+   {
+    "kind": "h2",
+    "text": "Point at things and say what you want",
+    "y": 2139,
+    "bottom": 2254,
+    "screens": 2.38,
+    "width": 660,
+    "height": 116
+   },
+   {
+    "kind": "demo",
+    "text": "picks",
+    "y": 2531,
+    "bottom": 3151,
+    "screens": 2.81,
+    "width": 1118,
+    "height": 620
+   },
+   {
+    "kind": "copied text",
+    "text": "picks",
+    "y": 3344,
+    "bottom": 3469,
+    "screens": 3.72,
+    "width": 1120,
+    "height": 125
+   },
+   {
+    "kind": "h2",
+    "text": "Show an area",
+    "y": 3689,
+    "bottom": 3747,
+    "screens": 4.1,
+    "width": 660,
+    "height": 58
+   },
+   {
+    "kind": "demo",
+    "text": "area",
+    "y": 3960,
+    "bottom": 4580,
+    "screens": 4.4,
+    "width": 1118,
+    "height": 620
+   },
+   {
+    "kind": "h2",
+    "text": "Show what happens",
+    "y": 4801,
+    "bottom": 4858,
+    "screens": 5.33,
+    "width": 660,
+    "height": 58
+   },
+   {
+    "kind": "demo",
+    "text": "clip",
+    "y": 5103,
+    "bottom": 5723,
+    "screens": 5.67,
+    "width": 1118,
+    "height": 620
+   },
+   {
+    "kind": "h2",
+    "text": "Then paste it",
+    "y": 5944,
+    "bottom": 6002,
+    "screens": 6.6,
+    "width": 437,
+    "height": 58
+   },
+   {
+    "kind": "copied text",
+    "text": "latest",
+    "y": 5975,
+    "bottom": 6086,
+    "screens": 6.64,
+    "width": 561,
+    "height": 111
+   },
+   {
+    "kind": "h2",
+    "text": "Copy an earlier capture again",
+    "y": 6351,
+    "bottom": 6467,
+    "screens": 7.06,
+    "width": 437,
+    "height": 116
+   },
+   {
+    "kind": "h2",
+    "text": "It is there when you need it",
+    "y": 7009,
+    "bottom": 7066,
+    "screens": 7.79,
+    "width": 660,
+    "height": 58
+   },
+   {
+    "kind": "demo",
+    "text": "tab",
+    "y": 7311,
+    "bottom": 7731,
+    "screens": 8.12,
+    "width": 1118,
+    "height": 420
+   },
+   {
+    "kind": "h2",
+    "text": "Your captures stay on your computer",
+    "y": 7952,
+    "bottom": 8068,
+    "screens": 8.84,
+    "width": 660,
+    "height": 116
+   },
+   {
+    "kind": "link",
+    "text": "privacy page → /privacy",
+    "y": 8268,
+    "bottom": 8323,
+    "screens": 9.19,
+    "width": 620,
+    "height": 55,
+    "fixed": false
+   },
+   {
+    "kind": "h2",
+    "text": "Questions",
+    "y": 8512,
+    "bottom": 8570,
+    "screens": 9.46,
+    "width": 1120,
+    "height": 58
+   },
+   {
+    "kind": "h3",
+    "text": "How is this different from Agentation?",
+    "y": 8614,
+    "bottom": 8641,
+    "screens": 9.57,
+    "width": 524,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "Which apps does it read?",
+    "y": 8614,
+    "bottom": 8641,
+    "screens": 9.57,
+    "width": 524,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "What does it need?",
+    "y": 8804,
+    "bottom": 8831,
+    "screens": 9.78,
+    "width": 524,
+    "height": 27
+   },
+   {
+    "kind": "h3",
+    "text": "Can I see the code?",
+    "y": 8804,
+    "bottom": 8831,
+    "screens": 9.78,
+    "width": 524,
+    "height": 27
+   },
+   {
+    "kind": "h2",
+    "text": "Try it on your own app.",
+    "y": 9163,
+    "bottom": 9220,
+    "screens": 10.18,
+    "width": 1120,
+    "height": 58
+   },
+   {
+    "kind": "link",
+    "text": "Download for Mac → /download/mac",
+    "y": 9256,
+    "bottom": 9306,
+    "screens": 10.28,
+    "width": 213,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Download for Windows → /download/windows",
+    "y": 9256,
+    "bottom": 9306,
+    "screens": 10.28,
+    "width": 252,
+    "height": 50,
+    "fixed": false
+   },
+   {
+    "kind": "link",
+    "text": "Privacy → /privacy",
+    "y": 9530,
+    "bottom": 9554,
+    "screens": 10.59,
+    "width": 49,
+    "height": 23,
+    "fixed": false
+   }
+  ],
+  "total": 9594,
+  "screens": 10.66
+ }
+}

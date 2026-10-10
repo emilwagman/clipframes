@@ -37,7 +37,8 @@ export const EXAMPLES: Partial<Record<DemoId, (a: Actor) => Promise<void>>> = {
     await a.click();
     await a.type("make this one grey");
     await a.save();
-    await a.move(a.el("#outstanding-total"));
+    // Its corner, which is the card itself and not the words in it.
+    await a.move(a.point(a.el("#outstanding-total"), 0.86, 0.26));
   },
 
   // An area around the three totals.

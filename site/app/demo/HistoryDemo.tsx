@@ -35,7 +35,6 @@ export default function HistoryDemo() {
         const text = entries.find((entry) => entry.id === id)?.text;
         if (!text) return;
         copyToClipboard(text);
-        useSite.setState({ latest: text });
       },
       // There is no folder to open on a website.
       reveal: async () => {},

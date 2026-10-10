@@ -30,10 +30,13 @@ const APP: [events: string[], when: string, sent: string][] = [
 /// Every event this website sends (lib/analytics.ts and where it is called).
 const SITE: [events: string[], when: string, sent: string][] = [
   [["$pageview"], "A page of this site is opened", "nothing more"],
-  [["download_clicked"], "A download button is pressed", "which system (mac, windows, or auto for the button at the top) and where on the page the button is (header, hero, footer)"],
+  [["download_clicked"], "A download button is pressed", "which system (mac, windows, or auto for the button at the top) and where on the page the button is (header, hero, below, end)"],
+  [["link_copied"], "On a phone, the button that copies this site's address is pressed", "where on the page the button is (header, hero, below, end)"],
   [["demo_started"], "You take over one of the demos on the home page", "which demo (hero, picks, area, clip, tab)"],
   [["demo_finished"], "You pick something in a demo, or open the bar from the tab", "which demo"],
-  [["reference_copied"], "You copy the text from one of the copied-text blocks", "nothing more"],
+  [["reference_shown"], "The text a demo copied is on screen in the prompt beside it", "which demo, and whether the text came from the example or from your own pick (example, visitor). The text itself is not sent"],
+  [["reference_copied"], "You copy the text from one of those prompts", "nothing more"],
+  [["recording_played"], "A recording of the app on the home page starts playing", "which recording (desktop, comment, paste)"],
 ];
 
 function Events({ rows }: { rows: [string[], string, string][] }) {
@@ -59,7 +62,7 @@ export default async function Privacy() {
   const stars = await starCount(3600);
   return (
     <>
-      <Header stars={stars} />
+      <Header stars={stars} here="/privacy" />
       <main className={s.page}>
         <h1>Privacy</h1>
         <p className={s.lede}>

@@ -45,6 +45,14 @@ const result = await build({
     setup(b) {
       // The app's stylesheet, kept to the app's interface, as next.config.ts does it.
       b.onLoad({ filter: /desktop[\\/]ui[\\/]style\.css$/ }, (args) => ({ contents: transform(readFileSync(args.path, "utf8")), loader: "css" }));
+      // The recordings are inside their addresses too: the same list as lib/media.ts, with each file in place of its path.
+      b.onLoad({ filter: /lib[\\/]media\.ts$/ }, (args) => {
+        const source = readFileSync(args.path, "utf8").replace(/"(\/recordings\/[^"]+)"/g, (_, file) => {
+          const type = file.endsWith(".mp4") ? "video/mp4" : "image/jpeg";
+          return JSON.stringify(`data:${type};base64,${readFileSync(at(`public${file}`)).toString("base64")}`);
+        });
+        return { contents: source, loader: "ts" };
+      });
       // A picture is imported as { src }, as Next does it; here the picture is inside the address.
       b.onLoad({ filter: /\.png$/ }, (args) => ({ contents: `export default { src: "data:image/png;base64,${readFileSync(args.path).toString("base64")}" };`, loader: "js" }));
     },
