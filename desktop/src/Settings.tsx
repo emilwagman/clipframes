@@ -80,7 +80,7 @@ export function Settings() {
       : view.claudeRead === "unnamed"
         ? "The Clipframes folder is on a network share, which a Claude Code rule cannot name."
         : view.claudeRead === "manual"
-        ? "Clipframes cannot change Claude Code's settings file safely. Add this to the allow list in it by hand:"
+          ? "Clipframes cannot change Claude Code's settings file safely. Add this to the allow list in it by hand:"
           : "Adds a rule for the Clipframes folder to Claude Code's settings. Switching off removes it again.";
 
   return (
