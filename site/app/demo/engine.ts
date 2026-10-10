@@ -46,6 +46,10 @@ export interface Demo {
   taken: boolean;
   /// The example has played to its end.
   played: boolean;
+  /// What is picked is the visitor's own: they picked it, or went on with what the example picked.
+  own: boolean;
+  /// The example's picks are being taken away, which is not something the visitor copied.
+  clearing: boolean;
   /// Stops the example that is playing.
   stop: (() => void) | null;
   /// How many rounds have been started, to tell the visitor's captures apart.
@@ -135,7 +139,7 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
   const d: Demo = {
     id, ...parts, platform, tool: options.tool ?? "element", opens: options.opens ?? true,
     round: { ...EMPTY, place: { name: PLACE, auto: true } }, hover: { rect: null, label: "" }, marks: [], area: { rect: null, recording: false },
-    still: null, taken: false, played: false, stop: null, rounds: 0, started: false, finished: false,
+    still: null, taken: false, played: false, own: false, clearing: false, stop: null, rounds: 0, started: false, finished: false,
   };
   byGlass.set(glass, d);
   demos.set(id, d);
@@ -146,9 +150,9 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
     d.round = round;
     if (live === d) useApp.setState({ round });
     useSite.setState((s) => ({ rounds: { ...s.rounds, [id]: round } }));
-    if (changed && round.reference && d.taken) keep(d, round.reference);
+    if (changed && round.reference && d.taken && !d.clearing) keep(d, round.reference);
     // The visitor has done what the demo is for: picked something, or opened the bar from the tab.
-    if (d.taken && !d.finished && (id === "tab" ? round.picking : changed && round.reference !== "")) {
+    if (d.taken && !d.clearing && !d.finished && (id === "tab" ? round.picking : changed && round.reference !== "")) {
       d.finished = true;
       track("demo_finished", { demo: id });
     }
@@ -193,8 +197,20 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
     if (Math.hypot(event.screenX - from.x, event.screenY - from.y) > 12) take(d);
   }, true);
   d.host.addEventListener("pointerleave", () => (from = null));
-  d.host.addEventListener("pointerdown", (event) => event.isTrusted && event.pointerType !== "touch" && take(d), true);
-  d.host.addEventListener("keydown", (event) => event.isTrusted && take(d), true);
+  d.host.addEventListener("pointerdown", (event) => {
+    if (!event.isTrusted || event.pointerType === "touch") return;
+    take(d);
+    // A press on the page is a pick of the visitor's own. A press in the comment box the example
+    // left open is the visitor going on with the example's pick. The bar's buttons are neither.
+    const on = event.target instanceof Element ? event.target.closest(".window") : null;
+    if (on === null && event.target instanceof Element && glass.contains(event.target)) fresh(d);
+    else if (on?.querySelector(".note")) d.own = true;
+  }, true);
+  d.host.addEventListener("keydown", (event) => {
+    if (!event.isTrusted) return;
+    take(d);
+    d.own = true;
+  }, true);
   // The comment box takes the keyboard when it opens, and the browser scrolls to it. That is
   // right when the visitor picked something. When the example did, the keyboard stays where
   // it was and the page stays still.
@@ -238,9 +254,20 @@ export function take(d: Demo): void {
   if (live !== d) activate(d);
 }
 
+/// The visitor's first pick starts a round of their own: what the example picked is taken away
+/// first, so the text is exactly what they did. Called before the pick reaches the picker.
+export function fresh(d: Demo): void {
+  if (d.own) return;
+  d.own = true;
+  d.clearing = true;
+  for (let i = d.round.picks.length - 1; i >= 0; i--) void d.platform.removePick(i);
+  d.clearing = false;
+}
+
 /// Hands the round back to the example and plays it from the start.
 export async function replay(d: Demo): Promise<void> {
   d.taken = false;
+  d.own = false;
   d.played = false;
   useSite.setState((s) => ({ taken: { ...s.taken, [d.id]: false } }));
   await reset(d);

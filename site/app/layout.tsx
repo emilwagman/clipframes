@@ -26,7 +26,7 @@ export const viewport: Viewport = {
 
 /// The hero has three layouts to compare (app/home.module.css): ?hero=a, b or c picks one, before
 /// anything is drawn. With no choice the page has the one it is built with.
-const HERO = "b";
+const HERO = "a";
 const hero = `try{var h=new URLSearchParams(location.search).get("hero");if(/^[abc]$/.test(h||""))document.documentElement.dataset.hero=h}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

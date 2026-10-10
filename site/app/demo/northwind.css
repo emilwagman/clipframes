@@ -7,6 +7,8 @@
   letter-spacing: normal; user-select: none; -webkit-user-select: none; cursor: default; }
 .northwind * { box-sizing: border-box; }
 .northwind .app { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+.northwind .app.simple { grid-template-columns: 1fr; }
+.northwind .app.simple aside { display: none; }
 .northwind aside { background: var(--ground); border-right: 1px solid var(--line); padding: 22px 16px; }
 .northwind .logo { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; margin-bottom: 26px; }
 .northwind .logo i { width: 24px; height: 24px; border-radius: 7px; background: var(--brand); }
@@ -70,4 +72,11 @@
 }
 @container (max-width: 380px) {
   .northwind td.customer, .northwind th.customer { display: none; }
+}
+/* The simpler page is also a little tighter, so the bar sits under its last row. */
+.northwind .app.simple main { padding-top: 24px; }
+.northwind .app.simple .stats, .northwind .app.simple table { margin-top: 18px; }
+/* The simpler page has no sidebar to give way, so its search field gives way sooner. */
+@container (max-width: 640px) {
+  .northwind .app.simple input[type="search"] { display: none; }
 }

@@ -30,8 +30,8 @@ const APP: [events: string[], when: string, sent: string][] = [
 /// Every event this website sends (lib/analytics.ts and where it is called).
 const SITE: [events: string[], when: string, sent: string][] = [
   [["$pageview"], "A page of this site is opened", "nothing more"],
-  [["download_clicked"], "A download button is pressed", "which system (mac, windows, or auto for the button at the top) and where on the page the button is (header, hero, end)"],
-  [["link_copied"], "On a phone, the button that copies this site's address is pressed", "where on the page the button is (header, hero, end)"],
+  [["download_clicked"], "A download button is pressed", "which system (mac, windows, or auto for the button at the top) and where on the page the button is (header, hero, below, end)"],
+  [["link_copied"], "On a phone, the button that copies this site's address is pressed", "where on the page the button is (header, hero, below, end)"],
   [["demo_started"], "You take over one of the demos on the home page", "which demo (hero, picks, area, clip, tab)"],
   [["demo_finished"], "You pick something in a demo, or open the bar from the tab", "which demo"],
   [["reference_shown"], "The text a demo copied is on screen in the prompt beside it", "which demo, and whether the text came from the example or from your own pick (example, visitor). The text itself is not sent"],

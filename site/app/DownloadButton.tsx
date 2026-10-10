@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { track } from "@/lib/analytics";
-import { DOWNLOAD_MAC, DOWNLOAD_WINDOWS, SITE_URL } from "@/lib/site";
+import { DOWNLOAD_MAC, DOWNLOAD_PATH, DOWNLOAD_WINDOWS, SITE_URL } from "@/lib/site";
 import s from "./home.module.css";
 
 /// Where on the page a download button is.
-export type Place = "header" | "hero" | "end";
+export type Place = "header" | "hero" | "below" | "end";
 
 export function DownloadIcon() {
   return (
@@ -22,6 +22,22 @@ export function DownloadButtons({ place }: { place: Place }) {
     <>
       <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_MAC} onClick={() => track("download_clicked", { os: "mac", place })}><DownloadIcon />Download for Mac</a>
       <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_WINDOWS} onClick={() => track("download_clicked", { os: "windows", place })}><DownloadIcon />Download for Windows</a>
+    </>
+  );
+}
+
+/// One button, for the first screen: the download for the system the visitor is on (app/download).
+export function DownloadOne({ place }: { place: Place }) {
+  return <a className={`${s.pill} ${s.big}`} href={DOWNLOAD_PATH} onClick={() => track("download_clicked", { os: "auto", place })}><DownloadIcon />Download Clipframes</a>;
+}
+
+/// The two downloads as words in a sentence, for the quiet line under the first screen.
+export function DownloadLinks({ place }: { place: Place }) {
+  return (
+    <>
+      <a href={DOWNLOAD_MAC} onClick={() => track("download_clicked", { os: "mac", place })}>Download for Mac</a>
+      {" or "}
+      <a href={DOWNLOAD_WINDOWS} onClick={() => track("download_clicked", { os: "windows", place })}>Download for Windows</a>
     </>
   );
 }

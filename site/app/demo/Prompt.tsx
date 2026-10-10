@@ -10,8 +10,10 @@ import s from "./prompt.module.css";
 /// (desktop/ui/web.ts writes it), and it changes as things are picked. `example` is what the
 /// demo's example ends up with, shown faintly until the demo has a round of its own, so the
 /// prompt is never empty.
-export default function Prompt({ id, example }: { id: DemoId; example: string }) {
-  const box = useRef<HTMLElement>(null);
+/// `docked` is the prompt as the foot of its demo's window, which is how the first screen has
+/// it: it is not there until something is picked, and then it is as tall as its text.
+export default function Prompt({ id, example = "", docked = false }: { id: DemoId; example?: string; docked?: boolean }) {
+  const box = useRef<HTMLDivElement & HTMLElement>(null);
   const round = useSite((site) => site.rounds[id]);
   const taken = useSite((site) => site.taken[id]);
   const own = useSite((site) => site.clipboard);
@@ -36,6 +38,24 @@ export default function Prompt({ id, example }: { id: DemoId; example: string })
     watch.observe(box.current);
     return () => watch.disconnect();
   }, [id, text, by]);
+
+  // The foot keeps its last text while it closes, so what closes is not an empty strip.
+  const last = useRef("");
+  if (text) last.current = text;
+
+  if (docked) {
+    return (
+      <div ref={box} className={s.foot} data-prompt={id} data-open={text ? "" : undefined}>
+        <div className={s.footIn}>
+          <div className={s.title}>Pasted into your agent</div>
+          <pre className={s.text} data-copied={id} data-state={text ? (taken ? "own" : "example") : "empty"} aria-live="polite" onCopy={() => track("reference_copied")}>
+            <span className={s.caret} aria-hidden="true">&gt; </span>
+            <span key={round?.picks.length} className={s.line}>{text || last.current}</span>
+          </pre>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <figure ref={box} className={s.prompt} data-prompt={id}>

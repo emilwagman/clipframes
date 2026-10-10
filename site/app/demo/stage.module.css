@@ -9,8 +9,11 @@
 .hero .view { height: var(--hero-stage, 420px); }
 .tall .view { height: 600px; }
 .short .view { height: 340px; }
-/* Said above the hero's stage, where it is read first. */
-.invite { margin: 0 0 12px; font-size: 15.5px; line-height: 1.45; color: var(--text-2); }
+/* The first screen's window: a bare top bar, with the way to play the example again at its end. */
+.bare { height: 32px; }
+.bare button { margin-left: auto; font: 12px var(--sans); color: var(--text-3); background: none; border: 0; padding: 0; cursor: pointer; }
+.bare button:hover { color: var(--text); }
+.bare button[data-off] { visibility: hidden; }
 .glass { position: absolute; inset: 0; }
 /* The still copy a demo keeps while another one is live. */
 .glass :global([data-still]) { pointer-events: none; }
@@ -46,7 +49,7 @@
   .frame { margin: 0 calc(-1 * var(--gutter)); border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
   .address { display: none; }
   .view { height: 500px; }
-  .hero .view { height: 400px; }
+  .hero .view { height: 380px; }
   .tall .view { height: 540px; }
   .short .view { height: 320px; }
 }

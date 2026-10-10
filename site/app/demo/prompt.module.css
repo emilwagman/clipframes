@@ -17,3 +17,12 @@
   .text { font-size: 12.5px; padding: 8px 14px 16px; }
   .title { padding: 10px 14px 0; }
 }
+
+/* The prompt as the foot of a demo's window: closed until something is picked. */
+.foot { display: grid; grid-template-rows: 0fr; background: var(--app-surface); }
+.foot[data-open] { grid-template-rows: 1fr; }
+.footIn { min-height: 0; overflow: hidden; }
+.foot .text { min-height: 0; padding-bottom: 16px; }
+@media (prefers-reduced-motion: no-preference) {
+  .foot { transition: grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1); }
+}

@@ -62,6 +62,7 @@ await page.evaluate(() => document.querySelectorAll('a[href^="/download"]').forE
 await page.locator('main a[href="/download/windows"]').last().scrollIntoViewIfNeeded();
 await page.locator('main a[href="/download/windows"]').last().click();
 await page.evaluate(() => scrollTo(0, 0));
+await page.locator('main a[href="/download"]').click();
 await page.locator('main a[href="/download/mac"]').first().click();
 await page.locator('header a[href="/download"]').click();
 // Events are sent a few at a time, every few seconds.
@@ -93,8 +94,8 @@ if (mode === "off") {
     assert.equal(e.properties.$process_person_profile, false);
     assert.ok(!JSON.stringify(e).includes("secret") && !JSON.stringify(e).includes("Export"), `${e.event} carries something from a demo`);
   }
-  // Each download says which button it was: the pair at the end, the pair at the top, the header's.
-  assert.deepEqual(events.filter((e) => e.event === "download_clicked").map((e) => `${e.properties.os} ${e.properties.place}`), ["windows end", "mac hero", "auto header"]);
+  // Each download says which button it was: the pair at the end, the one in the first screen, the line under it, the header's.
+  assert.deepEqual(events.filter((e) => e.event === "download_clicked").map((e) => `${e.properties.os} ${e.properties.place}`), ["windows end", "auto hero", "mac below", "auto header"]);
   // The agent's text was on screen twice in the hero: the example's, then the visitor's own.
   assert.deepEqual(events.filter((e) => e.event === "reference_shown" && e.properties.demo === "hero").map((e) => e.properties.by), ["example", "visitor"]);
   assert.equal(events.find((e) => e.event === "recording_played").properties.place, "desktop");

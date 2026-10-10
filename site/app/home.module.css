@@ -51,63 +51,59 @@
 .pointed { position: relative; display: inline-block; }
 .outline { position: absolute; inset: 0.07em -0.13em -0.07em; background: none; pointer-events: none; }
 
-/* The first screen: what it is, and the app itself with the text it hands an agent.
-   The hero has three layouts to compare, chosen with ?hero= (app/layout.tsx): the demo beside
-   the headline (a), the headline above a demo as wide as the page (b, which is what the page
-   has when nothing is chosen), and the demo first (c). The markup is the same for all three. */
-.hero { padding-top: clamp(28px, 4.4vw, 52px); display: flex; flex-direction: column; }
-.heroText, .pitch { display: contents; }
-.headline { container-type: inline-size; order: 1; padding-top: 0.5em; }
-.lede { order: 2; margin-top: 20px; max-width: 620px; font-size: clamp(18.5px, 1.7vw, 21px); line-height: 1.45; color: var(--text-2); }
-.bench { order: 3; margin-top: 24px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-/* Stacked, the prompt comes first: on a phone it is then still in view above the keyboard while a comment is typed. */
-.bench > figure:first-child { order: 2; margin-top: 10px; }
-.bench > figure:last-child { --lines: 4; }
-.heroGet .big, .endGet .big { padding: 0 20px; }
-@media (max-width: 640px) {
-  /* A phone's first screen has room for the text or for a sentence about it. The window's own title says what it is. */
-  .bench > figure:last-child figcaption { display: none; }
-}
-.steps { order: 4; margin: 32px 0 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 10px; font-size: 17px; color: var(--text-2); }
-.steps li { counter-increment: step; display: flex; align-items: baseline; gap: 12px; }
-/* A step's number, as the app numbers a pick. */
-.steps li::before { content: counter(step); flex: none; min-width: 22px; height: 22px; border-radius: 11px; background: var(--accent); color: #fff; font: 700 12px/22px var(--sans); text-align: center; transform: translateY(-1px); }
-.heroGet { order: 5; margin-top: 32px; }
-.assure { margin-top: 6px; font-size: 14.5px; color: var(--text-3); }
+/* The first screen is one thing: the headline, one line, and the app at work, whose window
+   grows a foot with what the agent gets. Everything else that was here is in the quiet lines
+   right under it (.below) or at the end of the page. The hero has three layouts to compare,
+   chosen with ?hero= (app/layout.tsx): the headline and one button above a window as wide as
+   the page (a, which is what the page has when nothing is chosen), the headline beside a
+   smaller window (b), and the headline on one line with only the window under it (c). The
+   markup is the same for all three. */
+/* As tall as the screen, so the quiet lines start right under it and the window's foot has room to open. */
+.hero { padding-top: clamp(24px, 4vw, 44px); display: flex; flex-direction: column; min-height: calc(100vh - 64px); min-height: calc(100svh - 64px); }
+.heroText { display: block; }
+.headline { container-type: inline-size; padding-top: 0.5em; }
+.lede { margin-top: 18px; max-width: 560px; font-size: clamp(18px, 1.6vw, 20px); line-height: 1.45; color: var(--text-2); }
+.heroGet { margin-top: 18px; }
+.bench { margin-top: 26px; min-width: 0; }
+
+.below { padding-top: 22px; font-size: 14.5px; line-height: 1.6; color: var(--text-3); }
+.below a { color: var(--text-2); }
+.below .what { display: none; }
+.below .phone p { margin-top: 12px; }
+.below .phone { margin-bottom: 10px; }
 
 @media (min-width: 900px) {
-  .hero { --hero-stage: clamp(360px, calc(100vh - 480px), 440px); display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0 56px; align-items: start; }
-  .heroText { display: block; }
-  .pitch { display: block; }
+  .hero { --hero-stage: clamp(340px, calc(100vh - 478px), 460px); }
+  .heroText { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 56px; align-items: end; }
   .headline { padding-top: 34px; }
-  .bench { margin-top: 0; }
-  .bench > figure:first-child { order: 0; margin-top: 0; }
-  .bench > figure:last-child { --lines: 3; }
-  .lede { margin-top: 24px; }
-  .steps { margin-top: 26px; }
-  .heroGet { margin-top: 34px; }
+  .lede { margin-top: 0; }
+  .below { display: flex; justify-content: space-between; gap: 8px 40px; flex-wrap: wrap; padding-top: 0; }
 
-  /* b: the headline and the pitch side by side, above the demo and its prompt side by side. */
-  :global(html:is([data-hero="b"], [data-hero="c"])) .hero { --hero-stage: clamp(340px, calc(100vh - 496px), 470px); display: flex; gap: 0; align-items: stretch; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .heroText { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 56px; align-items: end; order: 1; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .headline { padding-top: 0; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .pitch { order: 2; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .lede { margin-top: 0; font-size: 18.5px; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .steps { display: none; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .heroGet { margin-top: 18px; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .assure { margin-top: 4px; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .bench { order: 2; margin-top: 30px; display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 20px; align-items: stretch; }
-  /* The prompt is as tall as the window beside it: its top is level with the window's, under the line above the stage. */
-  :global(html:is([data-hero="b"], [data-hero="c"])) .bench > figure:last-child { display: flex; flex-direction: column; padding-top: 34px; }
-  /* It is a terminal: what is typed sits at the bottom of it. */
-  :global(html:is([data-hero="b"], [data-hero="c"])) .bench > figure:last-child > div { flex: 1; display: flex; flex-direction: column; }
-  :global(html:is([data-hero="b"], [data-hero="c"])) .bench > figure:last-child pre { margin-top: auto; }
+  /* b: the headline and its line on the left, the window on the right, level with each other. */
+  :global(html[data-hero="b"]) .hero { --hero-stage: clamp(340px, calc(100vh - 330px), 420px); display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); gap: 56px; align-items: start; align-content: start; padding-top: clamp(28px, calc((100vh - 64px - 32px - var(--hero-stage) - 96px) / 2), 140px); }
+  /* The words are level with the middle of the window as it is before its foot opens, and stay there when it does. */
+  :global(html[data-hero="b"]) .heroText { padding-top: calc((32px + var(--hero-stage)) / 2 - 150px); }
+  :global(html[data-hero="b"]) .heroText { display: block; }
+  :global(html[data-hero="b"]) .headline { padding-top: 0; }
+  :global(html[data-hero="b"]) .lede { margin-top: 22px; }
+  :global(html[data-hero="b"]) .heroGet { display: none; }
+  :global(html[data-hero="b"]) .bench { margin-top: 0; }
 
-  /* c: the demo comes first, and the headline is under it. */
-  :global(html[data-hero="c"]) .hero { --hero-stage: clamp(320px, calc(100vh - 500px), 430px); padding-top: 18px; }
-  :global(html[data-hero="c"]) .bench { order: 1; margin-top: 0; }
-  :global(html[data-hero="c"]) .heroText { order: 2; margin-top: 26px; }
-  :global(html[data-hero="c"]) .headline { max-width: 560px; }
+  /* c: the headline on one line, and the window. What it is comes right under the screen. */
+  :global(html[data-hero="c"]) .hero { --hero-stage: clamp(340px, calc(100vh - 380px), 480px); }
+  :global(html[data-hero="c"]) .heroText { display: block; }
+  :global(html[data-hero="c"]) .headline h1 { font-size: min(6.25cqw, 78px); }
+  :global(html[data-hero="c"]) .headline h1 > span { display: inline; }
+  :global(html[data-hero="c"]) .pitch { display: none; }
+  :global(html[data-hero="c"]) .below .what { display: block; flex-basis: 100%; font-size: 17px; color: var(--text-2); }
+}
+/* A short laptop screen: a smaller headline, so the window and its foot are still in it. */
+@media (min-width: 900px) and (max-height: 800px) {
+  .hero { padding-top: 16px; --hero-stage: 340px; }
+  .headline h1 { font-size: clamp(30px, 12.3cqw, 62px); }
+  .headline { padding-top: 26px; }
+  .bench { margin-top: 20px; }
+  :global(html[data-hero="c"]) .headline h1 { font-size: min(6.25cqw, 62px); }
 }
 
 .section { padding-top: clamp(88px, 11vw, 148px); scroll-margin-top: 24px; }
@@ -156,6 +152,7 @@
 
 /* The end: the download, and beside it what there is to know before pressing it. */
 .end h2 { margin-bottom: 30px; }
+.endGet .big { padding: 0 20px; }
 .facts { margin: 44px 0 0; display: grid; border-top: 1px solid var(--border); }
 .facts > div { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 16px; line-height: 1.5; }
 .facts dt { color: var(--text); font-weight: 600; }

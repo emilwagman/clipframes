@@ -8,7 +8,7 @@
 
 import Footer from "./Footer";
 import Header from "./Header";
-import { CopyLink, DownloadButtons } from "./DownloadButton";
+import { CopyLink, DownloadButtons, DownloadLinks, DownloadOne } from "./DownloadButton";
 import type { Place } from "./DownloadButton";
 import HistoryDemo from "./demo/HistoryDemo";
 import Live from "./demo/Live";
@@ -21,7 +21,6 @@ import s from "./home.module.css";
 /// What each demo's example ends up copying (desktop/ui/web.ts writes these words). A demo's
 /// prompt shows its line faintly until the demo has copied something itself.
 const COPIES = {
-  hero: '[Button "New invoice" (#new-invoice .btn.btn-primary), under heading "Invoices" in Google Chrome "Invoices": make this green]',
   picks: `[Clipframes: 3 things in Google Chrome "Invoices"]
 1. Button "New invoice" (#new-invoice .btn.btn-primary), under heading "Invoices": make this green
 2. Text "$3,120" (#overdue-total), under heading "Invoices": too alarming, use the normal text colour
@@ -29,6 +28,9 @@ const COPIES = {
   area: '[Screenshot (1.png) in Google Chrome "Invoices": put more space between these]',
   clip: '[Screen clip, 3 s, 12 frames (1/) in Google Chrome "Invoices": the menu opens far from the button]',
 };
+
+/// What it is, in one sentence.
+const WHAT = "A free app for Mac and Windows that tells Claude Code or Codex exactly which thing you mean.";
 
 /// One line of the copied text taken apart, with what each part is for.
 const PARTS: [part: string, says: string][] = [
@@ -84,34 +86,35 @@ export function HomePage({ stars, preview = false }: { stars: number | null; pre
               </h1>
             </div>
             <div className={s.pitch}>
-              <p className={s.lede}>
-                Clipframes is a free app for Mac and Windows. It tells Claude Code or Codex exactly which thing on your
-                screen you mean.
-              </p>
-              <ol className={s.steps}>
-                <li>Press <code className={s.inline}>Ctrl+Shift+Space</code> in any app.</li>
-                <li>Click the thing and type what should change.</li>
-                <li>Paste into your agent.</li>
-              </ol>
-              <div className={s.heroGet}>
-                <Download place="hero" />
-                <p className={s.assure}>
-                  Your captures stay on your computer. <a href="#get">What it asks for and what it sends</a>
-                </p>
-              </div>
+              <p className={s.lede} data-walk="line">{WHAT}</p>
+              <div className={`${s.heroGet} ${s.desk}`}><DownloadOne place="hero" /></div>
             </div>
           </div>
           <div className={s.bench}>
             <Stage
               id="hero"
               size="hero"
-              invite
-              label="A made-up invoicing app with the Clipframes bar at the bottom. The New invoice button is outlined and named, and a comment box under it says: make this green."
-              hint="This is the real Clipframes bar on a made-up app. Click anything in the window."
-              touchHint="This is the real Clipframes bar on a made-up app. Tap anything in the window."
+              docked
+              label="A made-up invoicing app with the Clipframes bar at the bottom. The New invoice button is outlined and named, and a comment box under it says: make this green. Under the app is the text this puts into an agent's prompt."
+              hint="Click anything in the window."
+              touchHint="Tap anything in the window."
             />
-            <Prompt id="hero" example={COPIES.hero} />
           </div>
+        </div>
+
+        {/* What left the first screen, said once and quietly right under it. */}
+        <div className={`${s.wrap} ${s.below}`} data-walk="below">
+          <p className={s.what}>{WHAT}</p>
+          <p className={s.desk}>
+            Clipframes is free. Version {VERSION} runs on macOS 12 or later and on Windows 10 or 11. <DownloadLinks place="below" />.
+          </p>
+          <div className={s.phone}>
+            <CopyLink place="below" big />
+            <p>Clipframes is free and runs on Mac and Windows. Open the link on your computer to download it.</p>
+          </div>
+          <p>
+            Your captures stay on your computer. <a href="#get">What it asks for and what it sends</a>
+          </p>
         </div>
 
         <section id="why" className={`${s.wrap} ${s.section} ${s.why}`}>
