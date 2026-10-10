@@ -56,7 +56,7 @@ $area = @(1743, 1968); $clip = @(1800, 1968); $history = @(2068, 1968); $done = 
 function Go($p, [int]$ms) { [H]::Glide($p[0], $p[1], $ms) }
 
 if ($Scene -eq "pick") {
-  [H]::Key(0x11, 0x12, 0x20)            # Ctrl+Alt+Space: open Clipframes
+  Start-Process $exe -ArgumentList "--open"   # the same as pressing the shortcut; injected modifier keys are unreliable on this machine
   Wait 1500
   [H]::Glide(468, 206, 750);  Wait 550   # the page title
   [H]::Glide(494, 386, 650);  Wait 450   # a figure
@@ -77,7 +77,7 @@ if ($Scene -eq "pick") {
 }
 
 if ($Scene -eq "show") {
-  [H]::Key(0x11, 0x12, 0x20)
+  Start-Process $exe -ArgumentList "--open"
   Wait 1500
   Go $area 800; Wait 300; [H]::Click(); Wait 700           # the Area tool
   [H]::Glide(400, 455, 800); Wait 300
@@ -100,7 +100,7 @@ if ($Scene -eq "show") {
 
 if ($Scene -eq "which") {
   # Things that appear more than once on the page: the reference has to say which one.
-  [H]::Key(0x11, 0x12, 0x20)
+  Start-Process $exe -ArgumentList "--open"
   Wait 1500
   [H]::Glide(1253, 770, 800); Wait 600; [H]::Click(); Wait 1200    # the second "Paid" badge
   [H]::Type("make these grey"); Wait 300; [H]::Key(0x0D); Wait 800
