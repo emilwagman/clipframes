@@ -158,8 +158,10 @@ pub struct Core {
     /// the bar is next opened, closed or sent home. Holds which displays were connected at the
     /// press. Without it, Clipframes putting the bar somewhere would look like a drag.
     gripped: Mutex<Option<String>>,
-    /// The bar has moved since it was last looked at.
+    /// The bar has moved, or its grip was pressed, since it was last looked at.
     bar_moved: AtomicBool,
+    /// It really moved, so there is a new place to remember.
+    bar_dragged: AtomicBool,
     /// A thread is waiting for the bar to come to rest.
     bar_timer: AtomicBool,
 }
@@ -706,11 +708,20 @@ fn bar_spot(app: &AppHandle, near: Option<(f64, f64)>) -> Option<Spot> {
 
 /// The bar moved. When that was the user's hand on the grip, it is followed up once the bar
 /// has come to rest (`bar_settle`). Called on the main thread for every step of a drag, so it
-/// only leaves a note.
-fn bar_moved(app: &AppHandle) {
+/// only leaves a note. Also called for the press on the grip itself (`moved` false).
+fn bar_moved(app: &AppHandle, moved: bool) {
     let core = app.state::<Core>();
     if core.gripped.lock().unwrap().is_none() {
         return;
+    }
+    if moved {
+        core.bar_dragged.store(true, Ordering::SeqCst);
+    }
+    // Without waiting: this is the main thread, and a pause in a drag may have let go.
+    if let Ok(picker) = core.picker.try_lock() {
+        if let Some(picker) = picker.as_ref() {
+            picker.hold(true);
+        }
     }
     core.bar_moved.store(true, Ordering::SeqCst);
     if !core.bar_timer.swap(true, Ordering::SeqCst) {
@@ -734,7 +745,15 @@ fn bar_moved(app: &AppHandle) {
 /// it is on; the bar itself stays where it was let go, also when part of it is off the screen.
 fn bar_settle(app: &AppHandle) {
     let core = app.state::<Core>();
+    // Pointing goes on from here, whether or not the button was seen coming up.
+    if let Some(picker) = core.picker.lock().unwrap().as_ref() {
+        picker.hold(false);
+    }
     refresh_exempt(app);
+    // A press on the grip that moved nothing leaves the remembered place as it is.
+    if !core.bar_dragged.swap(false, Ordering::SeqCst) {
+        return;
+    }
     let Some(gripped) = core.gripped.lock().unwrap().clone() else { return };
     let Some(rect) = app.get_webview_window(BAR).filter(|w| w.is_visible().unwrap_or(false)).and_then(|w| window_rect(&w)) else { return };
     let all = all_displays(app);
@@ -768,7 +787,9 @@ fn bar_settle(app: &AppHandle) {
 /// so nothing waits for a second step once the web view is up.
 fn show_bar(app: &AppHandle) -> Option<WebviewWindow> {
     // From here until the grip is pressed, the bar only moves because Clipframes puts it.
-    *app.state::<Core>().gripped.lock().unwrap() = None;
+    let core = app.state::<Core>();
+    *core.gripped.lock().unwrap() = None;
+    core.bar_dragged.store(false, Ordering::SeqCst);
     let spot = bar_spot(app, element::pointer());
     if let Some(bar) = app.get_webview_window(BAR) {
         if let Some(spot) = &spot {
@@ -1636,6 +1657,9 @@ fn tab_open(app: AppHandle) {
 fn bar_grip(app: AppHandle, window: WebviewWindow) {
     let arrangement = all_displays(&app).first().map(|d| d.arrangement.clone()).unwrap_or_default();
     *app.state::<Core>().gripped.lock().unwrap() = Some(arrangement);
+    // As for any move: the picker holds off, and lets go again once the bar rests, also
+    // when the grip was only pressed and the bar never moved.
+    bar_moved(&app, false);
     let _ = window.start_dragging();
 }
 
@@ -1647,6 +1671,7 @@ fn bar_home(app: AppHandle, window: WebviewWindow) {
     // The first of the two clicks was a press on the grip. What follows is not a drag.
     *core.gripped.lock().unwrap() = None;
     core.bar_moved.store(false, Ordering::SeqCst);
+    core.bar_dragged.store(false, Ordering::SeqCst);
     let Some(rect) = window_rect(&window) else { return };
     let all = all_displays(&app);
     let frames: Vec<Rect> = all.iter().map(|d| display(&d.monitor).0).collect();
@@ -2057,7 +2082,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::WindowEvent::Moved(_)) && window.label() == BAR {
-                bar_moved(window.app_handle());
+                bar_moved(window.app_handle(), true);
             }
         })
         .invoke_handler(tauri::generate_handler![

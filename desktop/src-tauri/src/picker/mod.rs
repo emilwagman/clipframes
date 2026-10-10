@@ -99,6 +99,8 @@ struct Shared {
     drag: Mutex<Option<(f64, f64)>>,
     /// The last press was on one of Clipframes' own windows and went to it.
     own_press: AtomicBool,
+    /// The bar is being moved by its grip: nothing it passes over is read or outlined.
+    held: AtomicBool,
     running: AtomicBool,
 }
 
@@ -143,6 +145,13 @@ impl Picker {
         *self.shared.exempt.lock().unwrap() = rects;
     }
 
+    /// Said when the bar's grip is pressed and while the bar moves, and taken back when the
+    /// bar has come to rest. A release of the button takes it back too, but nothing depends
+    /// on the release being seen.
+    pub fn hold(&self, on: bool) {
+        self.shared.held.store(on, Ordering::SeqCst);
+    }
+
     pub fn set_mode(&self, mode: Mode) {
         self.shared.mode.store(mode as u8, Ordering::SeqCst);
         *self.shared.drag.lock().unwrap() = None;
@@ -176,10 +185,8 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
         Input::Move(x, y) => {
             // A drag keeps following the pointer even across Clipframes' own windows.
             let dragging = shared.drag.lock().unwrap().is_some();
-            // A press the bar got is the bar's until the button comes up: while the bar is
-            // being moved by its grip, nothing it passes over is read or outlined.
-            let own = shared.own_press.load(Ordering::SeqCst);
-            if mode != Mode::Watch && !own && (dragging || !exempt(shared, x, y)) {
+            let held = shared.held.load(Ordering::SeqCst);
+            if mode != Mode::Watch && !held && (dragging || !exempt(shared, x, y)) {
                 *shared.pending.lock().unwrap() = Some((x, y));
                 shared.wake.notify_one();
             }
@@ -206,6 +213,7 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             }
         }
         Input::Up(x, y) => {
+            shared.held.store(false, Ordering::SeqCst);
             // A press the bar got is the bar's to the end: dragged off and let go elsewhere,
             // it is not a pick, and the bar must see the button come up.
             if shared.own_press.swap(false, Ordering::SeqCst) {
@@ -224,16 +232,26 @@ fn handle(shared: &Shared, emit: &Arc<dyn Fn(Event) + Send + Sync>, input: Input
             }
             // The click asks once more, for the full description. The hover answer is the
             // fallback when the app does not reply.
-            let known = shared.last.lock().unwrap().clone().filter(|(_, _, e)| contains(&e.frame, x, y)).map(|(_, _, e)| e);
+            let last = shared.last.lock().unwrap().clone();
+            // Whether the pointer was read where it is now: not when it jumped here, or moved
+            // faster than the reader, or its moves were not followed.
+            let hovered = last.as_ref().is_some_and(|(lx, ly, _)| (lx - x).abs() <= 2.0 && (ly - y).abs() <= 2.0);
+            let known = last.filter(|(_, _, e)| contains(&e.frame, x, y)).map(|(_, _, e)| e);
             let emit = emit.clone();
             thread::spawn(move || {
                 static TOKENS: AtomicU64 = AtomicU64::new(0);
                 let clicked = Instant::now();
+                // A point that was never hovered is asked about once before the reading that
+                // counts. An app may answer the first question about a point with what is
+                // around it (a browser on Windows: the whole page) and only the next with the
+                // element; a click after a hover has always been that next one. Its answer
+                // is also a nearer fallback than an older hover somewhere else in the frame.
+                let first = if hovered { None } else { quick(x, y) };
                 let (read, mut more) = match full(x, y) {
                     Some(picked) => (Some(picked.info.clone()), Some(picked)),
                     None => (None, None),
                 };
-                let Some(element) = read.or(known) else { return };
+                let Some(element) = read.or(first).or(known) else { return };
                 let token = TOKENS.fetch_add(1, Ordering::SeqCst) + 1;
                 emit(Event::Pick { x, y, element, token, read_ms: clicked.elapsed().as_secs_f64() * 1000.0 });
                 // The pick is shown and copied by now: `emit` returns when that is done. Only
@@ -260,9 +278,11 @@ fn quick(x: f64, y: f64) -> Option<ElementInfo> {
     element::element_at(x, y).ok()
 }
 
+/// Tests never read the real screen: they only note where a reading was asked for.
 #[cfg(test)]
-fn quick(_x: f64, _y: f64) -> Option<ElementInfo> {
-    None
+fn quick(x: f64, y: f64) -> Option<ElementInfo> {
+    tests::QUICK.lock().unwrap().push((x, y));
+    (x == tests::SLOW_TO_ANSWER).then(|| ElementInfo { role: "Button".into(), name: "New invoice".into(), ..Default::default() })
 }
 
 #[cfg(not(test))]
@@ -318,6 +338,14 @@ mod tests {
 
     /// Where the element with a second look is (see `full`).
     pub const TWICE: f64 = 777.0;
+    /// Where the first, quick reading answers and the full one does not.
+    pub const SLOW_TO_ANSWER: f64 = 555.0;
+    /// Every point `quick` was asked about. Tests share it, so each looks for its own point.
+    pub static QUICK: Mutex<Vec<(f64, f64)>> = Mutex::new(Vec::new());
+
+    fn asked(x: f64, y: f64) -> usize {
+        QUICK.lock().unwrap().iter().filter(|p| **p == (x, y)).count()
+    }
 
     #[test]
     fn the_pick_is_handed_over_before_the_look_through_the_page_begins() {
@@ -397,12 +425,60 @@ mod tests {
         let (shared, emit, _rx) = round();
         *shared.exempt.lock().unwrap() = vec![Rect { x: 100.0, y: 800.0, width: 400.0, height: 60.0 }];
         assert!(!handle(&shared, &emit, Input::Down(110.0, 820.0)), "the grip gets the press");
+        shared.held.store(true, Ordering::SeqCst); // what `Picker::hold` sets when the bar says its grip was pressed
         // The bar follows the pointer; its old place is all the picker knows until it rests.
         handle(&shared, &emit, Input::Move(300.0, 300.0));
         assert_eq!(*shared.pending.lock().unwrap(), None, "nothing is outlined on the way");
         assert!(!handle(&shared, &emit, Input::Up(300.0, 300.0)), "and letting go is not a pick");
         handle(&shared, &emit, Input::Move(310.0, 300.0));
         assert_eq!(*shared.pending.lock().unwrap(), Some((310.0, 300.0)), "afterwards pointing works as before");
+    }
+
+    #[test]
+    fn a_bar_drag_whose_release_was_never_seen_ends_when_the_bar_rests() {
+        let (shared, emit, rx) = round();
+        *shared.exempt.lock().unwrap() = vec![Rect { x: 100.0, y: 800.0, width: 400.0, height: 60.0 }];
+        assert!(!handle(&shared, &emit, Input::Down(110.0, 820.0)));
+        shared.held.store(true, Ordering::SeqCst);
+        handle(&shared, &emit, Input::Move(300.0, 300.0));
+        // No release arrives. The bar comes to rest and says so (`Picker::hold(false)`).
+        shared.held.store(false, Ordering::SeqCst);
+        handle(&shared, &emit, Input::Move(640.0, 200.0));
+        assert_eq!(*shared.pending.lock().unwrap(), Some((640.0, 200.0)), "the next move is followed");
+        // And the next click is a pick, though the press before it never ended.
+        assert!(handle(&shared, &emit, Input::Down(TWICE, 200.0)));
+        assert!(handle(&shared, &emit, Input::Up(TWICE, 200.0)));
+        assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Pick { .. })));
+    }
+
+    #[test]
+    fn a_click_where_the_pointer_was_never_read_asks_once_before_the_reading_that_counts() {
+        let (shared, emit, rx) = round();
+        // The last hover was somewhere else, on the page as a whole. The pointer then jumped.
+        let page = ElementInfo { role: "Group".into(), frame: Rect { x: 0.0, y: 0.0, width: 1971.0, height: 1942.0 }, ..Default::default() };
+        *shared.last.lock().unwrap() = Some((40.0, 900.0, page.clone()));
+        assert!(handle(&shared, &emit, Input::Up(TWICE, 411.0)));
+        match rx.recv_timeout(Duration::from_secs(1)).expect("a pick") {
+            Event::Pick { element, .. } => assert_eq!(element.name, "Paid", "what is at the click, not the page hovered before"),
+            other => panic!("expected a pick, got {other:?}"),
+        }
+        assert_eq!(asked(TWICE, 411.0), 1, "the point was asked about first");
+
+        // Hovered where it is clicked: the hover was that first question.
+        let (shared, emit, rx) = round();
+        *shared.last.lock().unwrap() = Some((TWICE, 412.0, page.clone()));
+        assert!(handle(&shared, &emit, Input::Up(TWICE, 413.0)));
+        assert!(matches!(rx.recv_timeout(Duration::from_secs(1)), Ok(Event::Pick { .. })));
+        assert_eq!(asked(TWICE, 413.0), 0);
+
+        // The full reading gets no answer: the first one is used before an old hover.
+        let (shared, emit, rx) = round();
+        *shared.last.lock().unwrap() = Some((40.0, 900.0, page));
+        assert!(handle(&shared, &emit, Input::Up(SLOW_TO_ANSWER, 414.0)));
+        match rx.recv_timeout(Duration::from_secs(1)).expect("a pick") {
+            Event::Pick { element, .. } => assert_eq!(element.headline(), "Button \"New invoice\""),
+            other => panic!("expected a pick, got {other:?}"),
+        }
     }
 
     #[test]
