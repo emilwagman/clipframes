@@ -294,7 +294,8 @@ fn entry(root: &Path, id: String) -> Option<Entry> {
 }
 
 pub fn load(folder: &Path) -> Option<Round> {
-    serde_json::from_slice(&fs::read(folder.join("capture.json")).ok()?).ok()
+    // Read whether or not a tool that touched the file left a byte order mark in front.
+    serde_json::from_slice(crate::settings::without_mark(&fs::read(folder.join("capture.json")).ok()?)).ok()
 }
 
 /// A round's folder by its id, refusing anything that is not a plain folder name under root.
@@ -393,6 +394,18 @@ mod tests {
         let back: Round = serde_json::from_slice(&fs::read(folder.join("capture.json")).unwrap()).unwrap();
         assert_eq!(back, r);
         assert!(!folder.join("notes.part").exists());
+        fs::remove_dir_all(&folder).unwrap();
+    }
+
+    #[test]
+    fn a_capture_whose_file_got_a_byte_order_mark_is_still_in_history() {
+        let folder = scratch("mark");
+        let mut r = Round::default();
+        r.add(button());
+        save(&r, &folder, TAKEN).unwrap();
+        let marked: Vec<u8> = b"\xEF\xBB\xBF".iter().copied().chain(fs::read(folder.join("capture.json")).unwrap()).collect();
+        fs::write(folder.join("capture.json"), marked).unwrap();
+        assert_eq!(load(&folder), Some(r));
         fs::remove_dir_all(&folder).unwrap();
     }
 

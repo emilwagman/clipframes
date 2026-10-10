@@ -79,8 +79,15 @@ pub struct Places {
 }
 
 impl Places {
+    /// The remembered places, or none when there is no file. A file that is there but cannot
+    /// be understood is kept under another name, so the next save does not write over it.
     pub fn load(dir: &Path) -> Places {
-        fs::read(dir.join(FILE)).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default()
+        let Ok(bytes) = fs::read(dir.join(FILE)) else { return Places::default() };
+        serde_json::from_slice(crate::settings::without_mark(&bytes)).unwrap_or_else(|e| {
+            eprintln!("places.json could not be read ({e}): kept aside, starting with none");
+            crate::settings::set_aside(dir, FILE);
+            Places::default()
+        })
     }
 
     pub fn save(&self, dir: &Path) -> io::Result<()> {
@@ -251,6 +258,25 @@ mod tests {
         places.set_auto(&off, false, 41 * DAY);
         assert_eq!(places.shown(42 * DAY), vec![site.clone(), slack], "not the one unused for a month, not the one turned off");
         assert_eq!(places.shown(42 * DAY)[0].name(), "Google Chrome · localhost:3000");
+    }
+
+    #[test]
+    fn a_places_file_with_a_byte_order_mark_is_read_and_a_broken_one_is_kept_aside() {
+        let dir = std::env::temp_dir().join(format!("clipframes-places-mark-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut places = Places::default();
+        places.used(&Place::new("Slack", ""), 5);
+        places.save(&dir).unwrap();
+        let marked: Vec<u8> = b"\xEF\xBB\xBF".iter().copied().chain(fs::read(dir.join(FILE)).unwrap()).collect();
+        fs::write(dir.join(FILE), &marked).unwrap();
+        assert_eq!(Places::load(&dir), places);
+        assert!(!dir.join("places.unreadable.json").exists());
+
+        fs::write(dir.join(FILE), b"{ \"places\": oops").unwrap();
+        assert_eq!(Places::load(&dir), Places::default());
+        assert_eq!(fs::read(dir.join("places.unreadable.json")).unwrap(), b"{ \"places\": oops", "what was there is kept");
+        assert!(!dir.join(FILE).exists(), "and the next save writes a new file, not over it");
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

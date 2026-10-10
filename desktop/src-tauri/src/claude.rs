@@ -118,7 +118,10 @@ fn read(file: &Path) -> Result<(Option<Vec<u8>>, Value), State> {
         Err(_) => return Err(State::Manual),
     };
     // Claude Code's settings are strict JSON. A file with comments, or one that is not text,
-    // fails here and is never written.
+    // fails here and is never written. So does one that begins with a byte order mark, and
+    // that is meant: unlike Clipframes' own files, this one is another program's. Writing it
+    // back would either drop the mark or keep it, and which of the two Claude Code expects
+    // is not ours to decide. The switch shows the rule for adding by hand instead.
     let doc: Value = serde_json::from_slice(&bytes).map_err(|_| State::Manual)?;
     let fits = match doc.get("permissions") {
         None => doc.is_object(),
