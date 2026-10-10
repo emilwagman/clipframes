@@ -38,6 +38,7 @@ pub fn element_at(x: f64, y: f64) -> Result<ElementInfo, ReadError> {
     AUTOMATION.with(|automation| {
         let automation = automation.as_ref().ok_or(ReadError::Other("UI Automation is not available.".into()))?;
         let el = automation.element_from_point(Point::new(x as i32, y as i32)).map_err(|_| ReadError::Nothing)?;
+        let el = control_of(automation, el);
         Ok(describe(&el, x as i32, y as i32))
     })
 }
@@ -74,6 +75,7 @@ struct Read {
 fn full(automation: &UIAutomation, x: f64, y: f64) -> Result<Read, ReadError> {
     {
         let el = automation.element_from_point(Point::new(x as i32, y as i32)).map_err(|_| ReadError::Nothing)?;
+        let el = control_of(automation, el);
         let mut info = describe(&el, x as i32, y as i32);
         let mut around: Option<UIElement> = None;
         // The raw tree: the simplified one leaves out plain containers, and in a page those
@@ -341,6 +343,32 @@ impl Drop for Limits {
                 let _ = automation.SetTransactionTimeout(self.before.1);
             }
         }
+    }
+}
+
+/// The control a label belongs to. In a desktop app the element under the pointer is often
+/// the text or the picture inside a button, a checkbox or a list row: it has the words but
+/// not the control's kind or its id, and its frame is only the words. The control is what
+/// was pointed at. Pages are left alone: a browser answers with the control already.
+fn control_of(automation: &UIAutomation, el: UIElement) -> UIElement {
+    if !matches!(el.get_control_type(), Ok(ControlType::Text) | Ok(ControlType::Image)) || is_web(&el) {
+        return el;
+    }
+    let Some(parent) = automation.get_raw_view_walker().ok().and_then(|w| w.get_parent(&el).ok()) else { return el };
+    match parent.get_control_type() {
+        Ok(
+            ControlType::Button
+            | ControlType::CheckBox
+            | ControlType::RadioButton
+            | ControlType::ListItem
+            | ControlType::MenuItem
+            | ControlType::TabItem
+            | ControlType::TreeItem
+            | ControlType::Hyperlink
+            | ControlType::SplitButton
+            | ControlType::ComboBox,
+        ) => parent,
+        _ => el,
     }
 }
 
