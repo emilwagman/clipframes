@@ -5,8 +5,12 @@
 .address { display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
 .address i { width: 9px; height: 9px; border-radius: 50%; background: #d9d8d4; }
 .address span { margin: 0 auto; padding-right: 39px; font: 12px var(--sans); color: var(--text-3); }
-.view { position: relative; height: 620px; overflow: hidden; touch-action: pan-y; }
-.short .view { height: 420px; }
+.view { position: relative; height: 500px; overflow: hidden; touch-action: pan-y; }
+.hero .view { height: var(--hero-stage, 420px); }
+.tall .view { height: 600px; }
+.short .view { height: 340px; }
+/* Said above the hero's stage, where it is read first. */
+.invite { margin: 0 0 12px; font-size: 15.5px; line-height: 1.45; color: var(--text-2); }
 .glass { position: absolute; inset: 0; }
 /* The still copy a demo keeps while another one is live. */
 .glass :global([data-still]) { pointer-events: none; }
@@ -41,6 +45,8 @@
 @media (max-width: 640px) {
   .frame { margin: 0 calc(-1 * var(--gutter)); border-radius: 0; border-left: 0; border-right: 0; box-shadow: none; }
   .address { display: none; }
-  .view { height: 540px; }
-  .short .view { height: 400px; }
+  .view { height: 500px; }
+  .hero .view { height: 400px; }
+  .tall .view { height: 540px; }
+  .short .view { height: 320px; }
 }

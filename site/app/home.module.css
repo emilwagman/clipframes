@@ -13,70 +13,170 @@
 
 /* A pill, as in the app: black, and the thing to press. */
 .pill { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 18px;
-  background: var(--text); color: #fff; font: 600 14.5px var(--sans); white-space: nowrap; text-decoration: none; transition: background-color 0.15s; }
+  background: var(--text); color: #fff; font: 600 14.5px var(--sans); white-space: nowrap; text-decoration: none; border: 0; cursor: pointer; transition: background-color 0.15s; }
 .pill:hover { background: #2e2e32; }
 .pill svg { width: 15px; height: 15px; }
 .big { height: 50px; padding: 0 24px; border-radius: 25px; font-size: 16.5px; }
 .big svg { width: 17px; height: 17px; }
-.get { margin-top: 36px; }
 .buttons { display: flex; gap: 12px; flex-wrap: wrap; }
-.meta { margin-top: 16px; font-size: 14.5px; color: var(--text-3); }
+.meta { margin-top: 14px; font-size: 14.5px; color: var(--text-3); }
+
+.get { margin: 0; }
+
+/* A phone cannot run the app: it gets the link in place of the downloads. */
+.phone { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .desk { display: none; }
+  .phone { display: revert; }
+  div.phone { display: block; }
+  div.buttons.phone { display: flex; }
+}
 
 .main { padding: 0 var(--gutter); }
 .wrap { max-width: var(--page); margin: 0 auto; }
 .text { max-width: var(--col); }
 
-.main h1 { margin: 0 0 28px; font: 650 clamp(30px, 9.4vw, 88px)/1.04 var(--sans); letter-spacing: -0.035em; }
+.main h1 { margin: 0; font: 650 clamp(30px, 12.3cqw, 88px)/1.04 var(--sans); letter-spacing: -0.035em; }
 .main h1 > span { display: block; white-space: nowrap; }
-.main h2 { margin: 0 0 20px; font: 650 clamp(30px, 4.6vw, 54px)/1.07 var(--sans); letter-spacing: -0.03em; text-wrap: balance; }
-.text p, .answers p, .lands > p { color: var(--text-2); }
-.text p { font-size: clamp(18px, 1.7vw, 20px); }
+.main h2 { margin: 0 0 20px; font: 650 clamp(30px, 4vw, 48px)/1.08 var(--sans); letter-spacing: -0.03em; text-wrap: balance; }
+.text p, .others p { color: var(--text-2); }
+.text p { font-size: clamp(18px, 1.6vw, 19.5px); }
 .text p + p { margin-top: 16px; }
-.lede { max-width: 740px; font-size: clamp(19px, 2vw, 23px); line-height: 1.5; color: var(--text-2); }
+.text > figure { margin-top: 28px; }
 .inline { font: 0.86em var(--mono); background: var(--surface-2); padding: 2px 6px; border-radius: 6px; white-space: nowrap; }
+.under { margin-top: 14px; font-size: 14.5px; line-height: 1.5; color: var(--text-3); }
 
 /* The few words Clipframes is pointing at. The box is a little larger than the words, the way
    an element is larger than its text. */
 .pointed { position: relative; display: inline-block; }
 .outline { position: absolute; inset: 0.07em -0.13em -0.07em; background: none; pointer-events: none; }
 
-.intro { padding-top: clamp(76px, 11vw, 132px); }
-.section { padding-top: clamp(104px, 15vw, 184px); }
-.visual { margin-top: clamp(36px, 5vw, 60px); }
-.under { margin-top: 14px; font-size: 14.5px; line-height: 1.5; color: var(--text-3); }
+/* The first screen: what it is, and beside it the app itself with the text it hands an agent.
+   The hero has three layouts to compare, chosen with ?hero= (app/layout.tsx): the demo beside
+   the headline (a, and what a page with no choice gets), the headline above a demo as wide as
+   the page (b), and the demo first (c). The markup is the same for all three. */
+.hero { padding-top: clamp(28px, 4.4vw, 52px); display: flex; flex-direction: column; }
+.heroText, .pitch { display: contents; }
+.headline { container-type: inline-size; order: 1; padding-top: 0.5em; }
+.lede { order: 2; margin-top: 20px; max-width: 620px; font-size: clamp(18.5px, 1.7vw, 21px); line-height: 1.45; color: var(--text-2); }
+.bench { order: 3; margin-top: 24px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+/* Stacked, the prompt comes first: on a phone it is then still in view above the keyboard while a comment is typed. */
+.bench > figure:first-child { order: 2; margin-top: 10px; }
+.bench > figure:last-child { --lines: 4; }
+.heroGet .big { padding: 0 20px; }
+@media (max-width: 640px) {
+  /* A phone's first screen has room for the text or for a sentence about it. The window's own title says what it is. */
+  .bench > figure:last-child figcaption { display: none; }
+}
+.steps { order: 4; margin: 32px 0 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 10px; font-size: 17px; color: var(--text-2); }
+.steps li { counter-increment: step; display: flex; align-items: baseline; gap: 12px; }
+/* A step's number, as the app numbers a pick. */
+.steps li::before { content: counter(step); flex: none; min-width: 22px; height: 22px; border-radius: 11px; background: var(--accent); color: #fff; font: 700 12px/22px var(--sans); text-align: center; transform: translateY(-1px); }
+.heroGet { order: 5; margin-top: 32px; }
+.assure { margin-top: 6px; font-size: 14.5px; color: var(--text-3); }
 
-/* Why: said large, with the two points in ink. */
-.why p { max-width: 940px; margin: 0; font-size: clamp(22px, 2.7vw, 32px); line-height: 1.36; letter-spacing: -0.015em; color: var(--text-3); }
-.why p + p { margin-top: 1em; }
-.why strong { font-weight: inherit; color: var(--text); }
+@media (min-width: 900px) {
+  .hero { --hero-stage: clamp(360px, calc(100vh - 480px), 440px); display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0 56px; align-items: start; }
+  .heroText { display: block; }
+  .pitch { display: block; }
+  .headline { padding-top: 34px; }
+  .bench { margin-top: 0; }
+  .bench > figure:first-child { order: 0; margin-top: 0; }
+  .bench > figure:last-child { --lines: 3; }
+  .lede { margin-top: 24px; }
+  .steps { margin-top: 26px; }
+  .heroGet { margin-top: 34px; }
 
-.lands { margin-top: clamp(36px, 5vw, 56px); }
-.lands > p { max-width: 760px; margin-bottom: 14px; }
+  /* b: the headline and the pitch side by side, above the demo and its prompt side by side. */
+  :global(html:is([data-hero="b"], [data-hero="c"])) .hero { --hero-stage: clamp(340px, calc(100vh - 470px), 470px); display: flex; gap: 0; align-items: stretch; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .heroText { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 56px; align-items: end; order: 1; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .headline { padding-top: 0; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .pitch { order: 2; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .lede { margin-top: 0; font-size: 18.5px; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .steps { display: none; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .heroGet { margin-top: 18px; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .assure { display: none; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .bench { order: 2; margin-top: 30px; display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 20px; align-items: stretch; }
+  /* The prompt is as tall as the window beside it: its top is level with the window's, under the line above the stage. */
+  :global(html:is([data-hero="b"], [data-hero="c"])) .bench > figure:last-child { display: flex; flex-direction: column; padding-top: 34px; }
+  /* It is a terminal: what is typed sits at the bottom of it. */
+  :global(html:is([data-hero="b"], [data-hero="c"])) .bench > figure:last-child > div { flex: 1; display: flex; flex-direction: column; }
+  :global(html:is([data-hero="b"], [data-hero="c"])) .bench > figure:last-child pre { margin-top: auto; }
+
+  /* c: the demo comes first, and the headline is under it. */
+  :global(html[data-hero="c"]) .hero { --hero-stage: clamp(320px, calc(100vh - 500px), 430px); padding-top: 18px; }
+  :global(html[data-hero="c"]) .bench { order: 1; margin-top: 0; }
+  :global(html[data-hero="c"]) .heroText { order: 2; margin-top: 26px; }
+  :global(html[data-hero="c"]) .headline { max-width: 560px; }
+}
+
+.section { padding-top: clamp(88px, 11vw, 148px); scroll-margin-top: 24px; }
+.visual { margin-top: clamp(32px, 4vw, 48px); min-width: 0; }
+.visual > figure + figure { margin-top: 16px; }
+
+/* Why: said large, with the two points in ink, and beside it the text taken apart. */
+.said p { margin: 0; font-size: clamp(22px, 2.5vw, 30px); line-height: 1.36; letter-spacing: -0.015em; color: var(--text-3); }
+.said p + p { margin-top: 1em; }
+.said strong { font-weight: inherit; color: var(--text); }
+.anatomy { margin-top: 48px; }
+.anatomy h2 { margin-bottom: 18px; font-size: 21px; line-height: 1.3; letter-spacing: -0.015em; font-weight: 600; }
+.anatomy dl { margin: 0; border-top: 1px solid var(--border); }
+.anatomy dl > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 13px 0; border-bottom: 1px solid var(--border); }
+.anatomy dt { font: 13.5px/1.6 var(--mono); color: var(--text); overflow-wrap: anywhere; }
+.anatomy dt::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 10px; border-radius: 50%; background: var(--accent); }
+.anatomy dd { margin: 0; font-size: 15.5px; line-height: 1.5; color: var(--text-2); }
 
 /* Words on the left, what they are about on the right. */
 @media (min-width: 900px) {
-  .split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 72px; align-items: start; }
-  .split .visual { margin-top: 8px; }
+  .split, .why { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: start; }
+  .why { grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); gap: 72px; }
+  .split .visual { margin-top: 6px; }
+  .anatomy { margin-top: 6px; }
+  .anatomy dl > div { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 20px; align-items: baseline; }
+  .split .text > figure { --lines: 9; }
 }
 
-.faq h2 { margin-bottom: 8px; }
-.answers { display: grid; gap: 40px 72px; margin-top: 44px; }
+/* A recording of the app: the picture, and under it what it is and a way to stop it. */
+.recording { margin: 0; }
+.recording video { display: block; width: 100%; height: auto; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); box-shadow: var(--shadow-window); cursor: pointer; }
+.recording figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 24px; margin-top: 14px; font-size: 14.5px; line-height: 1.5; color: var(--text-3); }
+.recording figcaption span { max-width: 760px; }
+.recording button { flex: none; font: inherit; color: var(--text-2); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-strong); }
+.recording button:hover { color: var(--text); text-decoration-color: currentColor; }
+.closeups .recording + .recording { margin-top: 28px; }
+
+.compare h2 { max-width: 760px; }
+.others { display: grid; gap: 36px 56px; margin-top: 40px; }
 @media (min-width: 900px) {
-  .answers { grid-template-columns: 1fr 1fr; }
+  .others { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-.faq h3 { margin: 0 0 8px; font: 600 21px/1.3 var(--sans); letter-spacing: -0.015em; }
+.compare h3 { margin: 0 0 8px; font: 600 21px/1.3 var(--sans); letter-spacing: -0.015em; }
+.others p { font-size: 17px; }
 
-.end { padding-top: clamp(120px, 17vw, 208px); }
-.footer { max-width: var(--page); margin: clamp(96px, 13vw, 160px) auto 0; border-top: 1px solid var(--border); padding: 24px 0 40px;
+/* The end: the download, and beside it what there is to know before pressing it. */
+.end h2 { margin-bottom: 30px; }
+.facts { margin: 44px 0 0; display: grid; border-top: 1px solid var(--border); }
+.facts > div { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); font-size: 16px; line-height: 1.5; }
+.facts dt { color: var(--text); font-weight: 600; }
+.facts dd { margin: 0; color: var(--text-2); }
+@media (min-width: 900px) {
+  .end { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: start; }
+  .endGet { position: sticky; top: 104px; }
+  .facts { margin-top: 10px; }
+}
+
+.footer { max-width: var(--page); margin: clamp(88px, 11vw, 140px) auto 0; border-top: 1px solid var(--border); padding: 24px 0 40px;
   display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14.5px; color: var(--text-3); }
 .footer a { color: var(--text-2); text-decoration: none; }
 .footer a:hover { color: var(--text); }
 .links { display: flex; gap: 24px; }
-@media (max-width: 1168px) {
+@media (max-width: 1248px) {
   .footer { margin-left: var(--gutter); margin-right: var(--gutter); }
 }
 
 @media (max-width: 640px) {
   .gh { display: none; }
   .buttons { flex-direction: column; align-items: stretch; }
+  .facts > div { grid-template-columns: 1fr; gap: 2px; }
+  .recording figcaption { flex-direction: column; }
 }

@@ -40,9 +40,11 @@ await context.route("https://eu.i.posthog.com/**", async (route) => {
 });
 
 await page.goto(url, { waitUntil: "networkidle" });
-// Take over the hero demo, pick something, copy the text, and press a download button.
+// Let the hero's example put its text in the prompt, take the demo over, pick something, copy
+// the text, play the recording, and press a download button at the top and at the end.
 const stage = page.locator('[data-demo="hero"]');
 await page.evaluate(() => document.querySelector('[data-demo="hero"] [role=group]').scrollIntoView({ block: "center" }));
+await page.waitForFunction(() => document.querySelector('[data-copied="hero"]').dataset.state === "example", null, { timeout: 12000 });
 await page.waitForTimeout(600);
 const box = await stage.locator(".northwind #export").boundingBox();
 await page.mouse.move(box.x - 40, box.y + 60);
@@ -50,12 +52,18 @@ await page.mouse.move(box.x + 20, box.y + 12, { steps: 6 });
 await page.mouse.click(box.x + 20, box.y + 12);
 await page.keyboard.type("a secret comment");
 await page.keyboard.press("Enter");
-await page.locator('[data-copied="latest"]').scrollIntoViewIfNeeded();
-await page.locator('[data-copied="latest"]').click({ clickCount: 3 });
+await page.waitForFunction(() => document.querySelector('[data-copied="hero"]').dataset.state === "own");
+await page.locator('[data-copied="hero"]').scrollIntoViewIfNeeded();
+await page.locator('[data-copied="hero"]').click({ clickCount: 3 });
 await page.keyboard.press("ControlOrMeta+C");
-await page.evaluate(() => document.querySelectorAll('a[href="/download/mac"]')[0].addEventListener("click", (e) => e.preventDefault()));
+await page.locator('[data-recording="desktop"] video').scrollIntoViewIfNeeded();
+await page.waitForFunction(() => document.querySelector('[data-recording="desktop"] video').currentTime > 0.2, null, { timeout: 15000 });
+await page.evaluate(() => document.querySelectorAll('a[href^="/download"]').forEach((a) => a.addEventListener("click", (e) => e.preventDefault())));
+await page.locator('main a[href="/download/windows"]').last().scrollIntoViewIfNeeded();
+await page.locator('main a[href="/download/windows"]').last().click();
 await page.evaluate(() => scrollTo(0, 0));
-await page.locator('a[href="/download/mac"]').first().click();
+await page.locator('main a[href="/download/mac"]').first().click();
+await page.locator('header a[href="/download"]').click();
 // Events are sent a few at a time, every few seconds.
 await page.waitForTimeout(4000);
 await page.goto(`${url}/privacy`, { waitUntil: "networkidle" });
@@ -75,9 +83,9 @@ if (mode === "off") {
 } else {
   assert.ok(outside.every((address) => address.startsWith("https://eu.i.posthog.com/")), `a request went elsewhere: ${outside.join(", ")}`);
   const names = events.map((e) => e.event);
-  for (const name of ["$pageview", "demo_started", "demo_finished", "reference_copied", "download_clicked"]) assert.ok(names.includes(name), `${name} was not sent (got ${names.join(", ")})`);
+  for (const name of ["$pageview", "demo_started", "demo_finished", "reference_shown", "reference_copied", "recording_played", "download_clicked"]) assert.ok(names.includes(name), `${name} was not sent (got ${names.join(", ")})`);
   assert.equal(names.filter((n) => n === "$pageview").length, 2);
-  const allowed = new Set(["token", "distinct_id", "$pathname", "$os", "$browser", "$device_type", "$lib", "$lib_version", "$geoip_disable", "$process_person_profile", "os", "place", "demo"]);
+  const allowed = new Set(["token", "distinct_id", "$pathname", "$os", "$browser", "$device_type", "$lib", "$lib_version", "$geoip_disable", "$process_person_profile", "os", "place", "demo", "by"]);
   for (const e of events) {
     const extra = Object.keys(e.properties).filter((k) => !allowed.has(k));
     assert.deepEqual(extra, [], `${e.event} carries more than it should`);
@@ -85,10 +93,13 @@ if (mode === "off") {
     assert.equal(e.properties.$process_person_profile, false);
     assert.ok(!JSON.stringify(e).includes("secret") && !JSON.stringify(e).includes("Export"), `${e.event} carries something from a demo`);
   }
-  assert.deepEqual(events.find((e) => e.event === "download_clicked").properties.os, "mac");
-  assert.deepEqual(events.find((e) => e.event === "download_clicked").properties.place, "hero");
+  // Each download says which button it was: the pair at the end, the pair at the top, the header's.
+  assert.deepEqual(events.filter((e) => e.event === "download_clicked").map((e) => `${e.properties.os} ${e.properties.place}`), ["windows end", "mac hero", "auto header"]);
+  // The agent's text was on screen twice in the hero: the example's, then the visitor's own.
+  assert.deepEqual(events.filter((e) => e.event === "reference_shown" && e.properties.demo === "hero").map((e) => e.properties.by), ["example", "visitor"]);
+  assert.equal(events.find((e) => e.event === "recording_played").properties.place, "desktop");
   assert.deepEqual(events.find((e) => e.event === "demo_started").properties.demo, "hero");
-  assert.match(await page.locator("main").innerText(), /download_clicked/);
+  for (const name of ["download_clicked", "link_copied", "reference_shown", "recording_played"]) assert.ok((await page.locator("main").innerText()).includes(name), `the privacy page does not list ${name}`);
   console.log(`ok    with a key: ${names.join(", ")}; only the listed properties; nothing kept in the browser`);
   console.log(JSON.stringify(events.find((e) => e.event === "download_clicked").properties));
 }

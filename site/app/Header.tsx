@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { track } from "@/lib/analytics";
 import { DOWNLOAD_PATH, REPO_URL } from "@/lib/site";
 import { formatStars } from "@/lib/github";
-import { DownloadIcon } from "./DownloadButton";
+import { CopyLink, DownloadIcon } from "./DownloadButton";
 import s from "./home.module.css";
 
 /// The quiet top bar. A hairline appears under it once the page scrolls. `stars` is the count the
@@ -42,7 +42,8 @@ export default function Header({ stars: initial, refresh = true }: { stars: numb
             </span>
           )}
         </a>
-        <a className={s.pill} href={DOWNLOAD_PATH} onClick={() => track("download_clicked", { os: "auto", place: "header" })}><DownloadIcon />Download</a>
+        <span className={s.desk}><a className={s.pill} href={DOWNLOAD_PATH} onClick={() => track("download_clicked", { os: "auto", place: "header" })}><DownloadIcon />Download</a></span>
+        <span className={s.phone}><CopyLink place="header" /></span>
       </div>
     </header>
   );

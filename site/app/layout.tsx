@@ -6,7 +6,7 @@ import "./globals.css";
 import Analytics from "./Analytics";
 import { SITE_NAME, SITE_URL } from "@/lib/site";
 
-const description = "Point at the thing you want changed, and Clipframes tells your agent exactly what it is. For Mac and Windows, for building with Claude Code and Codex.";
+const description = "Point at the thing you want changed, and Clipframes tells Claude Code or Codex exactly which thing you mean. A free app for Mac and Windows.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -24,9 +24,16 @@ export const viewport: Viewport = {
   themeColor: "#fafaf9",
 };
 
+/// The hero has three layouts to compare (app/home.module.css): ?hero=a, b or c picks one, before
+/// anything is drawn. With no choice the page is as it is built.
+const hero = `try{var h=new URLSearchParams(location.search).get("hero");if(/^[abc]$/.test(h||""))document.documentElement.dataset.hero=h}catch(e){}`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: hero }} />
+      </head>
       <body>
         {children}
         <Analytics />

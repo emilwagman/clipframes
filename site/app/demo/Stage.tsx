@@ -21,12 +21,15 @@ interface Props {
   /// What a visitor can do here, with a mouse and with a finger.
   hint: string;
   touchHint: string;
-  size?: "wide" | "short";
+  /// How tall the stage is: the hero's follows the hero's layout, and the others are fixed.
+  size?: "hero" | "tall" | "side" | "short";
+  /// Says what a visitor can do above the stage, where it is read before the stage is: the hero.
+  invite?: boolean;
 }
 
 /// One demo: the Northwind page, the glass the app's interface is drawn on, and the pointer
 /// that plays the example. The interface itself is mounted by Live, for whichever demo is live.
-export default function Stage({ id, tool, opens = true, label, hint, touchHint, size = "wide" }: Props) {
+export default function Stage({ id, tool, opens = true, label, hint, touchHint, size = "side", invite = false }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLDivElement>(null);
   const glass = useRef<HTMLDivElement>(null);
@@ -70,8 +73,16 @@ export default function Stage({ id, tool, opens = true, label, hint, touchHint, 
     else open(d);
   };
 
+  const says = (
+    <span data-hint="">
+      <span className={s.mouse}>{hint}</span>
+      <span className={s.finger}>{touchHint}</span>
+    </span>
+  );
+
   return (
     <figure className={`${s.stage} ${s[size]}`} data-demo={id}>
+      {invite && <p className={s.invite}>{says}</p>}
       <div className={s.frame}>
         <div className={s.address} aria-hidden="true"><i /><i /><i /><span>localhost:3000</span></div>
         <div ref={host} className={s.view} role="group" aria-label={label}>
@@ -94,12 +105,7 @@ export default function Stage({ id, tool, opens = true, label, hint, touchHint, 
           <span>
             The tab is off for this page now. <button onClick={() => reopen(true)}>Turn it back on</button>
           </span>
-        ) : (
-          <span>
-            <span className={s.mouse}>{hint}</span>
-            <span className={s.finger}>{touchHint}</span>
-          </span>
-        )}
+        ) : invite ? <span /> : says}
         {EXAMPLES[id] && <button onClick={again} data-off={playing ? "" : undefined}>Play the example again</button>}
       </figcaption>
     </figure>

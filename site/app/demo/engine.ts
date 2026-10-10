@@ -60,14 +60,12 @@ interface Site {
   rounds: Partial<Record<DemoId, RoundView>>;
   playing: Partial<Record<DemoId, boolean>>;
   taken: Partial<Record<DemoId, boolean>>;
-  /// The newest text the visitor copied, in a demo or from History.
-  latest: string;
   /// The text that is on the visitor's own clipboard, once a demo has put one there.
   clipboard: string | null;
   captures: Capture[];
 }
 
-export const useSite = create<Site>(() => ({ live: null, rounds: {}, playing: {}, taken: {}, latest: "", clipboard: null, captures: [] }));
+export const useSite = create<Site>(() => ({ live: null, rounds: {}, playing: {}, taken: {}, clipboard: null, captures: [] }));
 
 const demos = new Map<DemoId, Demo>();
 const byGlass = new WeakMap<HTMLElement, Demo>();
@@ -147,7 +145,7 @@ export function register(id: DemoId, parts: { host: HTMLElement; page: HTMLEleme
     const changed = round.reference !== d.round.reference;
     d.round = round;
     if (live === d) useApp.setState({ round });
-    useSite.setState((s) => ({ rounds: { ...s.rounds, [id]: round }, latest: changed && round.reference && d.taken ? round.reference : s.latest }));
+    useSite.setState((s) => ({ rounds: { ...s.rounds, [id]: round } }));
     if (changed && round.reference && d.taken) keep(d, round.reference);
     // The visitor has done what the demo is for: picked something, or opened the bar from the tab.
     if (d.taken && !d.finished && (id === "tab" ? round.picking : changed && round.reference !== "")) {

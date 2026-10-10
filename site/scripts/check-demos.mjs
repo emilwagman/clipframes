@@ -1,5 +1,7 @@
-// Drives every demo on the home page the way a visitor would, with a mouse at 1280 px and a
-// finger at 400 px, and checks the text each one copies. Headless; nothing appears on screen.
+// Drives every interactive piece of the home page the way a visitor would, with a mouse at
+// 1440 px and a finger at 390 px, and checks what each one does: the text each demo copies and
+// shows in its prompt, what is in the first screen, the hero's three layouts, the recordings,
+// and the downloads. Headless; nothing appears on screen.
 //
 //   npm run build && npx next start -p 5231 &     (or npm run dev)
 //   node scripts/check-demos.mjs [http://localhost:5231] [folder for pictures]
@@ -19,7 +21,10 @@ const UNDER = ', under heading "Invoices"';
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 let failed = 0;
 
-async function session(name, options, body) {
+const SITE = "https://clipframes.app";
+const HERO = '[Button "New invoice" (#new-invoice .btn.btn-primary), under heading "Invoices" in Google Chrome "Invoices": make this green]';
+
+async function session(name, options, body, query = "") {
   const context = await browser.newContext({ ...options, permissions: ["clipboard-read", "clipboard-write"] });
   const page = await context.newPage();
   const errors = [];
@@ -44,13 +49,17 @@ async function session(name, options, body) {
       await page.waitForFunction((id) => document.querySelector(`[data-demo="${id}"] figcaption button[data-off]`) === null, id, { timeout: 30000 });
       await page.waitForTimeout(300);
     },
-    copied: (which) => page.locator(`[data-copied="${which}"]`).innerText(),
+    /// What a demo's prompt shows, without the prompt's own mark.
+    copied: async (which) => (await page.locator(`[data-copied="${which}"]`).innerText()).replace(/^> /, ""),
+    /// "empty" (the faint example), "example" or "own".
+    state: (which) => page.locator(`[data-copied="${which}"]`).getAttribute("data-state"),
+    box: (selector) => page.locator(selector).first().boundingBox(),
     clipboard: () => page.evaluate(() => navigator.clipboard.readText()),
     bar: (id) => page.locator(`[data-demo="${id}"] .clipframes-web:not([data-still]) .bar`),
     note: (id) => page.locator(`[data-demo="${id}"] .clipframes-web:not([data-still]) #comment`),
   };
   try {
-    await page.goto(url, { waitUntil: "networkidle" });
+    await page.goto(url + query, { waitUntil: "networkidle" });
     await body(t);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, "the page scrolls sideways");
     assert.deepEqual(errors, [], "the console has errors");
@@ -77,30 +86,83 @@ async function picture(t, file) {
   await t.page.screenshot({ path: file, fullPage: true });
 }
 
-const desktop = { viewport: { width: 1280, height: 900 } };
-const phone = { viewport: { width: 400, height: 800 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
+const desktop = { viewport: { width: 1440, height: 900 } };
+const phone = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
+
+/// The agent's text is in the hero's prompt within ten seconds of arriving, with nothing done.
+const arrives = (t) => t.page.waitForFunction(() => document.querySelector('[data-copied="hero"]').dataset.state === "example" && document.querySelector('[data-copied="hero"]').innerText.includes("make this green"), null, { timeout: 10000 });
+
+for (const [width, height] of [[1440, 900], [1280, 720]]) {
+  for (const hero of ["", "a", "b", "c"]) {
+    await session(`desktop ${width}×${height}, hero ${hero || "as built"}: the demo, what to do with it and the agent's text are in the first screen`, { viewport: { width, height } }, async (t) => {
+      assert.equal(await t.page.evaluate(() => document.documentElement.dataset.hero ?? ""), hero);
+      const stage = await t.box('[data-demo="hero"] [role=group]');
+      const hint = await t.box('[data-demo="hero"] [data-hint]');
+      const text = await t.box('[data-copied="hero"]');
+      assert.ok(hint.y + hint.height <= height, "the sentence that says what to do is below the first screen");
+      // The whole demo at 900 px; at 720 px at least the part the example uses, down to under the comment box.
+      assert.ok(stage.y + (height >= 900 ? stage.height : 270) <= height, `the demo ends at ${stage.y + stage.height}`);
+      // The prompt's first two lines, which is all one pick takes.
+      assert.ok(text.y + 62 <= height, `the agent's text starts at ${text.y}`);
+      assert.equal(await t.state("hero"), "empty");
+      await arrives(t);
+      assert.equal(await t.copied("hero"), HERO);
+      assert.equal(await t.page.evaluate(() => scrollY), 0);
+      // A download is in the first screen too.
+      const get = await t.box('main a[href="/download/mac"]');
+      assert.ok(get.y + get.height <= height, "the download is below the first screen");
+    }, hero ? `?hero=${hero}` : "");
+  }
+}
+
+await session("desktop: the hero's three layouts are three layouts", desktop, async (t) => {
+  const places = {};
+  for (const hero of ["a", "b", "c"]) {
+    await t.page.goto(`${url}?hero=${hero}`, { waitUntil: "networkidle" });
+    const [h1, stage, prompt] = [await t.box("main h1"), await t.box('[data-demo="hero"] [role=group]'), await t.box('[data-prompt="hero"]')];
+    places[hero] = { beside: stage.x > h1.x + 300 && stage.y < h1.y + h1.height, promptBeside: prompt.x >= stage.x + stage.width, first: stage.y < h1.y };
+  }
+  assert.deepEqual(places, { a: { beside: true, promptBeside: false, first: false }, b: { beside: false, promptBeside: true, first: false }, c: { beside: false, promptBeside: true, first: true } });
+  // A choice that is not one of the three is no choice.
+  await t.page.goto(`${url}?hero=zzz`, { waitUntil: "networkidle" });
+  assert.equal(await t.page.evaluate(() => document.documentElement.dataset.hero ?? ""), "");
+});
+
+await session("desktop: nothing on the page moves out of place while it loads and plays", desktop, async (t) => {
+  await t.page.goto(url, { waitUntil: "domcontentloaded" });
+  await t.page.evaluate(() => {
+    window.shift = 0;
+    new PerformanceObserver((list) => { for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.shift += entry.value; }).observe({ type: "layout-shift", buffered: true });
+  });
+  await arrives(t);
+  await t.page.waitForTimeout(500);
+  assert.ok((await t.page.evaluate(() => window.shift)) < 0.01, `layout shift ${await t.page.evaluate(() => window.shift)}`);
+});
 
 await session("desktop: the examples play by themselves and leave the clipboard alone", desktop, async (t) => {
   await t.page.evaluate(() => navigator.clipboard.writeText("the visitor's own text"));
   await t.visit("hero");
   assert.equal(await t.note("hero").inputValue(), "make this green");
   assert.match(await t.bar("hero").innerText(), /1\s*copied/);
+  assert.equal(await t.copied("hero"), HERO);
+  assert.equal(await t.state("hero"), "example");
   await t.visit("picks");
   assert.equal(await t.copied("picks"), `[Clipframes: 3 things ${WHERE}]\n1. Button "New invoice" (#new-invoice .btn.btn-primary)${UNDER}: make this green\n2. Text "$3,120" (#overdue-total)${UNDER}: too alarming, use the normal text colour\n3. Text "Paid" (#invoice-table .badge.paid), 2nd of 4 on the page${UNDER}: make this one grey`);
   assert.equal(await t.stage("picks").locator(".clipframes-web:not([data-still]) .label").innerText(), 'Group "Outstanding $12,940"');
   await t.visit("area");
   assert.equal(await t.note("area").inputValue(), "put more space between these");
   assert.equal(await t.stage("area").locator(".mark.area").count(), 1);
+  assert.equal(await t.copied("area"), `[Screenshot (1.png) ${WHERE}: put more space between these]`);
   await t.visit("clip");
   assert.equal(await t.note("clip").inputValue(), "the menu opens far from the button");
   assert.match(await t.stage("clip").locator(".clipframes-web:not([data-still]) .note .what").innerText(), /^Screen clip, [345] s, \d+ frames$/);
   assert.equal(await t.stage("clip").locator("#export-menu").count(), 1);
+  assert.match(await t.copied("clip"), /^\[Screen clip, [345] s, \d+ frames \(1\/\) in Google Chrome "Invoices": the menu opens far from the button\]$/);
   await t.visit("tab");
   assert.equal(await t.stage("tab").locator(".tabmark").count(), 1);
   // The demos that are not live keep a still copy of what they showed.
   assert.equal(await t.stage("hero").locator("[data-still] .note").count(), 1);
   assert.equal(await t.clipboard(), "the visitor's own text");
-  assert.match(await t.copied("latest"), /3 things/);
   if (shots) await picture(t, `${shots}/desktop.png`);
 });
 
@@ -115,9 +177,14 @@ await session("desktop: point at an element, click it, and write a comment", des
   await t.page.keyboard.type("make this smaller");
   await t.page.keyboard.press("Enter");
   const text = `[Clipframes: 2 things ${WHERE}]\n1. Button "New invoice" (#new-invoice .btn.btn-primary)${UNDER}: make this green\n2. Button "Export" (#export .btn)${UNDER}: make this smaller`;
-  await t.page.waitForFunction((want) => document.querySelector('[data-copied="latest"]').innerText.includes(want), "make this smaller");
-  assert.equal((await t.copied("latest")).replace(/^> /, ""), text);
+  await t.page.waitForFunction((want) => document.querySelector('[data-copied="hero"]').innerText.includes(want), "make this smaller");
+  assert.equal(await t.copied("hero"), text);
+  assert.equal(await t.state("hero"), "own");
   assert.equal(await t.clipboard(), text);
+  assert.match(await t.page.locator('[data-prompt="hero"] figcaption').innerText(), /on your own clipboard now/);
+  // The prompt is still in the first screen with two picks in it.
+  const prompt = await t.box('[data-copied="hero"]');
+  assert.ok(prompt.y + prompt.height <= 900 + (await t.page.evaluate(() => scrollY)), "the visitor's text runs below the first screen");
   assert.match(await t.bar("hero").innerText(), /2\s*copied/);
   // History lists the round.
   assert.equal(await t.page.locator(".history li").count(), 5);
@@ -161,15 +228,16 @@ await session("desktop: drag an area", desktop, async (t) => {
   await t.note("area").waitFor();
   await t.page.keyboard.type("the table is cramped");
   await t.page.keyboard.press("Enter");
-  await t.page.waitForFunction(() => document.querySelector('[data-copied="latest"]').innerText.includes("cramped"));
-  assert.equal((await t.copied("latest")).replace(/^> /, ""), `[Clipframes: 2 things ${WHERE}]\n1. Screenshot (1.png): put more space between these\n2. Screenshot (2.png): the table is cramped`);
+  await t.page.waitForFunction(() => document.querySelector('[data-copied="area"]').innerText.includes("cramped"));
+  assert.equal(await t.copied("area"), `[Clipframes: 2 things ${WHERE}]\n1. Screenshot (1.png): put more space between these\n2. Screenshot (2.png): the table is cramped`);
 });
 
 await session("desktop: record a clip, use the page, and stop", desktop, async (t) => {
   await t.visit("clip");
   await t.stage("clip").getByRole("button", { name: "Play the example again" }).click();
-  await t.page.mouse.move(640, 450);
-  await t.page.mouse.move(600, 420, { steps: 5 });
+  const middle = await t.at("clip", "#invoice-table", 0.5, 0.5);
+  await t.page.mouse.move(middle.x + 40, middle.y + 30);
+  await t.page.mouse.move(middle.x, middle.y, { steps: 5 });
   await t.page.waitForTimeout(300);
   assert.equal(await t.stage("clip").locator("#export-menu").count(), 0);
   const from = await t.at("clip", "#invoice-table", 0.02, 0.1);
@@ -188,8 +256,8 @@ await session("desktop: record a clip, use the page, and stop", desktop, async (
   await t.note("clip").waitFor();
   await t.page.keyboard.type("nothing happens when I click a row");
   await t.page.keyboard.press("Enter");
-  await t.page.waitForFunction(() => document.querySelector('[data-copied="latest"]').innerText.includes("nothing happens"));
-  assert.match((await t.copied("latest")).replace(/^> /, ""), /^\[Screen clip, [12] s, [48] frames \(1\/\) in Google Chrome "Invoices": nothing happens when I click a row\]$/);
+  await t.page.waitForFunction(() => document.querySelector('[data-copied="clip"]').innerText.includes("nothing happens"));
+  assert.match(await t.copied("clip"), /^\[Screen clip, [12] s, [48] frames \(1\/\) in Google Chrome "Invoices": nothing happens when I click a row\]$/);
 });
 
 await session("desktop: History copies an earlier capture again", desktop, async (t) => {
@@ -197,8 +265,7 @@ await session("desktop: History copies an earlier capture again", desktop, async
   assert.equal(await t.page.locator(".history li").count(), 4);
   await t.page.locator(".history li").nth(3).getByRole("button", { name: "Copy" }).click();
   const text = `[Screenshot (1.png) ${WHERE}: the table is cramped]`;
-  await t.page.waitForFunction(() => document.querySelector('[data-copied="latest"]').innerText.includes("1.png"));
-  assert.equal(await t.clipboard(), text);
+  await t.page.waitForFunction((text) => navigator.clipboard.readText().then((now) => now === text), text);
   assert.equal(await t.page.locator(".history li").nth(3).getByRole("button").first().innerText(), "Copied");
   // The page is not marked as one of the app's windows, which would stop the demos picking.
   assert.equal(await t.page.evaluate(() => document.documentElement.classList.contains("window")), false);
@@ -227,8 +294,9 @@ await session("desktop: the clock in the bar goes to History, and Esc closes the
   await t.bar("hero").getByRole("button", { name: "History" }).click();
   await t.page.waitForFunction((y) => scrollY > y + 1000, before);
   await t.visit("picks");
-  await t.page.mouse.move(640, 300);
-  await t.page.mouse.move(600, 320, { steps: 5 });
+  const over = await t.at("picks", "#invoice-table", 0.5, 0.2);
+  await t.page.mouse.move(over.x + 40, over.y - 20);
+  await t.page.mouse.move(over.x, over.y, { steps: 5 });
   await t.page.keyboard.press("Escape");
   await t.stage("picks").locator(".tabmark").waitFor();
 });
@@ -250,7 +318,7 @@ await session("phone: the examples play, and nothing is wider than the screen", 
   await t.visit("picks");
   assert.match(await t.copied("picks"), /^\[Clipframes: 3 things/);
   if (shots) await picture(t, `${shots}/phone.png`);
-  assert.equal(await t.page.evaluate(() => getComputedStyle(document.querySelector("figcaption span span")).display), "none", "a phone gets the hint for a finger");
+  assert.equal(await t.page.evaluate(() => getComputedStyle(document.querySelector("[data-hint] span")).display), "none", "a phone gets the hint for a finger");
 });
 
 await session("phone: a tap picks, and a swipe scrolls without picking", phone, async (t) => {
@@ -285,8 +353,89 @@ await session("phone: a drag that starts sideways draws an area", phone, async (
   await t.page.waitForFunction(() => document.querySelectorAll('[data-demo="area"] .clipframes-web:not([data-still]) .mark.area').length === 2, null, { timeout: 5000 });
   await t.note("area").fill("too tight");
   await t.stage("area").locator(".note button.pill").tap();
-  await t.page.waitForFunction(() => document.querySelector('[data-copied="latest"]').innerText.includes("too tight"));
-  assert.match(await t.copied("latest"), /2\. Screenshot \(2\.png\): too tight$/);
+  await t.page.waitForFunction(() => document.querySelector('[data-copied="area"]').innerText.includes("too tight"));
+  assert.match(await t.copied("area"), /2\. Screenshot \(2\.png\): too tight$/);
+});
+
+await session("desktop: what a visitor asks before downloading is answered on the page, and the downloads are downloads", desktop, async (t) => {
+  // The line by the first download goes to the answers.
+  await t.page.getByRole("link", { name: "What it asks for and what it sends" }).click();
+  await t.page.waitForFunction(() => scrollY > 3000);
+  const facts = await t.page.locator("#get").innerText();
+  for (const said of ["Clipframes is free.", "macOS 12 or later", "Windows 10 or 11", "about 5 MB for Mac and about 2 MB for Windows", "22 to 26 MB", "Accessibility", "Screen Recording", "Windows asks for none", "They stay on your computer", "Settings has a switch", "Claude Code, Codex"]) assert.ok(facts.includes(said), `not said: ${said}`);
+  assert.equal(await t.page.locator('#get a[href="/privacy"]').count(), 1);
+  const whole = await t.page.locator("main").first().innerText();
+  for (const said of ["24 of 24", "18 of 24", "2nd of 4 on the page", "A screenshot", "Agentation", "A browser extension", "native apps"]) assert.ok(whole.includes(said), `not said: ${said}`);
+  // No dash of either long kind in anything a visitor reads.
+  assert.equal(/[\u2013\u2014]/.test(await t.page.locator("body").innerText()), false, "a dash is in the page");
+  // Five downloads: the header's, and a pair at the top and at the end. The phone's button is not shown.
+  const shown = await t.page.evaluate(() => [...document.querySelectorAll('a[href^="/download"]')].filter((a) => a.getBoundingClientRect().width > 0).map((a) => a.getAttribute("href")));
+  assert.deepEqual(shown, ["/download", "/download/mac", "/download/windows", "/download/mac", "/download/windows"]);
+  assert.equal(await t.page.evaluate(() => [...document.querySelectorAll("[data-copy-link]")].filter((b) => b.getBoundingClientRect().width > 0).length), 0);
+  // The header's stays on screen at the bottom of the page.
+  await t.page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+  await t.page.waitForTimeout(300);
+  const top = await t.box('header a[href="/download"]');
+  assert.ok(top.y >= 0 && top.y < 60, "the header's download is not on screen at the end of the page");
+});
+
+await session("desktop: the recording is fetched only when it comes near, plays on screen and can be paused", desktop, async (t) => {
+  const video = t.page.locator('[data-recording="desktop"] video');
+  assert.equal(await video.getAttribute("src"), null, "the recording was fetched with the page");
+  const shape = await video.boundingBox();
+  assert.ok(Math.abs(shape.width / shape.height - 1920 / 1044) < 0.01, "the recording's box has another shape than the recording");
+  await video.scrollIntoViewIfNeeded();
+  await t.page.waitForFunction(() => document.querySelector('[data-recording="desktop"] video').currentTime > 0.3, null, { timeout: 15000 });
+  assert.equal(await video.getAttribute("src"), "/recordings/desktop.mp4");
+  const after = await video.boundingBox();
+  assert.equal(Math.round(after.height), Math.round(shape.height));
+  await t.page.locator('[data-recording="desktop"]').getByRole("button", { name: "Pause" }).click();
+  assert.equal(await video.evaluate((v) => v.paused), true);
+  await t.page.locator('[data-recording="desktop"]').getByRole("button", { name: "Play" }).click();
+  assert.equal(await video.evaluate((v) => v.paused), false);
+  // The two close-ups are a phone's, and are not fetched here.
+  assert.equal(await t.page.locator('[data-recording="comment"] video').getAttribute("src"), null);
+});
+
+await session("phone: the first screen has the agent's text and the demo, and the example fills the text in", phone, async (t) => {
+  const text = await t.box('[data-copied="hero"]');
+  const stage = await t.box('[data-demo="hero"] [role=group]');
+  assert.ok(text.y + text.height <= 844, `the agent's text ends at ${text.y + text.height}`);
+  assert.ok(stage.y + 250 <= 844, `the demo starts at ${stage.y}`);
+  await arrives(t);
+  assert.equal(await t.copied("hero"), HERO);
+});
+
+await session("phone: a tap in the hero picks, and the text is the visitor's", phone, async (t) => {
+  await arrives(t);
+  const target = await t.at("hero", "#export");
+  await t.page.touchscreen.tap(target.x, target.y);
+  await t.note("hero").waitFor();
+  await t.note("hero").fill("smaller");
+  await t.stage("hero").locator(".note button.pill").tap();
+  await t.page.waitForFunction(() => document.querySelector('[data-copied="hero"]').innerText.includes("smaller"));
+  assert.equal(await t.state("hero"), "own");
+  assert.equal((await t.copied("hero")).split("\n")[2], `2. Button "Export" (#export .btn)${UNDER}: smaller`);
+});
+
+await session("phone: the downloads are a button that copies the link, and the recordings are the close-ups", phone, async (t) => {
+  assert.equal(await t.page.evaluate(() => [...document.querySelectorAll('a[href^="/download"]')].filter((a) => a.getBoundingClientRect().width > 0).length), 0, "a phone is offered a download");
+  const buttons = t.page.locator("main [data-copy-link]");
+  assert.equal(await buttons.count(), 2);
+  await buttons.first().scrollIntoViewIfNeeded();
+  await buttons.first().tap();
+  await t.page.waitForFunction(() => document.querySelector("main [data-copy-link]").innerText === "Link copied");
+  assert.equal(await t.clipboard(), SITE);
+  assert.match(await t.page.locator("main").first().innerText(), /runs on Mac and Windows\. Open the link on your computer/);
+  await t.page.locator("header [data-copy-link]").tap();
+  await t.page.waitForFunction(() => document.querySelector("header [data-copy-link]").innerText === "Link copied");
+  // The close-ups play; the recording of the whole desktop, too small to read here, is not fetched.
+  const close = t.page.locator('[data-recording="comment"] video');
+  await close.scrollIntoViewIfNeeded();
+  await t.page.waitForFunction(() => document.querySelector('[data-recording="comment"] video').currentTime > 0.3, null, { timeout: 15000 });
+  assert.equal(await t.page.locator('[data-recording="desktop"] video').getAttribute("src"), null);
+  await t.page.locator('[data-recording="comment"]').getByRole("button", { name: "Pause" }).tap();
+  assert.equal(await close.evaluate((v) => v.paused), true);
 });
 
 await browser.close();
