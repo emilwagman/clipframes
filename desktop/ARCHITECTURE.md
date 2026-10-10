@@ -40,6 +40,7 @@ desktop/
 | `shot` | picture of an area, later a recording | ScreenCaptureKit | Windows Graphics Capture | portal |
 | `places` | which app and site is in front, and where Clipframes was used | front app + page URL | foreground window + page URL | later |
 | `store` | captures on disk: folders, capture.json, notes.md, the reference line | shared | shared | shared |
+| `claude` | the one rule in Claude Code's settings file that lets it read captures without asking | shared | shared (rule not yet checked there) | shared |
 
 `element` and `picker` are the pieces that had to be proven first. `cf-probe` and `cf-bench`
 (src/bin) check them on any machine.

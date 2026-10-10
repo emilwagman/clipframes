@@ -1,4 +1,5 @@
 pub mod app;
+pub mod claude;
 pub mod element;
 pub mod picker;
 pub mod places;

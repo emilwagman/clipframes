@@ -26,6 +26,22 @@ Each round is a folder in `~/Clipframes` with a `notes.md` the agent reads, and 
 
 Clipframes remembers the apps and sites you used it on and shows a small tab there next time. A pin in the bar turns that off for a place.
 
+## Claude Code and the captures folder
+
+Claude Code asks before it reads a file outside the project it is working in, and captures are in `~/Clipframes`. So the first thing that happens after a paste is a question. Settings has a switch for this: "Let Claude Code read captures without asking". It is off until you switch it on.
+
+Switched on, Clipframes adds one line to the `allow` list in Claude Code's own settings file (`~/.claude/settings.json`, on Windows `%USERPROFILE%\.claude\settings.json`):
+
+```
+"Read(~/Clipframes/**)"
+```
+
+Switched off, it removes that line and nothing else. The rest of the file is left as it was, and a copy of the file from before the first change is kept beside it as `settings.json.clipframes-backup-<date>`. If Clipframes cannot read the file as plain JSON it does not change it, and shows the line so you can add it yourself. The switch shows what is in the file, so adding or removing the line by hand moves it too.
+
+If `~/Clipframes` is a link to a folder somewhere else, a second line for that folder is added, because Claude Code checks both.
+
+Codex needs nothing like this: it reads files outside the project without asking.
+
 ## Install
 
 Download the latest version from [Releases](https://github.com/emilwagman/clipframes/releases/latest).

@@ -26,6 +26,7 @@ the ones still waiting.
 | `history_deleted` | A capture is deleted in History | nothing |
 | `place_auto_set` | The pin in the bar is pressed | on or off |
 | `shortcut_changed` | A new shortcut is saved | nothing |
+| `claude_read_set` | "Let Claude Code read captures without asking" is switched, and Claude Code's settings file was changed | on or off |
 | `update_found` | A new version is found | its version number |
 | `$exception` | Something failed: a screenshot, an update, the picker, a crash, or an error in a window's own code | the kind (`capture`, `update`, `picker`, `panic`, `ui`), a message, and the place in Clipframes' code (a function, or a file name and line; for a window also which window) |
 

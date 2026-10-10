@@ -1,4 +1,4 @@
-// Settings: the shortcut, starting at login, and the version. Only the desktop app has this
+// Settings: the shortcut, starting at login, what Claude Code may read, and the version. Only the desktop app has this
 // window, so it talks to the core directly instead of through the shared Platform.
 
 import { invoke } from "@tauri-apps/api/core";
@@ -15,6 +15,8 @@ interface SettingsView {
   version: string;
   update: string;
   mac: boolean;
+  claudeRead: "on" | "off" | "missing" | "manual";
+  claudeRules: string[];
 }
 
 /** "ctrl+shift+Space" from a key press, or null while only modifiers are down. */
@@ -35,11 +37,16 @@ export function Settings() {
   const [view, setView] = useState<SettingsView | null>(null);
   const [recording, setRecording] = useState(false);
   const [message, setMessage] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.add("window");
     listen<SettingsView>("settings", setView);
     void invoke<SettingsView>("settings_get").then(setView);
+    // Claude Code's settings are another program's file: look again when coming back here.
+    const onFocus = () => void invoke<SettingsView>("settings_get").then(setView);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   useEffect(() => {
@@ -67,6 +74,12 @@ export function Settings() {
   const help = recording
     ? "Esc keeps the current one."
     : message || (view.shortcutWorks ? "Click it to change." : `${view.shortcutLabel} is used by another app, so it does nothing here. Click it and choose another.`);
+  const claudeHelp =
+    view.claudeRead === "missing"
+      ? "Claude Code's settings file was not found on this computer."
+      : view.claudeRead === "manual"
+        ? "Clipframes cannot change Claude Code's settings file safely. Add this to the allow list in it by hand:"
+        : "Adds a rule for the Clipframes folder to Claude Code's settings. Switching off removes it again.";
 
   return (
     <main className="settings">
@@ -87,6 +100,27 @@ export function Settings() {
           <input id="login" type="checkbox" checked={view.launchAtLogin} onChange={(e) => void invoke<SettingsView>("launch_set", { on: e.target.checked }).then(setView)} />
         </label>
         <p className="help">Starts with nothing on screen, ready for the shortcut.</p>
+      </section>
+      <section>
+        <label className="row" htmlFor="claude">
+          <span>Let Claude Code read captures without asking</span>
+          <input
+            id="claude"
+            type="checkbox"
+            checked={view.claudeRead === "on"}
+            disabled={view.claudeRead === "missing" || view.claudeRead === "manual"}
+            onChange={(e) => void invoke<SettingsView>("claude_read_set", { on: e.target.checked }).then(setView)}
+          />
+        </label>
+        <p className="help">{claudeHelp}</p>
+        {view.claudeRead === "manual" && (
+          <div className="row byhand">
+            <code>{view.claudeRules.map((rule) => JSON.stringify(rule)).join(",\n")}</code>
+            <button className="plain" onClick={() => void invoke("claude_rules_copy").then(() => setCopied(true))}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+        )}
       </section>
       {view.usageAvailable && (
         <section>

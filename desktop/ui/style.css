@@ -113,6 +113,10 @@ html.window, html.window body { background: var(--surface); overflow: auto; }
 .settings input[type="checkbox"]::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
 .settings input[type="checkbox"]:checked { background: var(--accent); }
 .settings input[type="checkbox"]:checked::after { transform: translateX(14px); }
+.settings input[type="checkbox"]:disabled { opacity: 0.4; }
+/* A line to copy into another program's file. */
+.settings .byhand { margin-top: 8px; }
+.settings .byhand code { flex: 1; min-width: 0; padding: 6px 10px; border-radius: 8px; background: var(--raised); font: 12px/1.4 var(--mono); white-space: pre; overflow: hidden; text-overflow: ellipsis; user-select: text; -webkit-user-select: text; cursor: text; }
 
 /* History: a list to scan, newest first. */
 .history { height: 100vh; overflow-y: auto; padding: 0 20px 24px; }

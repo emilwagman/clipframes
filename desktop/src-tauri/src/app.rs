@@ -8,6 +8,7 @@
 //! Positions come in "picker units": what the system's input and element APIs report. That is
 //! points on macOS and physical pixels on Windows, so every conversion to a window lives here.
 
+use crate::claude;
 use crate::element::{self, ElementInfo, Rect};
 use crate::picker::{Event, Mode, Picker};
 use crate::places::{self, Place, Places};
@@ -1434,6 +1435,16 @@ struct SettingsView {
     version: String,
     update: String,
     mac: bool,
+    /// Whether Claude Code's own settings let it read captures without asking (claude.rs).
+    claude_read: claude::State,
+    /// What that takes: shown for adding by hand when Clipframes will not change the file.
+    claude_rules: Vec<String>,
+}
+
+/// Claude Code's settings file, and the rules in it that cover the captures folder.
+fn claude_read(app: &AppHandle) -> Option<(PathBuf, Vec<String>)> {
+    let home = app.path().home_dir().ok()?;
+    Some((claude::settings_file(&home), claude::rules(&store::root(), &home)))
 }
 
 fn settings_view(app: &AppHandle) -> SettingsView {
@@ -1441,6 +1452,9 @@ fn settings_view(app: &AppHandle) -> SettingsView {
     let settings = core.settings.lock().unwrap().clone();
     let shortcut_works = *core.shortcut_works.lock().unwrap();
     let update = core.update.lock().unwrap().clone();
+    // Read from Claude Code's file every time: it is the file that decides, and it can change
+    // while this window is open.
+    let (claude_read, claude_rules) = claude_read(app).map(|(file, rules)| (claude::state(&file, &rules), rules)).unwrap_or((claude::State::Missing, Vec::new()));
     SettingsView {
         shortcut_label: settings::label(&settings.shortcut, cfg!(target_os = "macos")),
         shortcut: settings.shortcut,
@@ -1451,6 +1465,8 @@ fn settings_view(app: &AppHandle) -> SettingsView {
         version: app.package_info().version.to_string(),
         update,
         mac: cfg!(target_os = "macos"),
+        claude_read,
+        claude_rules,
     }
 }
 
@@ -1613,7 +1629,7 @@ fn open_settings(app: &AppHandle) {
     // An ordinary window, built when asked for and gone when closed.
     let built = WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("index.html".into()))
         .title("Clipframes")
-        .inner_size(440.0, if telemetry::available() { 525.0 } else { 420.0 })
+        .inner_size(440.0, if telemetry::available() { 630.0 } else { 525.0 })
         .resizable(false)
         .maximizable(false)
         .minimizable(false)
@@ -1671,6 +1687,35 @@ fn usage_set(app: AppHandle, on: bool) -> SettingsView {
     save_settings(&app);
     telemetry::set_enabled(on);
     settings_view(&app)
+}
+
+/// Adds the rule for the captures folder to Claude Code's settings, or takes it away. What
+/// comes back is what the file holds now, which is not `on` when it could not be changed.
+#[tauri::command]
+fn claude_read_set(app: AppHandle, on: bool) -> SettingsView {
+    if let Some((file, rules)) = claude_read(&app) {
+        let now = claude::set(&file, &rules, on);
+        if now == (if on { claude::State::On } else { claude::State::Off }) {
+            telemetry::event("claude_read_set", json!({ "on": on }));
+        }
+    }
+    settings_view(&app)
+}
+
+/// Puts the rules on the clipboard as they are written in the file, for adding by hand.
+#[tauri::command]
+fn claude_rules_copy(app: AppHandle) {
+    let Some((_, rules)) = claude_read(&app) else { return };
+    let lines = rules.iter().map(|rule| json!(rule).to_string()).collect::<Vec<_>>().join(",\n");
+    // Not through `copy_text`: this is not a round's text, and must not be taken back as one.
+    let core = app.state::<Core>();
+    let mut clipboard = core.clipboard.lock().unwrap();
+    if clipboard.is_none() {
+        *clipboard = arboard::Clipboard::new().ok();
+    }
+    if let Some(c) = clipboard.as_mut() {
+        let _ = c.set_text(if cfg!(windows) { lines.replace('\n', "\r\n") } else { lines });
+    }
 }
 
 /// Something went wrong in one of the windows' own code.
@@ -1737,6 +1782,8 @@ pub fn run() {
             shortcut_set,
             launch_set,
             usage_set,
+            claude_read_set,
+            claude_rules_copy,
             ui_error,
             update_check
         ])
