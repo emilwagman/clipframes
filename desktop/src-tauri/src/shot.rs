@@ -29,6 +29,20 @@ pub fn works() -> bool {
     taken
 }
 
+/// Takes one very small picture, once per start of the app, in the background. Recent macOS
+/// asks again every so often whether Clipframes may go on recording the screen, and it asks
+/// at the next picture taken: without this, at the user's first capture, with the question
+/// then in the picture. Asked when the bar opens, the question is on screen before anything
+/// is captured. Does nothing where the permission is missing: that has its own message.
+pub fn warm() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        if cfg!(target_os = "macos") && permitted() {
+            std::thread::spawn(works);
+        }
+    });
+}
+
 /// Has the system ask the user for that permission, where there is one to ask for.
 pub fn ask_permission() {
     platform::ask_permission()

@@ -765,6 +765,7 @@ fn open_now(app: &AppHandle) {
     }
     let picking = started.elapsed();
     trace("open: input started");
+    shot::warm();
 
     if show_bar(app).is_none() {
         // No bar means no way to see or end the round.
